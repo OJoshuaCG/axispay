@@ -1,0 +1,23 @@
+{
+    "$schema": "https://raw.githubusercontent.com/laravel/pint/main/pint-schema.json",
+    "preset": "laravel",
+    "rules": {
+        "declare_strict_types": true,
+        "strict_comparison": true,
+        "strict_param": true,
+        "modernize_types_casting": true,
+        "no_useless_else": true,
+        "no_superfluous_phpdoc_tags": {
+            "allow_mixed": true,
+            "remove_inheritdoc": false
+        },
+        "global_namespace_import": {
+            "import_classes": true,
+            "import_constants": false,
+            "import_functions": false
+        }
+    },
+    "exclude": [
+        "tools"
+    ]
+}

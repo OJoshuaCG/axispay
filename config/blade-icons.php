@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Overrides for blade-ui-kit/blade-icons. Only the keys listed here replace the
  * package defaults (Laravel merges package config shallowly).

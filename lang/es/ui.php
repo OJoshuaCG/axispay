@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Shared interface chrome. Keys mirror lang/en/ui.php.
  */

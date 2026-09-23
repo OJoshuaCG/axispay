@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Copy for resources/views/design-system.blade.php (local-only developer
  * preview). Its prose and sample component copy are translated so the page can

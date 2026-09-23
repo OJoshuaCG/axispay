@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Support;
 
 use Illuminate\Http\Request;
@@ -30,7 +32,29 @@ final class Locales
      */
     public static function supported(): array
     {
-        return config('app.supported_locales', ['en' => 'English']);
+        $configured = config('app.supported_locales');
+        $supported = [];
+
+        if (is_array($configured)) {
+            foreach ($configured as $code => $name) {
+                if (is_string($code) && is_string($name)) {
+                    $supported[$code] = $name;
+                }
+            }
+        }
+
+        return $supported !== [] ? $supported : ['en' => 'English'];
+    }
+
+    /**
+     * The application default locale (config('app.locale')), used when the
+     * request expresses no supported preference.
+     */
+    public static function fallback(): string
+    {
+        $locale = config('app.locale');
+
+        return is_string($locale) && $locale !== '' ? $locale : 'en';
     }
 
     public static function isSupported(mixed $locale): bool
@@ -43,7 +67,7 @@ final class Locales
      */
     public static function match(mixed $locale): ?string
     {
-        return self::isSupported($locale) ? $locale : null;
+        return is_string($locale) && self::isSupported($locale) ? $locale : null;
     }
 
     /**

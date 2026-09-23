@@ -3,22 +3,30 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
         "blade-ui-kit/blade-heroicons": "^2.7",
+        "brick/money": "^0.15.1",
         "laravel/framework": "^13.17",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "sentry/sentry-laravel": "^4.28"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "larastan/larastan": "^3.12",
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^12.5.12"
+        "pestphp/pest": "^5.2",
+        "pestphp/pest-plugin-laravel": "^5.0",
+        "phpunit/phpunit": "^13.3"
     },
     "autoload": {
         "psr-4": {
@@ -48,6 +56,20 @@
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
             "@php artisan test"
+        ],
+        "analyse": [
+            "@php vendor/bin/phpstan analyse --memory-limit=1G --no-progress"
+        ],
+        "format": [
+            "@php vendor/bin/pint"
+        ],
+        "format:check": [
+            "@php vendor/bin/pint --test"
+        ],
+        "ci": [
+            "@format:check",
+            "@analyse",
+            "@test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
@@ -83,5 +105,12 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "scripts-descriptions": {
+        "test": "Run the Pest suite against the MariaDB configured in phpunit.xml.",
+        "analyse": "Run Larastan (PHPStan level max).",
+        "format": "Fix code style with Pint.",
+        "format:check": "Check code style with Pint without changing files.",
+        "ci": "Run format check, static analysis and tests, as CI does."
+    }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Shared interface chrome: layout, theme and language controls, and the
  * default strings of design-system components. Page copy lives in a file named

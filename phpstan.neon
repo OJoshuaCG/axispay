@@ -1,0 +1,22 @@
+# Larastan / PHPStan configuration.
+#
+# Level: max (10). The codebase is small enough at Phase 0 to be fully green at
+# the strictest level, and starting there is far cheaper than raising it later
+# (plan 23.5: "Larastan at the maximum viable level"). If a future package makes
+# max unworkable for a specific path, prefer a targeted ignore with a reason
+# over lowering the global level.
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    level: max
+    paths:
+        - app
+        - bootstrap/app.php
+        - bootstrap/providers.php
+        - config
+        - database
+        - routes
+        - tests
+    tmpDir: storage/framework/cache/phpstan
+    treatPhpDocTypesAsCertain: false

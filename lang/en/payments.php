@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Payment vocabulary. Status labels are read by App\Enums\PaymentStatus::label()
  * as payments.status.<enum value>.

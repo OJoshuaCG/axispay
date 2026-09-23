@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Support\Locales;
@@ -14,14 +16,16 @@ class LocaleController extends Controller
 {
     public function __invoke(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        $request->validate([
             'locale' => ['required', 'string', Rule::in(array_keys(Locales::supported()))],
             'redirect' => ['nullable', 'string', 'max:2048'],
         ]);
 
+        $redirect = $request->input('redirect');
+
         return redirect()
-            ->to($this->safeRedirect($validated['redirect'] ?? null))
-            ->withCookie(Locales::cookie($validated['locale']));
+            ->to($this->safeRedirect(is_string($redirect) ? $redirect : null))
+            ->withCookie(Locales::cookie($request->string('locale')->toString()));
     }
 
     /**

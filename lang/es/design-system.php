@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Copy for resources/views/design-system.blade.php. Keys mirror
  * lang/en/design-system.php. Technical identifiers stay untranslated.

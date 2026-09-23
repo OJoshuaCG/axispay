@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 /*
  * Payment vocabulary. Keys mirror lang/en/payments.php.
  */
