@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 8.4 is the plan's preferred runtime (and the composer.json minimum);
+        # 8.5 is what the team runs locally.
+        php: ['8.4', '8.5']
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same image tag as compose.yaml. GitHub service containers cannot take
+      # server arguments, so MariaDB is started here with the flags that mirror
+      # docker/mariadb/conf.d/paylink.cnf, plus the same init script.
+      - name: Start MariaDB 11.8
+        run: |
+          docker run --detach --name mariadb \
+            --publish 33061:3306 \
+            --env MARIADB_ROOT_PASSWORD=root \
+            --volume "$GITHUB_WORKSPACE/docker/mariadb/initdb.d:/docker-entrypoint-initdb.d:ro" \
+            --health-cmd "healthcheck.sh --connect --innodb_initialized" \
+            --health-interval 5s --health-timeout 5s --health-retries 30 \
+            mariadb:11.8.9 \
+            --character-set-server=utf8mb4 \
+            --collation-server=utf8mb4_uca1400_ai_ci \
+            --sql-mode=STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE \
+            --default-time-zone=+00:00 \
+            --default-storage-engine=InnoDB \
+            --transaction-isolation=REPEATABLE-READ
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, intl, mbstring
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ matrix.php }}-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Views need the Vite manifest (public/build) to render in feature tests.
+      - name: Build frontend assets
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm run build
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+
+      - name: Code style (Pint)
+        run: composer format:check
+
+      - name: Static analysis (Larastan)
+        run: composer analyse
+
+      - name: Security audit
+        run: composer audit --no-interaction
+
+      - name: Wait for MariaDB
+        run: |
+          for attempt in $(seq 1 60); do
+            status="$(docker inspect --format '{{.State.Health.Status}}' mariadb)"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 2
+          done
+          docker logs mariadb
+          exit 1
+
+      - name: Tests (Pest, against MariaDB 11.8)
+        run: composer test
