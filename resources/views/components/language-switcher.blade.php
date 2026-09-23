@@ -2,6 +2,7 @@
     Language switcher molecule: one submit button per supported locale.
 
     Usage: <x-language-switcher />
+           <x-language-switcher :redirect="$path" />   (explicit return path, e.g. from a Livewire re-render)
 
     Works without JavaScript: a plain POST form (CSRF-protected) to
     route('locale.update'), which stores the choice in the `locale` cookie and
@@ -18,6 +19,10 @@
           (the visible code is part of it, satisfying label-in-name).
         - Every option is at least 44x44px.
 --}}
+@props([
+    'redirect' => null,
+])
+
 @php
     $locales = \App\Support\Locales::supported();
     $current = app()->getLocale();
@@ -29,7 +34,7 @@
     {{ $attributes->class('inline-flex max-w-full shrink-0') }}
 >
     @csrf
-    <input type="hidden" name="redirect" value="{{ request()->getRequestUri() }}">
+    <input type="hidden" name="redirect" value="{{ $redirect ?? request()->getRequestUri() }}">
 
     <div
         role="group"

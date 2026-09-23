@@ -6,7 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            // The panel theme is a separate entry: Filament loads it with ->viteTheme().
+            input: ['resources/css/app.css', 'resources/js/app.js', 'resources/css/filament/theme.css'],
             refresh: true,
             // Jost is self-hosted: font files are read from the pinned @fontsource/jost
             // package at build time and emitted into public/build. No third-party

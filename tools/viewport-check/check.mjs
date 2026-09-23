@@ -6,7 +6,17 @@
 //   BASE_URL=http://127.0.0.1:8000 node check.mjs [--shots ./shots]
 //
 // PATHS=/,/checkout limits the pages. Exit code 1 when any issue is found.
+//
+// Filament panels (signed-in pages): set LOGIN_EMAIL and LOGIN_PASSWORD and,
+// when the account has 2FA, LOGIN_TOTP_SECRET (base32). The script signs in
+// through the real login form (and 2FA challenge) once per browser context.
+// There is no auth bypass: use a local account, e.g. the DevelopmentSeeder
+// owner after enrolling 2FA with a secret you control.
+//
+//   BASE_URL=http://app.localhost:8000 PATHS=/login SKIP_LOGIN=1 node check.mjs
+//   BASE_URL=http://app.localhost:8000 PATHS=/users LOGIN_EMAIL=... LOGIN_PASSWORD=... LOGIN_TOTP_SECRET=... node check.mjs
 import { chromium } from 'playwright';
+import { createHmac } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -19,6 +29,37 @@ const MIN_TARGET = 44;
 const shotsIndex = process.argv.indexOf('--shots');
 const SHOTS_DIR = shotsIndex > -1 ? process.argv[shotsIndex + 1] : null;
 const SHOTS = new Set(['320-es-dark', '375-en-light', '1440-es-light']);
+const LOGIN = process.env.LOGIN_EMAIL && !process.env.SKIP_LOGIN
+    ? { email: process.env.LOGIN_EMAIL, password: process.env.LOGIN_PASSWORD ?? '', totp: process.env.LOGIN_TOTP_SECRET ?? '' }
+    : null;
+
+// RFC 6238 TOTP (SHA-1, 30 s, 6 digits) from a base32 secret.
+function totp(secret) {
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    let bits = '';
+    for (const c of secret.replace(/=+$/, '').toUpperCase()) bits += alphabet.indexOf(c).toString(2).padStart(5, '0');
+    const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+    const hmac = createHmac('sha1', key).update(counter).digest();
+    const offset = hmac[hmac.length - 1] & 0xf;
+    return String((hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0');
+}
+
+// Signs in through the Filament login form (and TOTP challenge when asked).
+async function login(page) {
+    await page.goto(`${BASE}/login`, { waitUntil: 'networkidle' });
+    await page.fill('input[type=email]', LOGIN.email);
+    await page.fill('input[type=password]', LOGIN.password);
+    await page.click('form[wire\\:submit] button[type=submit]');
+    const otp = page.locator('input[autocomplete="one-time-code"]').first();
+    await Promise.race([page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 }), otp.waitFor({ timeout: 15000 })]);
+    if (new URL(page.url()).pathname.startsWith('/login')) {
+        await otp.fill(totp(LOGIN.totp));
+        await page.click('form[wire\\:submit] button[type=submit]');
+        await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 15000 });
+    }
+}
 
 function audit(minTarget) {
     const describe = (el) => {
@@ -94,12 +135,22 @@ function audit(minTarget) {
 
 const browser = await chromium.launch();
 let problems = 0;
+
+// Sign in once and share the session: a TOTP code can only be used once.
+let storageState;
+if (LOGIN) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await login(page);
+    storageState = await context.storageState();
+    await context.close();
+}
 const summary = [];
 
 for (const path of PATHS) {
     for (const lang of LOCALES) {
         for (const scheme of SCHEMES) {
-            const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme });
+            const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, storageState });
             const page = await context.newPage();
             const errors = [];
             page.on('pageerror', (e) => errors.push(String(e)));
@@ -122,7 +173,7 @@ for (const path of PATHS) {
                 }
                 if (SHOTS_DIR && SHOTS.has(key)) {
                     mkdirSync(SHOTS_DIR, { recursive: true });
-                    const name = `${path === '/' ? 'welcome' : path.replace(/\W+/g, '')}-${key}.png`;
+                    const name = `${new URL(BASE).hostname.split('.')[0]}-${path === '/' ? 'root' : path.replace(/\W+/g, '')}-${key}.png`;
                     await page.screenshot({ path: join(SHOTS_DIR, name), fullPage: true });
                 }
             }

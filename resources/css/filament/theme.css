@@ -1,0 +1,105 @@
+/*
+ * Filament panel theme (admin + app), built from the design tokens (ADR-0025,
+ * ADR-0030). Values are never redefined here: they come from the token files.
+ *
+ * Import order matters. Our token files come FIRST, so their `--color-*`,
+ * `--shadow-*`, `--text-*`, `--radius-*` ... resets run before anything is
+ * defined, and our non-default @theme values then win over Tailwind's
+ * `@theme default` palette, shadows, radius and type scale that Filament's
+ * theme imports afterwards. Filament's own palettes (primary, gray, success,
+ * warning, danger, info) are registered in PHP from the same primitives
+ * (App\Support\Filament\DesignTokenPalette), so its contrast math matches.
+ *
+ * base.css is deliberately not imported: Filament ships its own element
+ * defaults and focus rings.
+ */
+@import '../tokens/primitives.css';
+@import '../tokens/semantic.css';
+@import '../theme.css';
+@import '../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../app/Modules/**/Filament/**/*.php';
+@source '../../../app/Providers/Filament/**/*.php';
+@source '../../views/filament/**/*.blade.php';
+@source '../../views/components/language-switcher.blade.php';
+
+/* Jost, self-hosted (App\Support\Filament\ViteFontProvider). */
+@theme inline {
+    --font-sans:
+        var(--font-jost, 'Jost'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+/*
+ * Panel chrome that is ours (language switcher, mode badge, banners). Semantic
+ * tokens only; they follow the theme through `data-theme`, which the dark-mode
+ * bridge keeps in sync with Filament's `.dark` class (docs/frontend/theming.md).
+ */
+@layer components {
+    .pl-panel-controls {
+        @apply flex min-w-0 flex-nowrap items-center gap-1 sm:gap-2;
+    }
+
+    .pl-mode-switch {
+        @apply inline-flex min-h-touch items-center gap-2 rounded-md border px-2 text-sm font-semibold sm:px-3;
+    }
+
+    .pl-mode-switch[data-mode='test'] {
+        @apply border-warning bg-warning-subtle text-warning;
+    }
+
+    .pl-mode-switch[data-mode='live'] {
+        @apply border-success bg-success-subtle text-success;
+    }
+
+    .pl-banner {
+        @apply flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-gutter py-2 text-sm text-fg;
+    }
+
+    .pl-banner[data-tone='warning'] {
+        @apply border-warning bg-warning-subtle;
+    }
+
+    .pl-banner[data-tone='info'] {
+        @apply border-info bg-info-subtle;
+    }
+
+    .pl-banner[data-tone='error'] {
+        @apply border-error bg-error-subtle;
+    }
+
+    .pl-banner-action {
+        @apply inline-flex min-h-touch items-center rounded-md border border-line-strong bg-page px-3 font-medium text-fg;
+    }
+
+    .pl-banner-action:hover {
+        @apply bg-surface-alt;
+    }
+}
+
+/*
+ * Touch and zoom rules of docs/frontend/responsive.md applied to Filament's
+ * own controls: 44px targets and 16px text in form controls (iOS Safari
+ * zooms into anything smaller). Filament's 32px icon buttons, table header
+ * sort buttons, row links and breadcrumbs keep their size: an invisible hit
+ * area would overflow their scroll containers (sidebar, table toolbar). They
+ * are documented exceptions in docs/frontend/theming.md.
+ */
+@layer components {
+    .fi-btn,
+    .fi-input-wrp,
+    .fi-sidebar-item-btn {
+        min-height: var(--spacing-touch);
+    }
+
+    input.fi-input,
+    .fi-select-input,
+    .fi-fo-textarea textarea,
+    .fi-otp-input-ctn input {
+        font-size: var(--text-base);
+    }
+
+    input.fi-input {
+        min-height: var(--spacing-touch);
+    }
+}

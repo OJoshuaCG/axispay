@@ -7,6 +7,7 @@ use App\Modules\Shared\Http\Errors\ApiErrorRenderer;
 use App\Modules\Shared\Http\Errors\ApiException;
 use App\Modules\Shared\Http\Errors\ApiSurface;
 use App\Modules\Shared\Http\Middleware\AssignRequestId;
+use App\Modules\Shared\Http\Middleware\UseSurfaceSessionCookie;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -29,6 +30,9 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Before StartSession: per-surface session cookie name (ADR-0034).
+        $middleware->prepend(UseSurfaceSessionCookie::class);
+
         // First global middleware, so every response and log line (including
         // errors raised by later middleware) carries the request ID.
         $middleware->prepend(AssignRequestId::class);
@@ -38,6 +42,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SetLocale::class,
         ]);
+
+        // Non-Filament routes that need a tenant user (app host) send guests
+        // to the tenant panel's sign-in page.
+        $middleware->redirectGuestsTo(static fn (): string => route('filament.app.auth.login'));
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         // Reports unhandled exceptions to Sentry/GlitchTip. No-op without a DSN.
