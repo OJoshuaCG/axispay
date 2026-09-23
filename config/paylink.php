@@ -33,6 +33,15 @@ return [
     ],
 
     /*
+    | One session cookie per panel host (ADR-0034). Cookies stay host-only:
+    | `session.domain` must be null (checked at boot).
+    */
+    'session_cookies' => [
+        'admin' => 'paylink_admin_session',
+        'app' => 'paylink_app_session',
+    ],
+
+    /*
     |--------------------------------------------------------------------------
     | Supported currencies (plan section 8.1)
     |--------------------------------------------------------------------------
@@ -66,6 +75,36 @@ return [
         'max_expiration_hours' => 2160,
         'min_expiration_minutes' => 15,
         'max_fx_markup_bps' => 1000,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Identity and access (plan 17.3, 17.4)
+    |--------------------------------------------------------------------------
+    |
+    | Re-authentication for sensitive actions uses auth.password_timeout
+    | (600 seconds, plan 17.3).
+    |
+    */
+
+    'invitations' => [
+        // Plan 17.3: single-use token, 72-hour expiry.
+        'expires_hours' => 72,
+        // Per-tenant throttle (ADR-0034): limits e-mail enumeration through refusals.
+        'max_per_hour' => 20,
+    ],
+
+    'passwords' => [
+        // Plan 17.3: at least 12 characters and not found in known breaches.
+        'min_length' => 12,
+        'check_uncompromised' => (bool) env('PAYLINK_PASSWORD_CHECK_UNCOMPROMISED', true),
+    ],
+
+    'impersonation' => [
+        // Plan 17.4: impersonation sessions last at most 30 minutes.
+        'max_minutes' => 30,
+        // Lifetime of the single-use hand-off link from the admin host to the app host.
+        'handoff_seconds' => 120,
     ],
 
 ];

@@ -2,7 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Models\User;
+use App\Modules\Identity\Models\User;
+use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 
 return [
 
@@ -40,9 +41,18 @@ return [
     */
 
     'guards' => [
+        // Tenant users (app panel). Users are tenant-scoped, so the provider
+        // looks them up without a tenant context (TenantUserProvider).
         'web' => [
             'driver' => 'session',
             'provider' => 'users',
+        ],
+
+        // Platform admins (admin panel, admin host). Never shares a table,
+        // provider or session cookie with tenant users (ADR-014, plan 17.4).
+        'platform' => [
+            'driver' => 'session',
+            'provider' => 'platform_admins',
         ],
     ],
 
@@ -65,14 +75,14 @@ return [
 
     'providers' => [
         'users' => [
-            'driver' => 'eloquent',
-            'model' => env('AUTH_MODEL', User::class),
+            'driver' => 'tenant_users',
+            'model' => User::class,
         ],
 
-        // 'users' => [
-        //     'driver' => 'database',
-        //     'table' => 'users',
-        // ],
+        'platform_admins' => [
+            'driver' => 'eloquent',
+            'model' => PlatformAdmin::class,
+        ],
     ],
 
     /*
@@ -114,6 +124,7 @@ return [
     |
     */
 
-    'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
+    // Plan 17.3: re-authentication for sensitive actions is valid 10 minutes.
+    'password_timeout' => 600,
 
 ];
