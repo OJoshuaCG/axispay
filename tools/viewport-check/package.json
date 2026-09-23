@@ -1,0 +1,12 @@
+{
+    "name": "cirox-viewport-check",
+    "private": true,
+    "type": "module",
+    "description": "Optional browser tooling: responsive/overflow/touch-target check and token contrast calc. Not part of the app build. See docs/frontend/responsive.md.",
+    "scripts": {
+        "check": "node check.mjs"
+    },
+    "dependencies": {
+        "playwright": "^1.63.0"
+    }
+}
