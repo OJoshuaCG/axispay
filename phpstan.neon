@@ -18,5 +18,18 @@ parameters:
         - database
         - routes
         - tests
+    excludePaths:
+        # Deliberate violations for the TenantTableAccessRule test.
+        - tests/PHPStan/Fixtures
     tmpDir: storage/framework/cache/phpstan
     treatPhpDocTypesAsCertain: false
+
+services:
+    # Plan 6.5: no DB::table()/raw SQL on tenant tables, no withoutGlobalScope(s)
+    # outside the whitelist. Tables and whitelist: config/tenancy.php.
+    -
+        class: Tests\PHPStan\Rules\TenantTableAccessRule
+        arguments:
+            configPath: %currentWorkingDirectory%/config/tenancy.php
+        tags:
+            - phpstan.rules.rule
