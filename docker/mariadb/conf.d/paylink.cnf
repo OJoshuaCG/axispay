@@ -1,0 +1,14 @@
+# Server defaults required by the plan (sections 6.7 and 6.8).
+# CI passes the same values as command-line flags; keep both in sync.
+[mariadb]
+character-set-server = utf8mb4
+collation-server = utf8mb4_uca1400_ai_ci
+
+# Strict mode: without it MariaDB silently truncates data.
+sql_mode = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE
+
+# Sessions run in UTC; the application stores every datetime in UTC.
+default-time-zone = '+00:00'
+
+default-storage-engine = InnoDB
+transaction-isolation = REPEATABLE-READ

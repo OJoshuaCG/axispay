@@ -1,0 +1,29 @@
+# Local development services. Production uses an external, dedicated MariaDB
+# server (see docs/adr/0026-local-and-production-database.md).
+name: paylink
+
+services:
+  mariadb:
+    # Pinned exact LTS patch release. CI (.github/workflows/ci.yml) must use the
+    # same tag, and production must run the same version (ADR-003).
+    image: mariadb:11.8.9
+    restart: unless-stopped
+    ports:
+      # Non-default host port to avoid clashing with a system MariaDB/MySQL.
+      - "${FORWARD_DB_PORT:-33061}:3306"
+    environment:
+      # Local-only credentials. Not secrets; never reuse them outside Docker.
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-root}"
+      MARIADB_AUTO_UPGRADE: "1"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mariadb/initdb.d:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mariadb-data:
