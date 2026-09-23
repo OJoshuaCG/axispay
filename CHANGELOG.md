@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Phase 1 tenancy, identity and access (master plan section 27):
+  - `Tenancy` module: `tenants` table and `TenantStatus` (plan 21.3) with
+    `CreateTenant` / `ChangeTenantStatus` actions (superadmin only, reason,
+    double confirmation to close, audited, owners notified); scoped
+    `TenantContext` with audited `runAsPlatform()` and `runAsTenant()`;
+    fail-closed `BelongsToTenant` and `BelongsToMode`; `TenantAware` jobs with
+    `RestoreTenantContext`; tenant panel resolution and session test/live
+    selector (`SwitchLivemode`, audited); `TenantSettings` DTO;
+    `config/tenancy.php` as the single list of tenant tables.
+  - Custom PHPStan rule (`Tests\PHPStan\Rules\TenantTableAccessRule`) against
+    `DB::table()` / raw SQL on tenant tables and non-whitelisted
+    `withoutGlobalScope(s)`, with rule tests.
+  - Isolation test infrastructure: `assertTenantIsolation()`, a resource
+    dataset, a route coverage test and a tenant-model inventory test.
+  - `Identity` module: ULID tenant users (one tenant per user, global e-mail
+    uniqueness), sign-in on the app host, TOTP 2FA with recovery codes
+    (Filament MFA, encrypted, audited), invitations (signed, 72 h, single-use),
+    re-authentication (password or 2FA code, 10 minutes), user deactivation.
+  - `Access` module: spatie/laravel-permission 8 with teams (team = tenant),
+    permission catalog and system roles seeders, permission-only policies,
+    role changes with re-authentication, last-owner and no-escalation rules,
+    sensitive-role notifications.
+  - `PlatformAdmin` module: `platform_admins` and the `platform` guard on the
+    admin host with mandatory 2FA, audited cross-host impersonation (read-only,
+    30 minutes, banner), `paylink:create-platform-admin` command.
+  - `Audit` module: append-only `audit_logs` (model guards and database
+    triggers), redacted details, request metadata; records sign-ins, failed
+    sign-ins, 2FA changes, invitations, role changes, tenant creation and status
+    changes, impersonation and platform-context entries.
+  - Filament 5.8 panels `admin` and `app`, themed from the design tokens
+    (palettes built from `primitives.css`, self-hosted Jost, dark-mode bridge),
+    EN/ES with a language switcher; resources: tenants, platform admins, audit
+    log (admin); users, roles, audit log, profile (app).
+  - `DevelopmentSeeder` (local only) and ADR-0030 to ADR-0033.
+  - Security hardening after review (ADR-0034): shared `RoleGrantGuard` for
+    role changes, invitations (re-checked on acceptance) and
+    deactivation/reactivation; re-authentication for sensitive invitations and
+    (de)activation; tenant row lock for owner invariants; per-host session
+    cookies with a boot guard against a shared `SESSION_DOMAIN`; wider PHPStan
+    tenancy rule; impersonation re-validates the platform admin on every
+    request; per-account login throttling; per-tenant invitation throttling
+    with audited refusals; local-only `paylink:dev-reset-2fa`.
 - Phase 0 foundations (master plan section 27):
   - Tooling: Pest 5 (on PHPUnit 13), Larastan 3 at PHPStan level max, Pint with the
     Laravel preset plus `declare_strict_types` and strict comparison rules, and the
@@ -32,6 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The default `users` migration now creates tenants and tenant users with ULID
+  keys and DATETIME(6); `sessions.user_id` is a `char(26)` ULID.
+- `App\Models\User` moved to `App\Modules\Identity\Models\User`.
+- `<x-language-switcher>` accepts an optional `redirect` path.
+- `.atl/` and Filament's published assets are gitignored; `filament:upgrade`
+  runs on `post-autoload-dump`.
 - Minimum PHP version raised from 8.3 to 8.4 (required by Pest 5; the plan prefers 8.4).
 - Tests run against MariaDB instead of in-memory SQLite.
 - `declare(strict_types=1);` added to every PHP file.

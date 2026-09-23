@@ -77,11 +77,11 @@ npx playwright install chromium      # ~115 MB headless browser, cached in ~/.ca
 BASE_URL=http://127.0.0.1:8000 node check.mjs --shots ./shots
 ```
 
-`PATHS=/,/checkout` limits the pages. Exit code 1 when anything is found. `python3 tools/viewport-check/contrast.py` recomputes status-color contrast (see [accessibility.md](accessibility.md#measured-ratios)).
+`PATHS=/,/checkout` limits the pages. For the Filament panels, point `BASE_URL` at the panel host (`http://app.localhost:8000`, `http://admin.localhost:8000`) and, for signed-in pages, set `LOGIN_EMAIL`, `LOGIN_PASSWORD` and `LOGIN_TOTP_SECRET` (the base32 secret of a local account's 2FA): the script signs in once through the real login and 2FA forms and reuses that session. There is no test-only login shortcut. Exit code 1 when anything is found. `python3 tools/viewport-check/contrast.py` recomputes status-color contrast (see [accessibility.md](accessibility.md#measured-ratios)).
 
 **Why it is not in the root `package.json`:** Playwright downloads a browser and is not needed to build or run the app. It lives in its own folder with its own `package.json` (`node_modules` and `shots` are gitignored, and `app.css` excludes `tools/` from Tailwind's scan). It is a manual check, not a test suite, and nothing runs it automatically.
 
-Last run (2026-09-23): 56 page/locale/theme/width combinations for `/` and `/design-system`, **0 issues**, no JS errors. Known false positive handled by the script: the `sm` button `::before` hit area is not counted as overflowing content.
+Last run (2026-09-23): 56 page/locale/theme/width combinations for `/` and `/design-system`, **0 issues**, no JS errors. Panels (Phase 1): app `/login`, app `/users`, admin `/login`, admin `/tenants` in en/es × light/dark × 7 widths: **no page overflow, no JS errors**; the remaining findings are the Filament-internal controls listed in [theming.md](theming.md#touch-target-exceptions-filament-internals). Known false positive handled by the script: the `sm` button `::before` hit area is not counted as overflowing content.
 
 ## Checklist
 

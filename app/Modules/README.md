@@ -20,11 +20,11 @@ Rules:
 | Module | Responsibility | Introduced in |
 |---|---|---|
 | `Shared` | Money (brick/money), prefixed IDs and ULID keys, API error format, request IDs, log and error-tracker redaction. **Not a catch-all**: only cross-cutting primitives with no business rules. | Phase 0 (exists) |
-| `Tenancy` | Tenants, `TenantContext`, `BelongsToTenant` / `BelongsToMode`, tenant resolution per surface, tenant states. | Phase 1 |
-| `Identity` | Tenant users, authentication, 2FA, invitations, re-authentication for sensitive actions. | Phase 1 |
-| `Access` | Permissions and roles (spatie/laravel-permission with teams), policies. | Phase 1 |
-| `PlatformAdmin` | Superadmins, audited impersonation, global views. | Phase 1 |
-| `Audit` | Append-only audit log. | Phase 1 |
+| `Tenancy` | Tenants, `TenantContext`, `BelongsToTenant` / `BelongsToMode`, tenant resolution per surface, tenant states. | Phase 1 (exists) |
+| `Identity` | Tenant users, authentication, 2FA, invitations, re-authentication for sensitive actions. | Phase 1 (exists) |
+| `Access` | Permissions and roles (spatie/laravel-permission with teams), policies. | Phase 1 (exists) |
+| `PlatformAdmin` | Superadmins, audited impersonation, global views. | Phase 1 (exists) |
+| `Audit` | Append-only audit log. | Phase 1 (exists) |
 | `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks. | Phase 2 / 4B |
 | `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch, reconciliation. | Phase 2 |
 | `ApiKeys` | Issuing, hashing, verifying, scoping and revoking API keys. | Phase 3 |
@@ -49,6 +49,21 @@ Rules:
 | API errors | `Http\Errors\ApiErrorCode`, `ApiErrorType`, `ApiException`, `ApiErrorRenderer`, `ApiSurface` |
 | Request IDs | `Http\RequestId`, `Http\Middleware\AssignRequestId` |
 | Redaction | `Logging\Redactor`, `Logging\RedactSensitiveDataProcessor`, `Logging\RedactSensitiveLogData`, `Observability\SentryEventScrubber` |
+
+## Phase 1 entry points
+
+| Module | Entry points |
+|---|---|
+| Tenancy | `TenantContext`, `Concerns\BelongsToTenant`, `Concerns\BelongsToMode`, `Contracts\TenantAware`, `Jobs\CapturesTenantContext`, `Actions\{CreateTenant, ChangeTenantStatus, SwitchLivemode}`, `Http\Middleware\ResolveTenantContext` |
+| Identity | `Models\{User, UserInvitation}`, `Actions\{InviteUser, AcceptInvitation, DeactivateUser, ReactivateUser, Reauthenticate}`, `Services\{ReauthenticationWindow, ImpersonationState}`, `Auth\AuditedAppAuthentication` |
+| Access | `Enums\{TenantPermission, SystemRole}`, `Actions\ChangeUserRoles`, `Policies\{UserPolicy, RolePolicy}`, `TenantTeamResolver` |
+| PlatformAdmin | `Models\{PlatformAdmin, ImpersonationSession}`, `Actions\{StartImpersonation, ConsumeImpersonationToken, EndImpersonation, CreatePlatformAdmin}`, `Policies\{TenantPolicy, PlatformAdminPolicy}` |
+| Audit | `Services\AuditLogger` (the only writer), `Enums\AuditAction`, `Models\AuditLog` |
+
+Filament resources live inside their module (`<Module>/Filament/...`) and are
+registered explicitly in `app/Providers/Filament/{Admin,App}PanelProvider.php`.
+Shared panel configuration (theme, palettes, font, render hooks) is in
+`app/Support/Filament`.
 
 Code outside `app/Modules` that predates the module structure
 (`app/Enums/PaymentStatus.php`, `app/Support/*`, locale middleware and

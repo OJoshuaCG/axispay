@@ -17,11 +17,17 @@
 /tools/viewport-check/node_modules
 /tools/viewport-check/shots
 /public/build
+# Filament assets, published by `php artisan filament:upgrade` (composer post-autoload-dump).
+/public/css/filament
+/public/fonts/filament
+/public/js/filament
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
 /storage/*.key
 /storage/pail
+# Local tool cache.
+/.atl/
 /vendor
 _ide_helper.php
 Homestead.json

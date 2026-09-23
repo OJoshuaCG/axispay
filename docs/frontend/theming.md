@@ -129,3 +129,29 @@ The toggle's labels (`ui.theme.light|dark|system`) and group name (`ui.theme.lab
 - [ ] Any `dark:` usage is non-color, or is justified in review.
 - [ ] If the storage key or values changed, the pre-paint script and `theme.js` still match.
 - [ ] Browser chrome color matches the page after switching Light / Dark / System (mobile browsers).
+
+## Filament panels (admin and app)
+
+The panels use the same tokens through a separate Vite entry, `resources/css/filament/theme.css` (ADR-0030).
+
+| Piece | Where | What it does |
+|---|---|---|
+| Token import | `resources/css/filament/theme.css` | Imports `primitives.css`, `semantic.css` and `theme.css` **before** Filament's theme, so our values win over Tailwind's defaults (palette, shadows, radius, type scale). `base.css` is not imported. |
+| Filament palettes | `app/Support/Filament/DesignTokenPalette.php` | Registers Filament's `primary`, `info`, `success`, `gray`, `warning`, `danger` scales from the hex values in `primitives.css` (missing steps map to the nearest primitive; see `MAP`). No color is copied. |
+| Font | `app/Support/Filament/ViteFontProvider.php` | Self-hosted Jost (`Vite::fonts()`), `--font-sans` → `--font-jost`. |
+| Dark-mode bridge | `resources/views/filament/partials/theme-bridge.blade.php` (render hook `HEAD_END`) | Mirrors Filament's `.dark` class on `<html>` into `data-theme="dark|light"` before first paint and on every change (`MutationObserver`). |
+| Panel chrome | `resources/views/filament/**`, `.pl-*` classes in the panel theme | Language switcher, test/live badge, banners; semantic tokens only. |
+
+### How the two theme systems agree
+
+Filament stores the preference in `localStorage['theme']` with the values `light`, `dark` and `system` — the same key and values as `resources/js/theme.js`. Filament's own head script turns that into the `.dark` class; the bridge then sets `data-theme`, which drives `color-scheme` and every `light-dark()` token. Filament's component styles use its `.dark` variant (it wins in the panel build), so both halves always follow the same effective theme, including "System" and OS changes. There is no flash: both scripts run in `<head>` before the body renders.
+
+Rules:
+
+- In panel views, use semantic utilities (`bg-surface`, `text-fg`...) or Filament components; never hex values.
+- Do not set `data-theme` yourself in a panel view; the bridge owns it.
+- If the storage key or values change in `theme.js`, Filament's key (`theme`) no longer matches: update both or add a sync.
+
+### Touch-target exceptions (Filament internals)
+
+The panel theme raises Filament buttons, text inputs and sidebar items to 44px and form text to 16px. These Filament controls keep their built-in size, because an invisible hit area would overflow their scroll containers: 32px icon buttons (column manager, sidebar group toggle, password reveal), table header sort buttons, table row links ("View"), breadcrumbs, the pagination page-size select (14px text; Filament already switches it to 16px on iOS), and checkboxes (their label is part of the target). The viewport check reports them; they are accepted until Filament exposes size options.

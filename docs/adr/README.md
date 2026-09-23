@@ -33,3 +33,8 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0027](0027-local-surface-hosts.md) | Surface hosts for local development | Accepted (by project owner delegation, 2026-09-23) |
 | [ADR-0028](0028-product-naming.md) | Product naming in code | Accepted (by project owner delegation, 2026-09-23); final commercial name still pending |
 | [ADR-0029](0029-error-tracking-integration.md) | Error tracking integration (Sentry SDK, compatible with GlitchTip) | Proposed. The provider choice is open question #13 (Sentry vs self-hosted GlitchTip). |
+| [ADR-0030](0030-filament-theme-and-dark-mode-bridge.md) | Filament 5 panels themed from the design tokens, with a dark-mode bridge | Accepted (Phase 1) |
+| [ADR-0031](0031-tenancy-enforcement.md) | Tenancy enforcement details (whitelist, platform rows, permission teams) | Accepted (Phase 1) |
+| [ADR-0032](0032-identity-invitations-reauthentication-2fa.md) | Identity: 2FA, invitations and re-authentication | Accepted (Phase 1) |
+| [ADR-0033](0033-impersonation.md) | Audited impersonation across hosts | Accepted (Phase 1) |
+| [ADR-0034](0034-phase-1-security-hardening.md) | Phase 1 security hardening (escalation guard, locks, session cookies, throttling, accepted enumeration risk) | Accepted (Phase 1) |

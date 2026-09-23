@@ -340,7 +340,7 @@ Behavior and storage are documented in [theming.md](theming.md).
 
 ## Language switcher: `<x-language-switcher>`
 
-One submit button per entry in `config('app.supported_locales')`, inside a CSRF-protected `POST` form to `route('locale.update')`. Works without JavaScript. No props.
+One submit button per entry in `config('app.supported_locales')`, inside a CSRF-protected `POST` form to `route('locale.update')`. Works without JavaScript. Optional prop `redirect` (string): the path to return to; defaults to the current request URI. The Filament panels pass it because their topbar re-renders inside Livewire requests, where the request URI is the Livewire endpoint.
 
 | Behavior | Detail |
 |---|---|

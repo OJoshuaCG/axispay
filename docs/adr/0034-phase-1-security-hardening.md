@@ -1,0 +1,16 @@
+# ADR-0034: Phase 1 security hardening (post-review)
+
+- **Status:** Accepted (Phase 1, 2026-09-23)
+- **Date:** 2026-09-23
+- **Source:** independent security review of Phase 1; master plan sections 4.1, 6.5, 17.2–17.4
+
+## Decisions
+
+1. **No escalation through any path (review H1, M1).** `Access\Services\RoleGrantGuard` is the single rule "an actor may only grant a role, or act on a user, whose permissions it holds itself". It is used by `ChangeUserRoles`, `InviteUser` (before persisting; the invite form only offers grantable roles) and re-checked in `AcceptInvitation` against the inviter's **current** permissions (an inviter who lost them, or was deactivated, cannot grant the role; the invitation is revoked and audited). `DeactivateUser` / `ReactivateUser` require the actor to hold every permission of the target. Inviting with a sensitive role, deactivating and reactivating now require re-authentication.
+2. **Tenant-wide invariants are serialized (M2).** Actions that check "at least one active owner" lock the tenant row first (`Tenancy\Services\TenantLock`), then the user row. One lock order everywhere avoids deadlocks.
+3. **Session isolation between hosts (M3).** Each panel host has its own session cookie (`paylink_admin_session`, `paylink_app_session`, `config/paylink.php` → `session_cookies`), set by the global `UseSurfaceSessionCookie` middleware before `StartSession`. Cookies stay host-only: the application refuses to boot when `SESSION_DOMAIN` is set (a parent domain such as `.example.com` would send the cookie to every subdomain). Redeeming an impersonation hand-off only touches the app-host cookie.
+4. **PHPStan rule coverage (M4).** The rule also reports: non-literal table names in `table()` / `from()` / `join*()`, `from()` / `join*()` on tenant tables, `newQueryWithoutScopes`, `newQueryWithoutScope`, `newModelQuery`, `getQuery()` on an Eloquent builder, and dynamic method calls on query builders and models. The test-code exemption is limited to the project's own `tests/` root.
+5. **Impersonation re-validation (M5).** Every tenant-panel request of an impersonation checks that the platform admin still exists, is enabled and is a superadmin; otherwise the impersonation ends (`invalid`), is audited and the session is signed out.
+6. **Per-account login throttling (M6).** Both panels use `Identity\Filament\Pages\Login`: 5 failed attempts (password or 2FA code) per account per 15 minutes, on top of Filament's per-IP limit. The limiter key and the `auth.login_throttled` audit entry use the SHA-256 of the normalized e-mail, never the e-mail.
+7. **Accepted risk: cross-tenant e-mail enumeration through invitations (M7).** E-mails are unique across the platform (plan 7.2), so refusing an invitation reveals that an address has an account somewhere. Accepted with mitigations: only `users:manage` holders can invite; invitations are throttled per tenant (`paylink.invitations.max_per_hour`, 20, refused attempts count); every refusal is audited (`invitation.refused`, recipient as SHA-256 only); the message does not say which tenant. Revisit if multi-tenant membership per user is introduced.
+8. **Audit digests.** `AuditLogger` keeps `*_hash` SHA-256 values intact after redaction; the value scanner could otherwise mask a long digit run inside the hex as a card number.
