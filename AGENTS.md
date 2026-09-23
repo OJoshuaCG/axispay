@@ -1,3 +1,5 @@
+Project rules: read `rules.md` first (non-negotiable) and the master plan in `docs/plans/master.md`.
+
 <laravel-boost-guidelines>
 # Laravel Application
 

@@ -1,0 +1,299 @@
+openapi: 3.1.0
+info:
+  title: PayLink API
+  version: v1
+  summary: Public API for creating and tracking payment links.
+  description: |
+    Contract of the public API v1 (master plan section 10). Phase 0 skeleton:
+    shared components only; endpoints are added from Phase 3.
+
+    Conventions (plan 10.1):
+    - JSON UTF-8; `Content-Type: application/json` is required on requests with a body.
+    - Versioned in the path (`/v1`). Compatible additions do not change the version.
+      **Integrators must ignore unknown fields.**
+    - IDs carry a type prefix (`plink_`, `pay_`, `re_`, `evt_`); a wrong prefix answers `404`.
+    - Timestamps are ISO-8601 in UTC with `Z`.
+    - Money amounts are decimal **strings** (`"150.50"`), never JSON numbers; responses
+      also include `amount_minor` (integer minor units).
+    - Every response carries a `Request-Id` header, also present in our logs.
+    - The API is server-to-server only: never call it from a payer's browser (no CORS).
+servers:
+  - url: https://api.{domain}/v1
+    description: Production
+    variables:
+      domain:
+        default: example.com
+        description: Platform domain (pending, open question 10).
+  - url: http://api.localhost:8000/v1
+    description: Local development (ADR-0027)
+security:
+  - apiKey: []
+tags: []
+paths: {}
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: plk_{test|live}_<secret>
+      description: |
+        `Authorization: Bearer plk_live_<secret>` or `plk_test_<secret>` (plan 10.2).
+        The prefix selects the mode; a test key never reaches live resources.
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Recommended on every POST and required on `POST /v1/payment_links` and
+        `POST /v1/refunds` (plan 10.3). Same key + same body within 24 hours replays
+        the original response with `Idempotent-Replayed: true`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: '^[A-Za-z0-9_\-:.]+$'
+    RequestIdIn:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: |
+        Optional client correlation ID. Reused as the `Request-Id` when it matches
+        the safe format; otherwise a new `req_<ULID>` is generated.
+      schema:
+        type: string
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    StartingAfter:
+      name: starting_after
+      in: query
+      required: false
+      schema:
+        type: string
+    EndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      schema:
+        type: string
+  headers:
+    RequestId:
+      description: Unique ID of the request, also written to the logs.
+      schema:
+        type: string
+        examples:
+          - req_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+    IdempotentReplayed:
+      description: Present with value `true` when the response is an idempotent replay.
+      schema:
+        type: string
+        enum: ['true']
+    RetryAfter:
+      description: Seconds to wait before retrying (rate limiting).
+      schema:
+        type: integer
+  schemas:
+    Currency:
+      type: string
+      enum: [USD, MXN]
+      description: ISO 4217 code. Lowercase input is normalized.
+    MoneyAmount:
+      type: string
+      description: |
+        Decimal string with at most the currency's decimals (2 for USD and MXN),
+        no sign, spaces, thousands separators or exponent (plan 8.2). A JSON number
+        is rejected with `amount_must_be_string`.
+      pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$'
+      examples:
+        - '150.50'
+    Money:
+      type: object
+      description: Response representation of an amount (plan 8.3).
+      required: [amount, amount_minor, currency]
+      properties:
+        amount:
+          type: string
+          description: Exact decimal string with the currency's number of decimals.
+          examples:
+            - '150.50'
+        amount_minor:
+          type: integer
+          format: int64
+          description: Amount in minor units (cents).
+          examples:
+            - 15050
+        currency:
+          $ref: '#/components/schemas/Currency'
+    ExchangeRate:
+      type: string
+      description: Decimal string with up to 6 decimals, greater than zero.
+      pattern: '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,6})?$'
+      examples:
+        - '17.422500'
+    ErrorType:
+      type: string
+      enum:
+        - invalid_request_error
+        - authentication_error
+        - permission_error
+        - rate_limit_error
+        - api_error
+    ErrorCode:
+      type: string
+      description: Stable machine-readable code (`ApiErrorCode` enum). New codes may be added.
+      enum:
+            - invalid_api_key
+            - insufficient_scope
+            - tenant_suspended
+            - gateway_not_ready
+            - parameter_missing
+            - parameter_invalid
+            - amount_must_be_string
+            - amount_invalid
+            - amount_below_minimum
+            - amount_above_maximum
+            - amount_below_minimum_after_conversion
+            - currency_not_supported
+            - expiration_out_of_range
+            - fx_not_available
+            - fx_rate_invalid
+            - metadata_invalid
+            - return_url_not_allowed
+            - payer_field_invalid
+            - validation_endpoint_not_configured
+            - idempotency_key_required
+            - idempotency_key_reused
+            - idempotency_request_in_progress
+            - resource_not_found
+            - link_not_cancelable
+            - link_payment_in_progress
+            - refund_exceeds_available
+            - payment_not_refundable
+            - rate_limited
+            - gateway_error
+            - internal_error
+            - method_not_allowed
+            - service_unavailable
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, param, request_id]
+          properties:
+            type:
+              $ref: '#/components/schemas/ErrorType'
+            code:
+              $ref: '#/components/schemas/ErrorCode'
+            message:
+              type: string
+              description: Human-readable explanation. Do not parse it; use `code`.
+            param:
+              type: [string, 'null']
+              description: The request parameter the error refers to, when there is one.
+            request_id:
+              type: string
+      examples:
+        - error:
+            type: invalid_request_error
+            code: currency_not_supported
+            message: "The currency 'EUR' is not supported. Allowed currencies: USD, MXN."
+            param: currency
+            request_id: req_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+    ListEnvelope:
+      type: object
+      description: Cursor-paginated list (plan 10.1).
+      required: [object, data, has_more]
+      properties:
+        object:
+          const: list
+        data:
+          type: array
+          items: {}
+        has_more:
+          type: boolean
+  responses:
+    BadRequest:
+      description: Invalid request (`invalid_request_error`).
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing, invalid, revoked or expired API key (`invalid_api_key`).
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Insufficient scope or tenant not allowed to create resources.
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource does not exist, belongs to another tenant/mode, or the ID prefix is wrong.
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The request conflicts with the resource state.
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    UnprocessableEntity:
+      description: Idempotency key reuse or refund above the available balance.
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: Rate limit exceeded (`rate_limited`).
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ServerError:
+      description: Unexpected error (`internal_error`) or gateway error (`gateway_error`).
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

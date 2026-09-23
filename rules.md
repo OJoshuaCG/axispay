@@ -1,10 +1,10 @@
 # CLAUDE.md — Reglas del proyecto PayLink
 
 Plataforma SaaS multi-tenant de Payment Links sobre Stripe Connect (Laravel + MariaDB).
-**El plan completo y fuente de verdad está en `docs/PLAN.md`. Léelo antes de empezar cualquier fase.**
+**El plan completo y fuente de verdad está en `docs/plans/master.md`. Léelo antes de empezar cualquier fase.**
 
 ## Cómo trabajar
-- Trabaja por fases (`docs/PLAN.md`, sección 27). No adelantes fases.
+- Trabaja por fases (`docs/plans/master.md`, sección 27). No adelantes fases.
 - Las decisiones `DECIDIDO` (sección 3) no se cambian sin consultar. Si ves un problema, detente, explica y propón.
 - Ante ambigüedad, pregunta antes de asumir. Registra las decisiones nuevas en `docs/adr/NNNN-titulo.md`.
 - Mantén actualizados `docs/api/openapi.yaml`, `docs/adr/` y `CHANGELOG.md`.
