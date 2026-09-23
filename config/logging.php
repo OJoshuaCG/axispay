@@ -1,6 +1,11 @@
 <?php
 
+declare(strict_types=1);
+
+use App\Modules\Shared\Logging\RedactSensitiveLogData;
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
@@ -48,17 +53,23 @@ return [
     | Available drivers: "single", "daily", "monthly", "slack", "syslog",
     |                    "errorlog", "monolog", "custom", "stack"
     |
+    | Every channel that writes somewhere taps RedactSensitiveLogData, which
+    | strips secrets and PII (plan section 23.3). Production uses the `json`
+    | channel (LOG_STACK=json): structured JSON lines, rotated daily.
+    |
     */
 
     'channels' => [
 
         'stack' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'single')),
             'ignore_exceptions' => false,
         ],
 
         'single' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -66,6 +77,7 @@ return [
         ],
 
         'daily' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -74,6 +86,7 @@ return [
         ],
 
         'monthly' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'monthly',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
@@ -81,7 +94,20 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'json' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'info'),
+            'handler' => RotatingFileHandler::class,
+            'handler_with' => [
+                'filename' => storage_path('logs/laravel.json.log'),
+                'maxFiles' => (int) env('LOG_JSON_DAYS', 30),
+            ],
+            'formatter' => JsonFormatter::class,
+            'tap' => [RedactSensitiveLogData::class],
+        ],
+
         'slack' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),
             'username' => env('LOG_SLACK_USERNAME', env('APP_NAME', 'Laravel')),
@@ -91,6 +117,7 @@ return [
         ],
 
         'papertrail' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => env('LOG_PAPERTRAIL_HANDLER', SyslogUdpHandler::class),
@@ -103,6 +130,7 @@ return [
         ],
 
         'stderr' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
             'handler' => StreamHandler::class,
@@ -114,6 +142,7 @@ return [
         ],
 
         'syslog' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'syslog',
             'level' => env('LOG_LEVEL', 'debug'),
             'facility' => env('LOG_SYSLOG_FACILITY', LOG_USER),
@@ -121,6 +150,7 @@ return [
         ],
 
         'errorlog' => [
+            'tap' => [RedactSensitiveLogData::class],
             'driver' => 'errorlog',
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
