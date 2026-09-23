@@ -1,0 +1,77 @@
+/*
+ * Global element defaults. Everything here reads semantic tokens, so it follows
+ * the active theme without any `dark:` rules.
+ */
+@layer base {
+    html {
+        background-color: var(--color-page);
+        color: var(--color-fg);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+
+    body {
+        min-height: 100dvh;
+        background-color: var(--color-page);
+        color: var(--color-fg);
+        font-size: var(--text-base);
+        line-height: var(--text-base--line-height);
+    }
+
+    ::selection {
+        background-color: var(--color-primary);
+        color: var(--color-on-primary);
+    }
+
+    /* The single keyboard focus indicator for the whole UI: a solid outline
+       (survives forced-colors mode, never clipped like box-shadow, does not
+       fight shadow utilities). Components must not restyle it. */
+    :where(:focus-visible) {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: 2px;
+    }
+
+    /* Controls that are unavailable but must stay focusable (e.g. loading
+       buttons) use aria-disabled instead of the disabled attribute. */
+    :where([aria-disabled='true']) {
+        cursor: not-allowed;
+    }
+
+    :where(a) {
+        color: var(--color-link);
+        text-underline-offset: 0.2em;
+    }
+
+    :where(a:visited) {
+        color: var(--color-link-visited);
+    }
+
+    /* Plain prose links (no classes) are underlined so they are not identified
+       by color alone (WCAG 1.4.1). Component links style themselves. */
+    :where(a:not([class])) {
+        text-decoration-line: underline;
+        text-decoration-thickness: 1px;
+    }
+
+    :where(a:not([class]):hover) {
+        text-decoration-thickness: 2px;
+    }
+
+    :where(code, kbd, samp, pre) {
+        font-family: var(--font-mono);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        ::before,
+        ::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}

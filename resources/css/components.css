@@ -1,0 +1,17 @@
+/*
+ * Minimal custom utilities. Component styling lives in Blade components under
+ * resources/views/components; only helpers Tailwind cannot express go here.
+ *
+ * Focus styling is defined once in base.css (:focus-visible outline); there is
+ * intentionally no focus utility.
+ */
+
+/*
+ * Monetary figures: tabular (equal-width) digits so amounts align in columns
+ * and do not shift while updating. Jost ships a `tnum` feature (verified: all
+ * digits 580 units at 400, 630 at 700). Jost has no `zero` feature, so
+ * slashed-zero only takes effect in fallback fonts that support it.
+ */
+@utility amount {
+    font-variant-numeric: tabular-nums slashed-zero;
+}

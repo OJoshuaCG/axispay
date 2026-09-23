@@ -1,0 +1,126 @@
+/*
+ * Semantic (functional) tokens.
+ *
+ * Every semantic color is defined ONCE, directly under its final Tailwind name,
+ * as light-dark(<light>, <dark>). Utilities (bg-page, text-fg, border-line, ...)
+ * and plain CSS (var(--color-page)) read the same variable.
+ *
+ * The value resolves against `color-scheme`, set on :root:
+ *   - no data-theme       -> follows the OS preference ("system")
+ *   - data-theme="light"  -> forced light
+ *   - data-theme="dark"   -> forced dark
+ *
+ * Theme switching is ROOT-LEVEL ONLY. Set data-theme on <html>, never an inline
+ * `color-scheme`. Build-time Lightning CSS compiles light-dark() into custom-
+ * property switches (--lightningcss-light/dark) that only these :root rules set,
+ * and each token is resolved once on :root and inherited. A nested
+ * data-theme="dark" section would therefore NOT re-resolve tokens. If scoped
+ * dark sections are ever needed, the tokens must be redeclared under that
+ * selector (or the build target raised so light-dark() ships untranspiled).
+ *
+ * Naming:
+ *   text-fg*        body text      text-primary   brand blue (links, emphasis)
+ *   *-subtle        tinted backgrounds (never text)
+ *   *-fill          solid control fills that carry white labels
+ */
+
+:root {
+    color-scheme: light dark;
+}
+
+:root[data-theme='light'] {
+    color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+    color-scheme: dark;
+}
+
+@theme static {
+    /* ---------- Surfaces ---------- */
+    --color-page: light-dark(var(--color-neutral-0), var(--color-neutral-900));
+    --color-surface: light-dark(var(--color-neutral-50), var(--color-neutral-700));
+    --color-surface-alt: light-dark(var(--color-neutral-100), var(--color-neutral-600));
+    /* Pressed state of low-emphasis controls (ghost button :active). One step
+       beyond surface-alt (the hover state) so press is visibly distinct. */
+    --color-surface-pressed: light-dark(var(--color-neutral-200), #2a3346);
+
+    /* ---------- Borders ---------- */
+    /* #2a3346 is a one-off dark hairline value from the source palette. */
+    --color-line: light-dark(var(--color-neutral-200), #2a3346);
+    /* Meets 3:1 against page/surface: use for input and control edges. */
+    --color-line-strong: light-dark(var(--color-neutral-450), var(--color-neutral-500));
+
+    /* ---------- Text ---------- */
+    --color-fg: light-dark(var(--color-neutral-900), var(--color-neutral-50));
+    --color-fg-secondary: light-dark(var(--color-neutral-550), var(--color-neutral-300));
+    /* Muted text: placeholders and non-essential metadata on page/surface only.
+       Never on surface-alt, where it drops below 4.5:1. */
+    --color-fg-muted: light-dark(var(--color-neutral-500), var(--color-neutral-400));
+
+    /* Labels on solid fills (primary, accent-fill, error-fill). Always white:
+       fills get darker on hover/active in both themes. */
+    --color-on-primary: var(--color-neutral-0);
+    --color-on-accent: var(--color-neutral-0);
+    --color-on-error: var(--color-neutral-0);
+
+    /* ---------- Primary (brand blue) ---------- */
+    --color-primary: light-dark(var(--color-blue-600), var(--color-blue-500));
+    --color-primary-hover: light-dark(var(--color-blue-700), var(--color-blue-600));
+    --color-primary-active: light-dark(var(--color-blue-800), var(--color-blue-700));
+    --color-primary-subtle: light-dark(var(--color-blue-50), rgb(31 99 199 / 0.15));
+
+    /* ---------- Accent (green) ---------- */
+    /* Text/icon accent. Brand green-500 on white is 2.65:1: decorative only. */
+    --color-accent: light-dark(var(--color-green-700), var(--color-green-500));
+    --color-accent-fill: var(--color-green-700);
+    --color-accent-hover: var(--color-green-800);
+    --color-accent-active: var(--color-green-900);
+    --color-accent-subtle: light-dark(var(--color-green-50), rgb(34 181 115 / 0.15));
+
+    /* ---------- Status ---------- */
+    --color-success: light-dark(var(--color-green-700), var(--color-green-400));
+    --color-success-subtle: light-dark(var(--color-green-50), rgb(34 181 115 / 0.12));
+
+    --color-warning: light-dark(var(--color-amber-700), var(--color-amber-400));
+    --color-warning-subtle: light-dark(var(--color-amber-50), rgb(180 83 9 / 0.15));
+
+    /* Error TEXT and icons. Solid destructive controls use error-fill. */
+    --color-error: light-dark(var(--color-red-700), var(--color-red-400));
+    --color-error-subtle: light-dark(var(--color-red-50), rgb(185 28 28 / 0.15));
+    --color-error-fill: var(--color-red-700);
+    --color-error-fill-hover: var(--color-red-800);
+    --color-error-fill-active: var(--color-red-900);
+
+    /* Dark uses blue-300: blue-400 on info-subtle over a dark surface was
+       4.49:1 (below 4.5). blue-300 gives >= 6.1:1 on page, surface and
+       surface-alt. Measured with the contrast script in responsive.md. */
+    --color-info: light-dark(var(--color-blue-600), var(--color-blue-300));
+    --color-info-subtle: light-dark(var(--color-blue-50), rgb(31 99 199 / 0.15));
+
+    /* ---------- Money ---------- */
+    /* Always paired with an explicit sign; color is never the only signal. */
+    --color-amount-positive: var(--color-success);
+    --color-amount-negative: var(--color-error);
+
+    /* ---------- Links ---------- */
+    --color-link: light-dark(var(--color-blue-600), var(--color-blue-400));
+    --color-link-visited: light-dark(var(--color-blue-800), var(--color-blue-300));
+
+    /* ---------- Feature (brand protagonist) ---------- */
+    /* Decorative only: never for buttons, links or text that must be read. */
+    --color-feature: light-dark(var(--color-blue-600), var(--color-green-500));
+    --color-feature-subtle: light-dark(var(--color-blue-50), rgb(34 181 115 / 0.12));
+
+    /* ---------- Focus ---------- */
+    /* Solid 2px outline (see base.css). Meets 3:1 against page and surface. */
+    --color-focus-ring: light-dark(var(--color-blue-600), var(--color-blue-400));
+
+    /* ---------- Elevation ---------- */
+    --shadow-*: initial;
+    --shadow-xs: 0 1px 1px light-dark(rgb(13 16 23 / 0.04), rgb(0 0 0 / 0.25));
+    --shadow-sm: 0 1px 2px light-dark(rgb(13 16 23 / 0.06), rgb(0 0 0 / 0.3));
+    --shadow-md: 0 4px 12px light-dark(rgb(13 16 23 / 0.1), rgb(0 0 0 / 0.4));
+    --shadow-lg: 0 8px 24px light-dark(rgb(13 16 23 / 0.12), rgb(0 0 0 / 0.45));
+    --shadow-xl: 0 16px 40px light-dark(rgb(13 16 23 / 0.16), rgb(0 0 0 / 0.5));
+}

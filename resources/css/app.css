@@ -1,0 +1,22 @@
+/*
+ * Design-system entry point. Order matters:
+ * primitives -> semantic tokens -> Tailwind theme mapping -> base -> components.
+ */
+@import 'tailwindcss';
+
+/* Optional Node/Python tooling is not UI: keep its strings out of the scan. */
+@source not '../../tools';
+
+/*
+ * resources/ is detected automatically. The Laravel pagination views are not
+ * scanned: the app does not use the default paginator markup (add the source
+ * back, or publish the views, if it ever does). Compiled views are not scanned
+ * either: every class is written literally in resources/views, so scanning
+ * storage/ would only add stale candidates from old compilations.
+ */
+
+@import './tokens/primitives.css';
+@import './tokens/semantic.css';
+@import './theme.css';
+@import './base.css';
+@import './components.css';

@@ -1,0 +1,65 @@
+/*
+ * Primitive (raw) color scales.
+ *
+ * These are the only literal color values in the design system besides the few
+ * dark-theme translucent tints in semantic.css. Components must never use them
+ * for meaning; use the semantic tokens instead. They are exposed as utilities
+ * (bg-blue-500, text-neutral-400, ...) for the design-system preview and rare
+ * decorative needs.
+ *
+ * `static` forces every variable to be emitted so plain CSS can always use them.
+ */
+@theme static {
+    /* Remove Tailwind's default palette: only design-system colors exist. */
+    --color-*: initial;
+
+    --color-blue-50: #edf3fb;
+    --color-blue-100: #dbe6f6;
+    --color-blue-200: #b7cded;
+    --color-blue-300: #8fb1e3;
+    --color-blue-400: #5e8fd7;
+    --color-blue-500: #1f63c7;
+    --color-blue-600: #1a54a9;
+    --color-blue-700: #154387;
+    --color-blue-800: #103367;
+    --color-blue-900: #0b2448;
+
+    --color-green-50: #edf9f4;
+    --color-green-100: #dcf3e9;
+    --color-green-200: #b8e7d2;
+    --color-green-300: #90dab9;
+    --color-green-400: #60ca9a;
+    --color-green-500: #22b573;
+    --color-green-600: #1d9a62;
+    --color-green-700: #177b4e;
+    --color-green-800: #125e3c;
+    --color-green-900: #0c4129;
+
+    --color-neutral-0: #ffffff;
+    --color-neutral-50: #f8f9f9;
+    --color-neutral-100: #eff0f1;
+    --color-neutral-200: #dddfe2;
+    --color-neutral-300: #bcbfc5;
+    --color-neutral-400: #9398a2;
+    --color-neutral-450: #858a94; /* added: 3:1 control edges on light surfaces */
+    --color-neutral-500: #697080; /* retuned from #6d7481 */
+    --color-neutral-550: #5f6673; /* added: secondary text on light surfaces */
+    --color-neutral-600: #1c2536;
+    --color-neutral-700: #171d2b;
+    --color-neutral-800: #111620;
+    --color-neutral-900: #0d1017;
+
+    /*
+     * Status hues are not full scales in the source palette; only the values in
+     * use are defined. Step numbers approximate their lightness.
+     */
+    --color-amber-50: #fdf3e7;
+    --color-amber-400: #f0a94e;
+    --color-amber-700: #b45309;
+
+    --color-red-50: #fbeaea;
+    --color-red-400: #e5695f;
+    --color-red-700: #b91c1c;
+    --color-red-800: #991b1b;
+    --color-red-900: #7f1d1d;
+}
