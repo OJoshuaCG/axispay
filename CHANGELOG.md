@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Production deployment (ADR-0035, ADR-0036):
+  - Multi-stage `Dockerfile` (PHP 8.4 FPM + Nginx, Composer `--no-dev` with
+    `check-platform-reqs`, pnpm + Vite build, non-root, no `.env`) and
+    `.dockerignore`. One image, roles `web`, `worker`, `scheduler`, `release`
+    and `artisan` selected by `CONTAINER_ROLE` or the first argument
+    (`docker/app/entrypoint.sh`); role-aware `HEALTHCHECK`; runtime caches
+    built at container start; migrations with the migrator connection before
+    the web role serves (`RUN_MIGRATIONS=true`), other roles wait for them.
+  - `config/trustedproxy.php` (`TRUSTED_PROXIES`) for TLS termination at a
+    reverse proxy; security headers (HSTS, nosniff, frame options, referrer
+    and permissions policies) in the image's Nginx.
+  - `docs/deployment/dokploy.md`: step-by-step Dokploy guide (environments,
+    variables, domains, Swarm health check and update settings, rollbacks,
+    security checklist, troubleshooting).
+  - Project documentation: `README.md`, `docs/README.md` (index) and
+    `docs/architecture.md`.
 - Phase 1 tenancy, identity and access (master plan section 27):
   - `Tenancy` module: `tenants` table and `TenantStatus` (plan 21.3) with
     `CreateTenant` / `ChangeTenantStatus` actions (superadmin only, reason,
@@ -74,6 +90,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- pnpm is the only package manager: its version is pinned in
+  `package.json` → `packageManager` (used by CI and the Dockerfile), and the
+  `composer setup` script uses pnpm instead of npm.
+- Production logging guidance: the container logs redacted JSON to stderr
+  (`LOG_CHANNEL=stderr` with the JSON formatter) instead of rotated files.
 - The default `users` migration now creates tenants and tenant users with ULID
   keys and DATETIME(6); `sessions.user_id` is a `char(26)` ULID.
 - `App\Models\User` moved to `App\Modules\Identity\Models\User`.

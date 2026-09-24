@@ -1,58 +1,88 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Cirox Payments (PayLink)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A multi-tenant **payment-links orchestrator** on Stripe Connect.
 
-## About Laravel
+- Tenant systems request payment links through an API.
+- Payers pay on a hosted checkout on our own domain.
+- Each tenant manages users, roles and payments in its own panel.
+- Platform staff operate every tenant from a separate superadmin panel.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+"PayLink" is the working name in code (ADR-0028); the display name comes from `APP_NAME`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+| Surface | Host | For |
+|---|---|---|
+| Public API v1 | `api.<domain>` | Tenant systems (API keys) |
+| Tenant panel | `app.<domain>` | Tenant users (Filament) |
+| Platform panel | `admin.<domain>` | Superadmins (Filament) |
+| Checkout | `pay.<domain>` | Payers (Blade + Stripe Payment Element) |
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Status
 
-## Learning Laravel
+Phases from the [master plan, section 27](docs/plans/master.md#27-plan-de-implementación-por-fases):
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+| Phase | Scope | Status |
+|---|---|---|
+| 0 | Foundations: tooling, MariaDB, `Shared` module, logging, CI | Done |
+| 1 | Tenancy, identity, RBAC, 2FA, audit log, admin and app panels | Done |
+| 2 | Stripe connection (`platform_onboarding`), gateway port, Connect webhooks | Pending |
+| 3 | API keys, idempotency, payment-links API | Pending |
+| 4 | Checkout and card payments | Pending |
+| 4B | `oauth` and `api_key` connection methods | Pending |
+| 5 | Outgoing webhooks and pre-payment validation | Pending |
+| 6 | Currency conversion (Banxico) | Pending |
+| 7 | Refunds and disputes | Pending |
+| 8 | Metrics, branding, payer fields | Pending |
+| 9 | Plans, usage reports, operations | Pending |
+| 10 | Hardening and go-live | Pending |
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Deployment: a production container image and a Dokploy guide exist ([deployment/dokploy.md](docs/deployment/dokploy.md)).
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Quickstart
 
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+docker compose up -d          # MariaDB 11.8 on port 33061
+composer install
+cp .env.example .env && php artisan key:generate
+pnpm install && pnpm run build
+php artisan migrate --seed
+php artisan db:seed --class=DevelopmentSeeder   # local demo accounts
+php artisan serve             # http://app.localhost:8000, http://admin.localhost:8000
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The full guide, with local accounts, environment keys and quality checks, is in [docs/development.md](docs/development.md).
 
-## Contributing
+## Documentation
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Read | When |
+|---|---|
+| [rules.md](rules.md) | Always first: the non-negotiable project rules (money, tenancy, Stripe, security) |
+| [docs/plans/master.md](docs/plans/master.md) | The plan and source of truth (Spanish) |
+| [docs/architecture.md](docs/architecture.md) | How the system is built today |
+| [docs/README.md](docs/README.md) | Index of every document |
+| [docs/adr/](docs/adr/README.md) | Architecture decision records |
+| [docs/deployment/dokploy.md](docs/deployment/dokploy.md) | Production deployment |
+| [docs/frontend/README.md](docs/frontend/README.md) | Before touching any UI |
+| [CHANGELOG.md](CHANGELOG.md) | What changed |
 
-## Code of Conduct
+## Tech stack
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Area | Choice |
+|---|---|
+| Language / framework | PHP 8.4+ (`strict_types`), Laravel 13 |
+| Panels | Filament 5 (`admin`, `app`) |
+| Database | MariaDB 11.8 LTS, one shared schema with `tenant_id` |
+| Queues / cache / sessions | Laravel `database` drivers |
+| Money | `brick/money` (minor units, never floats) |
+| Permissions | `spatie/laravel-permission` with teams (team = tenant) |
+| Frontend | Blade, Tailwind CSS 4, Vite 8, self-hosted Jost; pnpm |
+| Errors | Sentry SDK (Sentry or GlitchTip) |
+| Quality | Pest, Larastan (level max) with a custom tenancy rule, Pint, GitHub Actions |
+| Runtime | Nginx + PHP-FPM container on Dokploy (no Octane) |
 
-## Security Vulnerabilities
+## Key rules
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+The full list is in [rules.md](rules.md). The ones most often at stake:
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- Money is always an integer in minor units, never a float.
+- Every tenant model uses `BelongsToTenant`, and every new endpoint has an isolation test.
+- Business logic lives in Actions, never in controllers or Filament resources.

@@ -2,13 +2,17 @@
 
 This guide gets the application running locally with the same database the
 tests and CI use. Read `rules.md` and `docs/plans/master.md` before changing
-code, and `docs/frontend/README.md` before touching UI.
+code, and `docs/frontend/README.md` before touching UI. For production see
+[deployment/dokploy.md](deployment/dokploy.md); for how the pieces fit, see
+[architecture.md](architecture.md).
 
 ## Requirements
 
 - PHP 8.4 or 8.5 with `pdo_mysql`, `intl` and `mbstring`.
 - Composer 2.
-- Node.js with pnpm (the repository ships `pnpm-lock.yaml`).
+- Node.js 22 with pnpm; the version is pinned in `package.json` →
+  `packageManager` (`corepack enable` picks it up). pnpm is the only package
+  manager: the repository ships `pnpm-lock.yaml` and no `package-lock.json`.
 - Docker with Docker Compose.
 
 ## First-time setup
@@ -63,7 +67,8 @@ code, and `docs/frontend/README.md` before touching UI.
 | `MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY`, `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT` | unset | Optional TLS to an external server. |
 | `PAYLINK_API_HOST`, `PAYLINK_APP_HOST`, `PAYLINK_ADMIN_HOST`, `PAYLINK_PAY_HOST` | `*.localhost` | Surface hosts (ADR-0027). |
 | `PAYLINK_PASSWORD_CHECK_UNCOMPROMISED` | `true` (default) | Breached-password check on new passwords (HIBP). Off in `phpunit.xml`. |
-| `LOG_STACK` | `single` | Use `json` in production (structured, redacted, rotated). |
+| `LOG_STACK` | `single` | The production image logs redacted JSON to stderr instead (ADR-0035). |
+| `TRUSTED_PROXIES` | unset | Production behind Traefik: its network range (`config/trustedproxy.php`). |
 | `SENTRY_LARAVEL_DSN` | empty | Error tracking stays off while empty (ADR-0029). |
 
 The local credentials are defined in `compose.yaml` and the init script. They
@@ -165,10 +170,17 @@ live in `phpunit.xml` (`<env>` entries), so they do not depend on `.env`.
 - Money is `BIGINT` minor units plus `CHAR(3)` currency; exchange rates are
   `DECIMAL(18,6)`. Never floats.
 - Run migrations in production with the migrator user:
-  `php artisan migrate --force --database=mariadb_migrator`.
+  `php artisan migrate --force --database=mariadb_migrator`. The production
+  image does this at deploy time (`RUN_MIGRATIONS=true` on the web service).
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs Pint, Larastan and Pest on PHP 8.4 and 8.5
 against a `mariadb:11.8.9` service configured like `docker/mariadb/conf.d`.
 When MariaDB is upgraded, change `compose.yaml` and the workflow together.
+
+## Production image
+
+`docker build -t paylink:local .` builds the production image. To run its
+roles against the local database, see "Run the production image locally" in
+[deployment/dokploy.md](deployment/dokploy.md#run-the-production-image-locally).
