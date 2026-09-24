@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: PayLink API
+  title: AxisPay API
   version: v1
   summary: Public API for creating and tracking payment links.
   description: |
@@ -35,9 +35,9 @@ components:
     apiKey:
       type: http
       scheme: bearer
-      bearerFormat: plk_{test|live}_<secret>
+      bearerFormat: axp_{test|live}_<secret>
       description: |
-        `Authorization: Bearer plk_live_<secret>` or `plk_test_<secret>` (plan 10.2).
+        `Authorization: Bearer axp_live_<secret>` or `axp_test_<secret>` (plan 10.2).
         The prefix selects the mode; a test key never reaches live resources.
   parameters:
     IdempotencyKey:

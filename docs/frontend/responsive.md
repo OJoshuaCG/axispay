@@ -53,7 +53,7 @@ The layout sets `viewport-fit=cover`, so `env(safe-area-inset-*)` is non-zero on
 
 ```blade
 <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-stack-lg">
-    <span class="min-w-0 truncate font-semibold">{{ config('app.name') }}</span>
+    <span class="min-w-0 truncate font-semibold">{{ \App\Modules\Shared\Support\Brand::displayName() }}</span>
     <x-site-controls />
 </header>
 ```

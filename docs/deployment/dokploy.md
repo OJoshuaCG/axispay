@@ -1,6 +1,6 @@
 # Deploying on Dokploy
 
-PayLink runs on [Dokploy](https://docs.dokploy.com) as **four Applications built from the same Dockerfile**: `web`, `worker-critical`, `worker-default` and `scheduler`. The four Applications live in each Dokploy environment (staging and production).
+AxisPay runs on [Dokploy](https://docs.dokploy.com) as **four Applications built from the same Dockerfile**: `web`, `worker-critical`, `worker-default` and `scheduler`. The four Applications live in each Dokploy environment (staging and production).
 
 - `web` serves the four hosts behind Traefik with HTTPS and runs the migrations before it takes traffic.
 - The workers and the scheduler wait until the schema is up to date before they start.
@@ -60,7 +60,7 @@ For staging, use for example `api.staging.<domain>`. Let's Encrypt only issues t
 Production uses a dedicated MariaDB server outside Dokploy ([ADR-0026](../adr/0026-local-and-production-database.md)).
 
 - **Version:** it must match the version pinned for local and CI (`mariadb:11.8.9`). **Open item:** confirm the exact version of the production server and align `compose.yaml` and CI with it.
-- **Server settings:** `utf8mb4` / `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, UTC (see `docker/mariadb/conf.d/paylink.cnf`). The application also enforces these per session.
+- **Server settings:** `utf8mb4` / `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, UTC (see `docker/mariadb/conf.d/axispay.cnf`). The application also enforces these per session.
 - **Network:**
   - Allow port 3306 **only from the Dokploy server's IP** on the database server's firewall.
   - Use TLS if the traffic crosses an untrusted network. See [TLS to the database](#tls-to-the-database).
@@ -69,30 +69,30 @@ Production uses a dedicated MariaDB server outside Dokploy ([ADR-0026](../adr/00
 Run this on the database server once per environment. Replace `<dokploy-ip>`, the database name and the passwords. Use a different database and different users for staging and production.
 
 ```sql
-CREATE DATABASE paylink CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
+CREATE DATABASE axispay CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
 
 -- Runtime user: DML only, no DDL (plan 25.5).
-CREATE USER 'paylink_app'@'<dokploy-ip>' IDENTIFIED BY '<app-password>';
-GRANT SELECT, INSERT, UPDATE, DELETE ON paylink.* TO 'paylink_app'@'<dokploy-ip>';
+CREATE USER 'axispay_app'@'<dokploy-ip>' IDENTIFIED BY '<app-password>';
+GRANT SELECT, INSERT, UPDATE, DELETE ON axispay.* TO 'axispay_app'@'<dokploy-ip>';
 
 -- Migrations user: DDL on the application schema only; used at deploy time.
-CREATE USER 'paylink_migrator'@'<dokploy-ip>' IDENTIFIED BY '<migrator-password>';
-GRANT ALL PRIVILEGES ON paylink.* TO 'paylink_migrator'@'<dokploy-ip>';
+CREATE USER 'axispay_migrator'@'<dokploy-ip>' IDENTIFIED BY '<migrator-password>';
+GRANT ALL PRIVILEGES ON axispay.* TO 'axispay_migrator'@'<dokploy-ip>';
 
 -- With TLS required (recommended across untrusted networks):
--- ALTER USER 'paylink_app'@'<dokploy-ip>' REQUIRE SSL;
--- ALTER USER 'paylink_migrator'@'<dokploy-ip>' REQUIRE SSL;
+-- ALTER USER 'axispay_app'@'<dokploy-ip>' REQUIRE SSL;
+-- ALTER USER 'axispay_migrator'@'<dokploy-ip>' REQUIRE SSL;
 ```
 
 The migrations create two triggers that make `audit_logs` append-only. If the server has binary logging enabled (needed for point-in-time recovery), MariaDB can refuse `CREATE TRIGGER` for a user without `SUPER` (error 1419). See [Troubleshooting](#troubleshooting).
 
-The `paylink_backup` and `paylink_readonly` users (plan 25.5) belong to the database operator and are not used by the application.
+The `axispay_backup` and `axispay_readonly` users (plan 25.5) belong to the database operator and are not used by the application.
 
 ---
 
 ## 2. Project and environments
 
-1. **Projects → Create Project.** Name: `paylink`.
+1. **Projects → Create Project.** Name: `axispay`.
 2. A new project starts with one environment. Create environments until you have **staging** and **production**.
    - Services in different environments are isolated, and each environment has its own variables ([docs](https://docs.dokploy.com/docs/core/multi-tenancy)).
    - The exact button label varies between versions **(verify)**.
@@ -115,20 +115,21 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 
 | Variable | Required | Example (non-secret) | Description |
 |---|---|---|---|
-| `APP_NAME` | yes | `Cirox Payments` | Display name |
+| `APP_NAME` | yes | `AxisPay` | Fixed internal name: it drives the cache, Redis and session prefixes. Keep `AxisPay`; do not change it to rebrand (ADR-0037). |
+| `AXISPAY_DISPLAY_NAME` | no | `AxisPay` | Public name shown to people (pages, panels, 2FA issuer, mail sender). Change this one to rebrand. |
 | `APP_ENV` | yes | `production` (also on staging) | Laravel environment. Never `local`: the dev seeder and the dev commands only run with `local`. |
 | `APP_KEY` | yes | **secret** | `base64:…`. Generate once per environment (see below) and **back it up outside Dokploy**, separately from database backups (plan 23.2). Losing it makes the encrypted data (2FA secrets, PII) unreadable. |
 | `APP_DEBUG` | yes | `false` | Never `true` outside local |
 | `APP_URL` | yes | `https://app.example.com` | Base URL for generated links outside a request (e-mails, queued jobs) |
 | `APP_LOCALE` / `APP_FALLBACK_LOCALE` | no | `en` / `en` | Default locale |
-| `PAYLINK_API_HOST` | yes | `api.example.com` | Must match the Dokploy domain exactly |
-| `PAYLINK_APP_HOST` | yes | `app.example.com` | " |
-| `PAYLINK_ADMIN_HOST` | yes | `admin.example.com` | " |
-| `PAYLINK_PAY_HOST` | yes | `pay.example.com` | " |
+| `AXISPAY_API_HOST` | yes | `api.example.com` | Must match the Dokploy domain exactly |
+| `AXISPAY_APP_HOST` | yes | `app.example.com` | " |
+| `AXISPAY_ADMIN_HOST` | yes | `admin.example.com` | " |
+| `AXISPAY_PAY_HOST` | yes | `pay.example.com` | " |
 | `DB_CONNECTION` | yes | `mariadb` | Only MariaDB is supported |
 | `DB_HOST` / `DB_PORT` | yes | `db.internal.example.com` / `3306` | External database server |
-| `DB_DATABASE` | yes | `paylink` | Different per environment |
-| `DB_USERNAME` | yes | `paylink_app` | Runtime user (DML only) |
+| `DB_DATABASE` | yes | `axispay` | Different per environment |
+| `DB_USERNAME` | yes | `axispay_app` | Runtime user (DML only) |
 | `DB_PASSWORD` | yes | **secret** | |
 | `SESSION_DRIVER` | yes | `database` | |
 | `SESSION_SECURE_COOKIE` | yes | `true` | Cookies only over HTTPS (plan 23.4) |
@@ -139,11 +140,11 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5) |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | |
-| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | yes | `no-reply@example.com` / `Cirox Payments` | |
+| `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | yes | `no-reply@example.com` / `AxisPay` | `MAIL_FROM_NAME` defaults to `AXISPAY_DISPLAY_NAME` |
 | `LOG_LEVEL` | no | `info` | The image already logs JSON to stderr |
 | `SENTRY_LARAVEL_DSN` | no | **secret** | Error tracking; disabled while empty (ADR-0029) |
 | `SENTRY_ENVIRONMENT` | no | `production` / `staging` | |
-| `PAYLINK_PASSWORD_CHECK_UNCOMPROMISED` | no | `true` | Breached-password check (needs outbound HTTPS to the HIBP API) |
+| `AXISPAY_PASSWORD_CHECK_UNCOMPROMISED` | no | `true` | Breached-password check (needs outbound HTTPS to the HIBP API) |
 
 **Do not set `SESSION_DOMAIN`.** Leave it out, or leave it empty. The application refuses to boot when it is set (ADR-0034), because each panel host keeps its own host-only cookie.
 
@@ -181,18 +182,19 @@ Reference the shared variables, then add the ones that only `web` needs:
 ```dotenv
 CONTAINER_ROLE=web
 RUN_MIGRATIONS=true
-DB_MIGRATOR_USERNAME=paylink_migrator
+DB_MIGRATOR_USERNAME=axispay_migrator
 DB_MIGRATOR_PASSWORD=<secret, set in Dokploy>
 
 APP_NAME=${{environment.APP_NAME}}
+AXISPAY_DISPLAY_NAME=${{environment.AXISPAY_DISPLAY_NAME}}
 APP_ENV=${{environment.APP_ENV}}
 APP_KEY=${{environment.APP_KEY}}
 APP_DEBUG=${{environment.APP_DEBUG}}
 APP_URL=${{environment.APP_URL}}
-PAYLINK_API_HOST=${{environment.PAYLINK_API_HOST}}
-PAYLINK_APP_HOST=${{environment.PAYLINK_APP_HOST}}
-PAYLINK_ADMIN_HOST=${{environment.PAYLINK_ADMIN_HOST}}
-PAYLINK_PAY_HOST=${{environment.PAYLINK_PAY_HOST}}
+AXISPAY_API_HOST=${{environment.AXISPAY_API_HOST}}
+AXISPAY_APP_HOST=${{environment.AXISPAY_APP_HOST}}
+AXISPAY_ADMIN_HOST=${{environment.AXISPAY_ADMIN_HOST}}
+AXISPAY_PAY_HOST=${{environment.AXISPAY_PAY_HOST}}
 DB_CONNECTION=${{environment.DB_CONNECTION}}
 DB_HOST=${{environment.DB_HOST}}
 DB_PORT=${{environment.DB_PORT}}
@@ -240,7 +242,7 @@ Add four domains, one per host. All four point to the same container port:
 
 - Leave **Internal Path** and **Strip Path** empty.
 - For Applications, domain changes apply without a redeploy ([domains docs](https://docs.dokploy.com/docs/core/domains)).
-- Do not use the generated `traefik.me` domains. They are HTTP-only, and the hosts must match the `PAYLINK_*_HOST` variables.
+- Do not use the generated `traefik.me` domains. They are HTTP-only, and the hosts must match the `AXISPAY_*_HOST` variables.
 - Do not add anything under **Advanced → Ports**. Traefik reaches the container over Dokploy's network, and the container port must not be published to the internet.
 
 ### 4.4 Advanced tab
@@ -249,7 +251,7 @@ Add four domains, one per host. All four point to the same container port:
 
 ```json
 {
-  "Test": ["CMD", "paylink-healthcheck"],
+  "Test": ["CMD", "axispay-healthcheck"],
   "Interval": 10000000000,
   "Timeout": 5000000000,
   "StartPeriod": 180000000000,
@@ -343,8 +345,8 @@ Deploy all three. Their logs show `Worker started on queues critical`, `Worker s
 
 | Check | Expected |
 |---|---|
-| `curl -sI https://app.<domain>/login` | `200`, `Strict-Transport-Security` header, `Set-Cookie: paylink_app_session=…; secure; httponly` |
-| `curl -sI https://admin.<domain>/login` | `200`, cookie `paylink_admin_session` (a different cookie from the app host) |
+| `curl -sI https://app.<domain>/login` | `200`, `Strict-Transport-Security` header, `Set-Cookie: axispay_app_session=…; secure; httponly` |
+| `curl -sI https://admin.<domain>/login` | `200`, cookie `axispay_admin_session` (a different cookie from the app host) |
 | `curl -s -o /dev/null -w '%{http_code}' https://app.<domain>/up` | `200` |
 | Page source of `/login` | Asset URLs start with `https://` (no mixed content) |
 | Each Application → **Logs** | JSON lines, no errors |
@@ -357,7 +359,7 @@ Monitoring graphs only update while the page is open.
 Open a terminal in the `web` container: the Application's terminal option, or `docker exec -it <container> bash` on the server. Dokploy has a container terminal, but the docs do not say which screen it is on **(verify)**. Then run:
 
 ```sh
-php artisan paylink:create-platform-admin
+php artisan axispay:create-platform-admin
 ```
 
 The command is interactive and never takes the password as an argument. Sign in at `https://admin.<domain>` and set up 2FA (mandatory for platform admins).
@@ -444,7 +446,7 @@ The Dokploy docs recommend this for production ([going to production](https://do
 - [ ] `TRUSTED_PROXIES` is Traefik's network range, not `*`; no container port is published under **Advanced → Ports**.
 - [ ] HTTPS with Let's Encrypt on all four hosts; HSTS is sent by the app. Preload is not enabled; that decision belongs to the owner of the domain.
 - [ ] **Admin host allowlist** (plan 4.1, recommended); see below.
-- [ ] Platform admins have 2FA (enforced) and are created only with `paylink:create-platform-admin`.
+- [ ] Platform admins have 2FA (enforced) and are created only with `axispay:create-platform-admin`.
 - [ ] `APP_KEY` is backed up outside Dokploy.
 
 ### Admin host IP allowlist
@@ -473,19 +475,19 @@ Dokploy regenerates a domain's routers when you edit that domain, which drops th
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `419 Page Expired` on sign-in, or sign-in loops | The browser drops the `secure` cookie because Laravel thinks the request is HTTP, or `APP_URL` or the hosts do not match | Set `TRUSTED_PROXIES` to Traefik's network and `SESSION_SECURE_COOKIE=true`; check that `PAYLINK_*_HOST` match the domains exactly |
+| `419 Page Expired` on sign-in, or sign-in loops | The browser drops the `secure` cookie because Laravel thinks the request is HTTP, or `APP_URL` or the hosts do not match | Set `TRUSTED_PROXIES` to Traefik's network and `SESSION_SECURE_COOKIE=true`; check that `AXISPAY_*_HOST` match the domains exactly |
 | Assets load over `http://` (mixed content), redirects go to `http://` | The proxy is not trusted, so `X-Forwarded-Proto` is ignored | Set `TRUSTED_PROXIES` (see below) and redeploy |
 | Container exits at boot: `SESSION_DOMAIN must be empty (null)` | `SESSION_DOMAIN` is set (ADR-0034) | Remove the variable |
 | `Missing required environment variable APP_KEY` | A variable is not set, or the `${{environment.…}}` reference is wrong | Check the Environment tab and the shared variables |
-| Migrations fail: `CREATE command denied` / `ALTER command denied` | Migrations are running as `paylink_app` | Set `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` on `web` and check the migrator grants |
+| Migrations fail: `CREATE command denied` / `ALTER command denied` | Migrations are running as `axispay_app` | Set `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` on `web` and check the migrator grants |
 | Migrations fail with error 1419 on `CREATE TRIGGER` (`You do not have the SUPER privilege and binary logging is enabled`) | Binary logging is on and the migrator is not trusted to create triggers | On the database server, set `log_bin_trust_function_creators = 1`, or have the DBA grant the required privilege (verify with the DBA for your MariaDB version) |
 | Workers or scheduler log `Migrations are still pending…` and restart | `web` has not finished migrating, or it runs without `RUN_MIGRATIONS=true` | Check the `web` deploy log; deploy `web` |
 | Jobs pile up in `jobs` and nothing runs | Worker services are stopped, or listening on the wrong queue | Check `QUEUE_NAMES` and the worker logs; `php artisan queue:monitor database:critical,database:default,database:low` |
 | Scheduled tasks do not run | The `scheduler` Application is missing or stopped | Deploy it; exactly one replica |
 | Scheduled tasks run twice around a deploy | Scheduler Update Config uses `start-first` | Use `"Order": "stop-first"` |
 | `web` never becomes healthy, deploy rolls back | The start period is too short for the migrations, or the database is unreachable | Increase `StartPeriod`; check the logs (`Database connection … is not reachable`) and the database firewall |
-| Health check fails, but the site works through the domain | A custom health check calls the public host, or uses the wrong port | Use `["CMD", "paylink-healthcheck"]`. `/up` is not tied to a host and answers on `127.0.0.1:8080`. |
-| `404` for every page on a host | The host is not equal to the `PAYLINK_*_HOST` value (routes are bound with `Route::domain()`) | Make the domain and the variable identical |
+| Health check fails, but the site works through the domain | A custom health check calls the public host, or uses the wrong port | Use `["CMD", "axispay-healthcheck"]`. `/up` is not tied to a host and answers on `127.0.0.1:8080`. |
+| `404` for every page on a host | The host is not equal to the `AXISPAY_*_HOST` value (routes are bound with `Route::domain()`) | Make the domain and the variable identical |
 | Let's Encrypt certificate is not issued | DNS is not pointing to the server yet, or port 80 is blocked | Fix DNS or the firewall; Traefik retries |
 
 ### Trusted proxies
@@ -500,10 +502,10 @@ Set `TRUSTED_PROXIES` to that range, for example `10.0.1.0/24`. Swarm overlay ne
 
 ### TLS to the database
 
-Mount the CA certificate as a file (**Advanced → Volumes → File Mount**, for example at `/etc/ssl/certs/paylink-db-ca.pem`), then set:
+Mount the CA certificate as a file (**Advanced → Volumes → File Mount**, for example at `/etc/ssl/certs/axispay-db-ca.pem`), then set:
 
 ```dotenv
-MYSQL_ATTR_SSL_CA=/etc/ssl/certs/paylink-db-ca.pem
+MYSQL_ATTR_SSL_CA=/etc/ssl/certs/axispay-db-ca.pem
 MYSQL_ATTR_SSL_VERIFY_SERVER_CERT=true
 # Client certificates only if the server requires them:
 # MYSQL_ATTR_SSL_CERT=...
@@ -539,12 +541,12 @@ These settings are defined by later phases of the master plan (section 27). Do n
 
 ### Run the production image locally
 
-This runs against the Docker MariaDB from `compose.yaml` (network `paylink_default`, dev database). Use an env file with local, non-secret values only (see `.env.example`) and `DB_HOST=mariadb`, `DB_PORT=3306`:
+This runs against the Docker MariaDB from `compose.yaml` (network `axispay_default`, dev database). Use an env file with local, non-secret values only (see `.env.example`) and `DB_HOST=mariadb`, `DB_PORT=3306`:
 
 ```sh
-docker build -t paylink:local .
-docker run --rm --network paylink_default --env-file /tmp/paylink-local.env paylink:local release
-docker run -d --name paylink-web --network paylink_default --env-file /tmp/paylink-local.env -p 18080:8080 paylink:local
-docker run -d --name paylink-worker --network paylink_default --env-file /tmp/paylink-local.env -e CONTAINER_ROLE=worker paylink:local
+docker build -t axispay:local .
+docker run --rm --network axispay_default --env-file /tmp/axispay-local.env axispay:local release
+docker run -d --name axispay-web --network axispay_default --env-file /tmp/axispay-local.env -p 18080:8080 axispay:local
+docker run -d --name axispay-worker --network axispay_default --env-file /tmp/axispay-local.env -e CONTAINER_ROLE=worker axispay:local
 curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: app.localhost' http://127.0.0.1:18080/login
 ```

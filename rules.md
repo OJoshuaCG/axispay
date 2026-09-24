@@ -1,4 +1,4 @@
-# CLAUDE.md — Reglas del proyecto PayLink
+# CLAUDE.md — Reglas del proyecto AxisPay
 
 Plataforma SaaS multi-tenant de Payment Links sobre Stripe Connect (Laravel + MariaDB).
 **El plan completo y fuente de verdad está en `docs/plans/master.md`. Léelo antes de empezar cualquier fase.**
@@ -30,7 +30,7 @@ Plataforma SaaS multi-tenant de Payment Links sobre Stripe Connect (Laravel + Ma
 - PHP 8.3+ con `declare(strict_types=1);`. Enums para estados y modos.
 - Estructura: `app/Modules/<Modulo>/{Models,Actions,Data,Enums,Events,Jobs,Http,Policies,Services,Exceptions}`.
 - IDs: ULID como PK; en la API con prefijo (`plink_`, `pay_`, `re_`, `evt_`).
-- API keys: `plk_test_...` / `plk_live_...`, guardadas como hash SHA-256.
+- API keys: `axp_test_...` / `axp_live_...`, guardadas como hash SHA-256.
 - Pruebas con Pest; análisis con Larastan; formato con Pint. Todo debe pasar en CI con la misma versión de MariaDB que producción.
 
 ## Comandos habituales

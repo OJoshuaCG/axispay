@@ -33,7 +33,7 @@ Option 1. There are four Applications per Dokploy environment (staging and produ
 
 | Application | `CONTAINER_ROLE` | Domains | Replicas | Update order | Notes |
 |---|---|---|---|---|---|
-| `web` | `web` | `api.`, `app.`, `admin.`, `pay.` → port 8080, HTTPS (Let's Encrypt) | 1 at first; 2+ later | start-first, rollback on failure | `RUN_MIGRATIONS=true`: migrates with `paylink_migrator`, then seeds the permission catalog, before serving |
+| `web` | `web` | `api.`, `app.`, `admin.`, `pay.` → port 8080, HTTPS (Let's Encrypt) | 1 at first; 2+ later | start-first, rollback on failure | `RUN_MIGRATIONS=true`: migrates with `axispay_migrator`, then seeds the permission catalog, before serving |
 | `worker-critical` | `worker` | none | 1 | start-first | `QUEUE_NAMES=critical` |
 | `worker-default` | `worker` | none | 1 | start-first | `QUEUE_NAMES=default,low` |
 | `scheduler` | `scheduler` | none | exactly 1 | **stop-first** | `schedule:work`; stop-first avoids two schedulers during a deploy |
@@ -64,7 +64,7 @@ Option 1. There are four Applications per Dokploy environment (staging and produ
 | Symlink switch, `queue:restart`, FPM reload (25.4) | Replaced by the rolling update of each service | Deviation (accepted) |
 | Expand/contract migrations (25.4) | Still required: old `web` tasks serve during the migration, and old workers run until replaced | Process rule, unchanged |
 | Staging automatic, production manual with approval (25.4) | Staging: auto-deploy on push. Production: auto-deploy off, manual Deploy button | Partly met: Dokploy has no approval step; access control is Dokploy permissions |
-| DB users `paylink_app` (DML), `paylink_migrator` (DDL) (25.5) | Grants in `docs/deployment/dokploy.md` | Met; `paylink_backup` and `paylink_readonly` belong to the DB server's operator |
+| DB users `axispay_app` (DML), `axispay_migrator` (DDL) (25.5) | Grants in `docs/deployment/dokploy.md` | Met; `axispay_backup` and `axispay_readonly` belong to the DB server's operator |
 | Backups, PITR, restore tests (25.2) | On the external DB server; Dokploy backups only cover Dokploy-managed databases | Outside Dokploy; open item |
 | Backups of `APP_KEY`, secrets (23.2, 25.2) | Stored outside Dokploy, separately from DB backups | Operator procedure |
 | NTP, SSH hardening, fail2ban (25.1) | Server administration | Outside this repository |

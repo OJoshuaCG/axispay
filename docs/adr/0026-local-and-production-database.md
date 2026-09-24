@@ -16,7 +16,7 @@ ADR-0003 requires the same exact MariaDB LTS version in every environment. Produ
 
 ## Decision
 
-- Local: `compose.yaml` runs `mariadb:11.8.9` (11.8 LTS, exact patch pinned) on host port 33061, with `docker/mariadb/conf.d/paylink.cnf` (`utf8mb4`, `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, `+00:00`, InnoDB) and an init script that creates `paylink` (development) and `paylink_testing` (tests), plus two users that model plan 25.5: `paylink_app` (runtime) and `paylink_migrator` (migrations). Locally both have full rights on both databases; production grants `paylink_app` DML only.
+- Local: `compose.yaml` runs `mariadb:11.8.9` (11.8 LTS, exact patch pinned) on host port 33061, with `docker/mariadb/conf.d/axispay.cnf` (`utf8mb4`, `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, `+00:00`, InnoDB) and an init script that creates `axispay` (development) and `axispay_testing` (tests), plus two users that model plan 25.5: `axispay_app` (runtime) and `axispay_migrator` (migrations). Locally both have full rights on both databases; production grants `axispay_app` DML only.
 - CI: the same image tag as a service, configured with the same values through command-line flags.
 - Production: the external server is reached exclusively through env settings (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`, `DB_MIGRATOR_USERNAME`, `DB_MIGRATOR_PASSWORD`) and optional TLS (`MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY`, `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT`).
 - The Laravel `mariadb` connection enforces charset, collation, the explicit `sql_mode` list, UTC and InnoDB per session, so correctness does not depend on server defaults. A `mariadb_migrator` connection runs migrations with the DDL user.

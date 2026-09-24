@@ -1,6 +1,6 @@
 # Architecture
 
-PayLink is a **modular monolith** (ADR-0001): one Laravel application, one MariaDB database shared by every tenant (ADR-0002), and background work on database queues (ADR-0016).
+AxisPay is a **modular monolith** (ADR-0001): one Laravel application, one MariaDB database shared by every tenant (ADR-0002), and background work on database queues (ADR-0016).
 
 - The application serves four surfaces, each on its own host.
 - Tenant isolation is enforced in layers, so one mistake does not leak data.
@@ -33,7 +33,7 @@ flowchart LR
 
 ## Surfaces and hosts
 
-Each surface is bound to its host with `Route::domain()`. The hosts come from `config/paylink.php` → `surfaces` (`PAYLINK_*_HOST`; ADR-0027).
+Each surface is bound to its host with `Route::domain()`. The hosts come from `config/axispay.php` → `surfaces` (`AXISPAY_*_HOST`; ADR-0027).
 
 | Surface | Host | Status | Entry point | Auth |
 |---|---|---|---|---|
@@ -52,7 +52,7 @@ Host-independent routes:
 
 - **Every request.** Global middleware runs first:
   - `AssignRequestId` sets the `Request-Id` header and adds it to the log context.
-  - `UseSurfaceSessionCookie` picks the session cookie for the host: `paylink_admin_session` or `paylink_app_session`.
+  - `UseSurfaceSessionCookie` picks the session cookie for the host: `axispay_admin_session` or `axispay_app_session`.
   - Laravel's `TrustProxies` reads `config/trustedproxy.php`.
   - At boot, `SharedServiceProvider` refuses to start when `SESSION_DOMAIN` is set (ADR-0034).
 - **`app.`** Filament panel middleware (`App\Support\Filament\PanelDefaults`) → `Authenticate` → `ResolveTenantContext`, which sets the `TenantContext` from the signed-in user → `RequireTwoFactorForSensitiveUsers` → policies → Actions.
@@ -89,7 +89,7 @@ Business logic lives in single-purpose Actions with DTOs, never in controllers o
 | Fail-closed global scopes | `Concerns\BelongsToTenant` + `Scopes\TenantScope`; `Concerns\BelongsToMode` + `Scopes\ModeScope` | Queries that forget `tenant_id` or `livemode`; writing a row for another tenant (`TenantMismatchException`) |
 | Single table list | `config/tenancy.php` → `tenant_tables`, `team_scoped_tables`, `scope_bypass_whitelist` | Drift between the schema, the models and the static rule |
 | Composite foreign keys | Migrations, e.g. `['tenant_id', 'user_id'] → users(['tenant_id', 'id'])` | A row that references another tenant's row |
-| Static analysis | PHPStan rule `Tests\PHPStan\Rules\TenantTableAccessRule` (`paylink.tenantTableAccess`, `paylink.rawTenantSql`, `paylink.scopeBypass`) | `DB::table()` or raw SQL on tenant tables; `withoutGlobalScope(s)` outside the whitelist |
+| Static analysis | PHPStan rule `Tests\PHPStan\Rules\TenantTableAccessRule` (`axispay.tenantTableAccess`, `axispay.rawTenantSql`, `axispay.scopeBypass`) | `DB::table()` or raw SQL on tenant tables; `withoutGlobalScope(s)` outside the whitelist |
 | Tests | `tests/Feature/Isolation/TenantIsolationTest.php` (cross-tenant access → 404, route coverage), `tests/Feature/Tenancy/TenancyInventoryTest.php` (every `tenant_id` table is listed and its model uses the trait) | New endpoints or tables without isolation |
 | Explicit platform context | `TenantContext::runAsPlatform($reason, …)` (audited) and `runAsTenant()` | Silent cross-tenant access |
 
@@ -141,7 +141,7 @@ Business tables (links, payments; Phase 3+) also carry `livemode`, so test and l
 | Collations | `utf8mb4_uca1400_ai_ci` by default; `ascii_bin` for ULIDs, tokens, hashes, idempotency keys and provider IDs | `Shared\Database\SchemaMacros` (`ulidAscii`, `foreignUlidAscii`, `asciiString`, `asciiChar`, `->asciiBin()`) |
 | Datetimes | `DATETIME(6)` in UTC; the session time zone is `+00:00` | `config/database.php`, `UsesMicrosecondDates` |
 | Money | `BIGINT` minor units + `CHAR(3)` currency; decimal strings in the API; `HALF_UP` once; rates `DECIMAL(18,6)` | `Shared\Money` (ADR-0007) |
-| Database users | `paylink_app` (DML) at runtime; `paylink_migrator` (DDL) for migrations only | `mariadb` / `mariadb_migrator` connections |
+| Database users | `axispay_app` (DML) at runtime; `axispay_migrator` (DDL) for migrations only | `mariadb` / `mariadb_migrator` connections |
 
 ## Runtime and deployment
 

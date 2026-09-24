@@ -49,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     sensitive-role notifications.
   - `PlatformAdmin` module: `platform_admins` and the `platform` guard on the
     admin host with mandatory 2FA, audited cross-host impersonation (read-only,
-    30 minutes, banner), `paylink:create-platform-admin` command.
+    30 minutes, banner), `axispay:create-platform-admin` command.
   - `Audit` module: append-only `audit_logs` (model guards and database
     triggers), redacted details, request metadata; records sign-ins, failed
     sign-ins, 2FA changes, invitations, role changes, tenant creation and status
@@ -66,14 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     cookies with a boot guard against a shared `SESSION_DOMAIN`; wider PHPStan
     tenancy rule; impersonation re-validates the platform admin on every
     request; per-account login throttling; per-tenant invitation throttling
-    with audited refusals; local-only `paylink:dev-reset-2fa`.
+    with audited refusals; local-only `axispay:dev-reset-2fa`.
 - Phase 0 foundations (master plan section 27):
   - Tooling: Pest 5 (on PHPUnit 13), Larastan 3 at PHPStan level max, Pint with the
     Laravel preset plus `declare_strict_types` and strict comparison rules, and the
     Composer scripts `test`, `analyse`, `format`, `format:check` and `ci`.
   - Local MariaDB 11.8 LTS (`mariadb:11.8.9`) in `compose.yaml` with `utf8mb4` /
-    `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, UTC and InnoDB; `paylink` and
-    `paylink_testing` databases; `paylink_app` and `paylink_migrator` users.
+    `utf8mb4_uca1400_ai_ci`, strict `sql_mode`, UTC and InnoDB; `axispay` and
+    `axispay_testing` databases; `axispay_app` and `axispay_migrator` users.
   - `mariadb` connection with explicit charset, collation, `sql_mode`, time zone,
     engine and optional TLS; `mariadb_migrator` connection for deploy-time migrations.
   - `app/Modules` structure with the `Shared` module: money value objects on
@@ -90,6 +90,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Renamed the product to AxisPay (ADR-0037, supersedes ADR-0028): internal
+  name `axispay` replaces the working name `paylink` in `config/axispay.php`,
+  `AXISPAY_*` environment variables, `axispay:*` Artisan commands, session keys
+  and cookies (`axispay_admin_session`, `axispay_app_session`), database names
+  and users (`axispay`, `axispay_testing`, `axispay_app`, `axispay_migrator`),
+  the compose project and the image (`axispay-entrypoint`,
+  `axispay-healthcheck`). API keys use the `axp_test_` / `axp_live_` prefix.
+- The public display name is configurable with `AXISPAY_DISPLAY_NAME`
+  (default "AxisPay", read through `Brand::displayName()`) for pages, panels,
+  the 2FA issuer, the mail sender and mail templates. `APP_NAME` is now a fixed
+  internal value (`AxisPay`) because it drives the cache, Redis and session
+  prefixes.
 - pnpm is the only package manager: its version is pinned in
   `package.json` → `packageManager` (used by CI and the Dockerfile), and the
   `composer setup` script uses pnpm instead of npm.

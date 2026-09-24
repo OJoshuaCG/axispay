@@ -31,7 +31,7 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0025](0025-filament-panels.md) | Panels: Filament for `admin` and `app`, Blade for checkout | Accepted (by project owner delegation, 2026-09-23) |
 | [ADR-0026](0026-local-and-production-database.md) | Local database in Docker; production on an external MariaDB server | Accepted (by project owner delegation, 2026-09-23) |
 | [ADR-0027](0027-local-surface-hosts.md) | Surface hosts for local development | Accepted (by project owner delegation, 2026-09-23) |
-| [ADR-0028](0028-product-naming.md) | Product naming in code | Accepted (by project owner delegation, 2026-09-23); final commercial name still pending |
+| [ADR-0028](0028-product-naming.md) | Product naming in code | Superseded by ADR-0037 |
 | [ADR-0029](0029-error-tracking-integration.md) | Error tracking integration (Sentry SDK, compatible with GlitchTip) | Proposed. The provider choice is open question #13 (Sentry vs self-hosted GlitchTip). |
 | [ADR-0030](0030-filament-theme-and-dark-mode-bridge.md) | Filament 5 panels themed from the design tokens, with a dark-mode bridge | Accepted (Phase 1) |
 | [ADR-0031](0031-tenancy-enforcement.md) | Tenancy enforcement details (whitelist, platform rows, permission teams) | Accepted (Phase 1) |
@@ -40,3 +40,4 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0034](0034-phase-1-security-hardening.md) | Phase 1 security hardening (escalation guard, locks, session cookies, throttling, accepted enumeration risk) | Accepted (Phase 1) |
 | [ADR-0035](0035-production-container-image.md) | Production container image (Nginx + PHP-FPM, one image, several roles) | Accepted (by project owner delegation, 2026-09-24) |
 | [ADR-0036](0036-dokploy-deployment.md) | Deployment on Dokploy with one Application per role | Accepted (Dokploy chosen by the project owner, 2026-09-24) |
+| [ADR-0037](0037-product-naming-axispay.md) | Product naming: AxisPay internal name, configurable display name, `axp_` key prefix | Accepted (by the project owner, 2026-09-24) |

@@ -1,6 +1,6 @@
 # ADR-0028: Product naming in code
 
-- **Status:** Accepted (by project owner delegation, 2026-09-23); final commercial name still pending
+- **Status:** Superseded by [ADR-0037](0037-product-naming-axispay.md) (2026-09-24). The text below is kept as history; the names it mentions (`paylink`, `plk_`, `config/paylink.php`, "Cirox Payments") are no longer used.
 - **Date:** 2026-09-23
 - **Source:** master plan header and section 29, open question #10
 

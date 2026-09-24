@@ -25,10 +25,15 @@ code, and `docs/frontend/README.md` before touching UI. For production see
    ```
 
    On the first start, `docker/mariadb/initdb.d/01-databases-and-users.sql`
-   creates the `paylink` and `paylink_testing` databases and the `paylink_app`
-   and `paylink_migrator` users. Init scripts only run on an empty volume; to
+   creates the `axispay` and `axispay_testing` databases and the `axispay_app`
+   and `axispay_migrator` users. Init scripts only run on an empty volume; to
    rerun them, remove the volume with `docker compose down -v` (this deletes
    local data).
+
+   Before the AxisPay rename (ADR-0037) the compose project was called
+   `paylink`. Its container and volume are not reused: stop them with
+   `docker compose -p paylink stop` and, once nothing there is needed,
+   remove them with `docker compose -p paylink down -v`.
 
 2. Install dependencies and create `.env`:
 
@@ -59,14 +64,16 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 
 | Key | Local value | Notes |
 |---|---|---|
+| `APP_NAME` | `AxisPay` | Fixed internal name (cache, Redis and session prefixes). Do not change it to rebrand (ADR-0037). |
+| `AXISPAY_DISPLAY_NAME` | `AxisPay` | Public name shown in pages, panels, the 2FA issuer and the mail sender. Change this one to rebrand. |
 | `DB_CONNECTION` | `mariadb` | Only MariaDB is supported. |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `33061` | Production: the external database server. |
-| `DB_DATABASE` | `paylink` | Tests use `paylink_testing` (set in `phpunit.xml`). |
-| `DB_USERNAME` / `DB_PASSWORD` | `paylink_app` / `paylink_app` | Runtime user (DML only in production). |
-| `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` | `paylink_migrator` / `paylink_migrator` | Used by `--database=mariadb_migrator`. |
+| `DB_DATABASE` | `axispay` | Tests use `axispay_testing` (set in `phpunit.xml`). |
+| `DB_USERNAME` / `DB_PASSWORD` | `axispay_app` / `axispay_app` | Runtime user (DML only in production). |
+| `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` | `axispay_migrator` / `axispay_migrator` | Used by `--database=mariadb_migrator`. |
 | `MYSQL_ATTR_SSL_CA`, `MYSQL_ATTR_SSL_CERT`, `MYSQL_ATTR_SSL_KEY`, `MYSQL_ATTR_SSL_VERIFY_SERVER_CERT` | unset | Optional TLS to an external server. |
-| `PAYLINK_API_HOST`, `PAYLINK_APP_HOST`, `PAYLINK_ADMIN_HOST`, `PAYLINK_PAY_HOST` | `*.localhost` | Surface hosts (ADR-0027). |
-| `PAYLINK_PASSWORD_CHECK_UNCOMPROMISED` | `true` (default) | Breached-password check on new passwords (HIBP). Off in `phpunit.xml`. |
+| `AXISPAY_API_HOST`, `AXISPAY_APP_HOST`, `AXISPAY_ADMIN_HOST`, `AXISPAY_PAY_HOST` | `*.localhost` | Surface hosts (ADR-0027). |
+| `AXISPAY_PASSWORD_CHECK_UNCOMPROMISED` | `true` (default) | Breached-password check on new passwords (HIBP). Off in `phpunit.xml`. |
 | `LOG_STACK` | `single` | The production image logs redacted JSON to stderr instead (ADR-0035). |
 | `TRUSTED_PROXIES` | unset | Production behind Traefik: its network range (`config/trustedproxy.php`). |
 | `SENTRY_LARAVEL_DSN` | empty | Error tracking stays off while empty (ADR-0029). |
@@ -96,8 +103,8 @@ never share a session cookie.
 
 | Panel | E-mail | Password | Role |
 |---|---|---|---|
-| admin | `superadmin@paylink.test` | `local-dev-password` | Superadmin |
-| app | `owner@demo.paylink.test` | `local-dev-password` | Owner of "Demo Company" (active) |
+| admin | `superadmin@axispay.test` | `local-dev-password` | Superadmin |
+| app | `owner@demo.axispay.test` | `local-dev-password` | Owner of "Demo Company" (active) |
 
 These are local-only, non-secret credentials. Never create them anywhere else.
 
@@ -119,22 +126,22 @@ These are local-only, non-secret credentials. Never create them anywhere else.
   required, read-only, 30 minutes, audited). A banner in the tenant panel stops it.
 - **Test/live selector:** the badge in the tenant panel topbar (test by default).
 - **Reset 2FA of a local account** (lost authenticator, fresh seed):
-  `php artisan paylink:dev-reset-2fa owner@demo.paylink.test` (works for tenant
+  `php artisan axispay:dev-reset-2fa owner@demo.axispay.test` (works for tenant
   users and platform admins; refuses to run unless `APP_ENV=local`; audited).
   The next sign-in asks to set 2FA up again.
 - **Sign-in throttling:** 5 failed attempts per account in 15 minutes lock that
   account's sign-in for the rest of the window (plus Filament's per-IP limit).
   Locally, clear it with `php artisan cache:clear`.
-- **Session cookies:** each host has its own (`paylink_admin_session`,
-  `paylink_app_session`); keep `SESSION_DOMAIN` empty or the app will not boot.
-- **Platform admins in other environments:** `php artisan paylink:create-platform-admin`
+- **Session cookies:** each host has its own (`axispay_admin_session`,
+  `axispay_app_session`); keep `SESSION_DOMAIN` empty or the app will not boot.
+- **Platform admins in other environments:** `php artisan axispay:create-platform-admin`
   (interactive; the password is never passed as an argument).
 
 ## Quality checks
 
 | Command | What it does |
 |---|---|
-| `composer test` | Pest suite against `paylink_testing` on the Docker MariaDB. |
+| `composer test` | Pest suite against `axispay_testing` on the Docker MariaDB. |
 | `composer analyse` | Larastan, PHPStan level max. |
 | `composer format` | Fixes code style with Pint. |
 | `composer format:check` | Checks code style without changing files. |
@@ -149,8 +156,8 @@ live in `phpunit.xml` (`<env>` entries), so they do not depend on `.env`.
   table in `config/tenancy.php` (a test enforces both).
 - Never `DB::table('<tenant table>')`, raw SQL on tenant tables or
   `withoutGlobalScope(s)` outside the whitelist in `config/tenancy.php`:
-  PHPStan fails (`paylink.tenantTableAccess`, `paylink.rawTenantSql`,
-  `paylink.scopeBypass`).
+  PHPStan fails (`axispay.tenantTableAccess`, `axispay.rawTenantSql`,
+  `axispay.scopeBypass`).
 - Cross-tenant work: `TenantContext::runAsTenant()` per tenant, or
   `runAsPlatform($reason, ...)` (audited).
 - Queued tenant jobs implement `TenantAware` and use `CapturesTenantContext`.
@@ -181,6 +188,6 @@ When MariaDB is upgraded, change `compose.yaml` and the workflow together.
 
 ## Production image
 
-`docker build -t paylink:local .` builds the production image. To run its
+`docker build -t axispay:local .` builds the production image. To run its
 roles against the local database, see "Run the production image locally" in
 [deployment/dokploy.md](deployment/dokploy.md#run-the-production-image-locally).

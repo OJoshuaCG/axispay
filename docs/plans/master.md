@@ -3,7 +3,7 @@
 > **Documento fuente de verdad para el desarrollo.**
 > Está escrito para que Claude Code (u otro desarrollador) lo lea completo antes de escribir código, entienda *qué* se construye, *por qué* se tomó cada decisión, *qué alternativas se descartaron* y *qué queda fuera de alcance*.
 >
-> **Nombre de trabajo del producto:** `PayLink` (provisional). En código se usa el prefijo/namespace `paylink` y el prefijo de llaves `plk_`. Cambiar el nombre comercial no debe requerir cambios en el dominio.
+> **Nombre del producto:** `AxisPay` (nombre interno, decidido el 2026-09-24, ADR-0037). En código se usa el prefijo/namespace `axispay` y el prefijo de llaves `axp_`. El nombre público que ven las personas es configurable (`AXISPAY_DISPLAY_NAME`); cambiar el nombre comercial no debe requerir cambios en el dominio.
 >
 > **Fecha de redacción:** septiembre 2026.
 >
@@ -72,7 +72,7 @@
 
 | Término | Significado en este sistema |
 |---|---|
-| **Plataforma** | Nuestro sistema (`PayLink`) y nuestra cuenta de plataforma en Stripe Connect. |
+| **Plataforma** | Nuestro sistema (`AxisPay`) y nuestra cuenta de plataforma en Stripe Connect. |
 | **Operador / Superadmin** | Personal de nuestra empresa que administra la plataforma completa. |
 | **Tenant / Cliente** | Empresa o comercio que contrata la plataforma para cobrar a sus propios clientes. |
 | **Usuario del tenant** | Persona con acceso al panel del tenant (dueño, admin, finanzas, etc.). |
@@ -324,7 +324,7 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
 
 - **Opciones:**
   - (a) Laravel Sanctum con `tokenable = Tenant`. Funciona, pero separar test/live con prefijos visibles distintos requiere forzarlo con un modelo personalizado.
-  - (b) **Tabla propia `api_keys`** con prefijos por modo (`plk_test_` / `plk_live_`), hash SHA-256, scopes, expiración opcional, `last_used_at` y revocación.
+  - (b) **Tabla propia `api_keys`** con prefijos por modo (`axp_test_` / `axp_live_`), hash SHA-256, scopes, expiración opcional, `last_used_at` y revocación.
 - **Decisión:** (b). Es poco código (un modelo, un generador y un middleware) y da control total.
 - **Justificación:** la key pertenece al tenant, así que si el usuario que la creó deja la empresa, la integración no se rompe. Los prefijos visibles evitan usar llaves de producción en pruebas por accidente.
 - **Consecuencias:** sección 10.2.
@@ -399,7 +399,7 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
 
 | Superficie | Host sugerido | Autenticación | Contexto de tenant |
 |---|---|---|---|
-| API pública v1 | `api.<dominio>` | API key (`Authorization: Bearer plk_...`) | Derivado de la API key |
+| API pública v1 | `api.<dominio>` | API key (`Authorization: Bearer axp_...`) | Derivado de la API key |
 | Página de pago | `pay.<dominio>` | Ninguna (token secreto en la URL) | Derivado del `public_token` del link |
 | Panel del tenant | `app.<dominio>` | Sesión + 2FA | Derivado del usuario autenticado |
 | Panel superadmin | `admin.<dominio>` | Guard `platform` + 2FA obligatorio + (recomendado) allowlist de IP o VPN | Contexto de plataforma explícito y auditado |
@@ -667,7 +667,7 @@ Esta regla aplica a: `payment_attempts → payment_links`, `fx_quotes → paymen
 - `id`, `tenant_id`, `email`, `role_name`, `token_hash` (`ascii_bin`), `expires_at`, `accepted_at`, `invited_by_user_id`.
 
 **`api_keys`**
-- `id`, `tenant_id`, `livemode`, `name`, `key_prefix` (primeros 12 caracteres visibles, por ejemplo `plk_live_a1b2`, `ascii_bin`), `key_hash` (SHA-256 hex, `ascii_bin`, único), `scopes` (JSON: lista de permisos de API), `last_used_at`, `last_used_ip`, `expires_at` (nullable), `revoked_at`, `created_by_user_id`.
+- `id`, `tenant_id`, `livemode`, `name`, `key_prefix` (primeros 12 caracteres visibles, por ejemplo `axp_live_a1b2`, `ascii_bin`), `key_hash` (SHA-256 hex, `ascii_bin`, único), `scopes` (JSON: lista de permisos de API), `last_used_at`, `last_used_ip`, `expires_at` (nullable), `revoked_at`, `created_by_user_id`.
 
 ### 7.3 Configuración del tenant (`tenants.settings`, JSON validado)
 
@@ -695,7 +695,7 @@ Esta regla aplica a: `payment_attempts → payment_links`, `fx_quotes → paymen
 }
 ```
 
-- Límites de plataforma (no configurables por el tenant, en `config/paylink.php`): `max_expiration_hours` absoluto = 2160 (90 días), `markup_bps` máximo = 1000, expiración mínima = 15 minutos.
+- Límites de plataforma (no configurables por el tenant, en `config/axispay.php`): `max_expiration_hours` absoluto = 2160 (90 días), `markup_bps` máximo = 1000, expiración mínima = 15 minutos.
 - La configuración se lee siempre a través de un DTO `TenantSettings` con valores por defecto, nunca como arreglo suelto.
 
 ### 7.4 Pasarelas
@@ -944,8 +944,8 @@ Los estados internos son un espejo normalizado de los de Stripe (el adaptador ha
 
 ### 10.2 Autenticación
 
-- `Authorization: Bearer plk_live_<secreto>` o `plk_test_<secreto>`.
-- Formato de la key: `plk_{mode}_{32 bytes aleatorios en base62}` (aproximadamente 43 caracteres de secreto).
+- `Authorization: Bearer axp_live_<secreto>` o `axp_test_<secreto>`.
+- Formato de la key: `axp_{mode}_{32 bytes aleatorios en base62}` (aproximadamente 43 caracteres de secreto).
 - La key completa **se muestra una sola vez** al crearla. En BD se guarda `key_hash = SHA-256(key)` y `key_prefix` (para identificarla en el panel).
 - **Hash:** SHA-256 es adecuado aquí porque la key tiene alta entropía (no es una contraseña). Comparación en tiempo constante (`hash_equals`).
 - El prefijo determina `livemode`. Una key test **nunca** puede operar recursos live, y viceversa.
@@ -1258,7 +1258,7 @@ Pagador                   Checkout (nuestro backend)                    Stripe
 - **Idempotency key hacia Stripe:** `create_pi:{link_id}:{n}` para la creación y `confirm:{attempt_id}:{ctoken_id}` para la confirmación.
 - La página de "completado" **no** marca el pago como exitoso por sí misma: consulta el estado. El backend, al recibir el retorno del cliente, puede hacer un `retrieve` del PaymentIntent para acelerar la actualización (además del webhook).
 - **Métodos de pago:** `payment_method_types: ['card']`, sin wallets (ADR-009, ADR-018).
-- **Datos que se envían a Stripe:** `receipt_email` solo si el tenant activó `send_stripe_receipts` y el email fue recolectado; `description` (la del link, truncada); `statement_descriptor_suffix` (opcional, configurable por tenant, a futuro); `metadata` de Stripe **solo con nuestros IDs** (`paylink_tenant_id`, `paylink_link_id`, `paylink_attempt_id`), **no** la metadata del integrador (para evitar filtrar datos y por los límites de Stripe).
+- **Datos que se envían a Stripe:** `receipt_email` solo si el tenant activó `send_stripe_receipts` y el email fue recolectado; `description` (la del link, truncada); `statement_descriptor_suffix` (opcional, configurable por tenant, a futuro); `metadata` de Stripe **solo con nuestros IDs** (`axispay_tenant_id`, `axispay_link_id`, `axispay_attempt_id`), **no** la metadata del integrador (para evitar filtrar datos y por los límites de Stripe).
 
 ### 11.5 Endpoints internos del checkout
 
@@ -1347,7 +1347,7 @@ interface PaymentGateway
 
 ### 12.3 Conexión del tenant con Stripe (ADR-004: tres métodos)
 
-La pantalla "Conectar Stripe" del panel (permiso `gateway:manage`, con re-autenticación) ofrece los métodos habilitados por configuración de plataforma (`config/paylink.php` → `gateways.stripe.connection_methods`), en este orden y con esta presentación:
+La pantalla "Conectar Stripe" del panel (permiso `gateway:manage`, con re-autenticación) ofrece los métodos habilitados por configuración de plataforma (`config/axispay.php` → `gateways.stripe.connection_methods`), en este orden y con esta presentación:
 
 1. **"Crear o conectar con Stripe (recomendado)"** → `platform_onboarding`.
 2. **"Ya tengo cuenta de Stripe: conectar con OAuth"** → `oauth` (solo si está habilitado y disponible para la plataforma).
@@ -1430,7 +1430,7 @@ Parámetros clave. El contexto de autenticación lo resuelve la `StripeClientFac
 - `payment_method_types: ['card']`.
 - `confirmation_method`/flujo compatible con ConfirmationToken (confirmación del lado del servidor).
 - `description`: la descripción del link (truncada al límite de Stripe).
-- `metadata`: `paylink_tenant_id`, `paylink_link_id`, `paylink_attempt_id`, `paylink_livemode`.
+- `metadata`: `axispay_tenant_id`, `axispay_link_id`, `axispay_attempt_id`, `axispay_livemode`.
 - `receipt_email`: condicional (11.4).
 - **Sin** `application_fee_amount` (ADR-011).
 - Header `Idempotency-Key`.
@@ -1610,7 +1610,7 @@ Detalle del endpoint Connect:
 
 ### 14.4 Eventos que no pertenecen a un intento nuestro
 
-Si un `payment_intent.*` no tiene `metadata.paylink_attempt_id` o no existe en nuestra BD (por ejemplo, el comercio cobró por su cuenta desde su dashboard u otra integración), se marca `ignored` con motivo `foreign_object`. Esto será **frecuente con `api_key` y `oauth`**, porque son cuentas que el comercio también usa para otras ventas; el filtro debe ser barato (verificar la metadata del payload antes de cualquier consulta a Stripe). Para no llenar la tabla, los eventos `foreign_object` se guardan con el payload reducido y se purgan a los 7 días. **No** se crean pagos a partir de objetos que no originó la plataforma.
+Si un `payment_intent.*` no tiene `metadata.axispay_attempt_id` o no existe en nuestra BD (por ejemplo, el comercio cobró por su cuenta desde su dashboard u otra integración), se marca `ignored` con motivo `foreign_object`. Esto será **frecuente con `api_key` y `oauth`**, porque son cuentas que el comercio también usa para otras ventas; el filtro debe ser barato (verificar la metadata del payload antes de cualquier consulta a Stripe). Para no llenar la tabla, los eventos `foreign_object` se guardan con el payload reducido y se purgan a los 7 días. **No** se crean pagos a partir de objetos que no originó la plataforma.
 
 ---
 
@@ -1679,7 +1679,7 @@ webhook-id: evt_01J8Z5...
 webhook-timestamp: 1758679870
 webhook-signature: v1,<base64(HMAC-SHA256(secret_bytes, "{webhook-id}.{webhook-timestamp}.{body}"))>
 content-type: application/json
-user-agent: PayLink-Webhooks/1.0
+user-agent: AxisPay-Webhooks/1.0
 ```
 
 - `secret_bytes` = base64-decode de la parte posterior a `whsec_`.
@@ -1746,7 +1746,7 @@ En el flujo de 11.4, en este orden: campos del pagador validados → rate limits
 
 #### 15.8.3 Request
 
-`POST` a la URL configurada, con los headers de Standard Webhooks (`webhook-id` = ID de `validation_calls`, `webhook-timestamp`, `webhook-signature`) y además `x-paylink-kind: pre_payment_validation`.
+`POST` a la URL configurada, con los headers de Standard Webhooks (`webhook-id` = ID de `validation_calls`, `webhook-timestamp`, `webhook-signature`) y además `x-axispay-kind: pre_payment_validation`.
 
 ```json
 {
@@ -2065,7 +2065,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - `.env` con permisos `600`, propiedad del usuario de la aplicación; **nunca** en el repositorio (con `.env.example` sin valores reales).
 - `APP_KEY` respaldado de forma segura y separada de los backups de BD (sin él, los datos cifrados son irrecuperables). Rotación con `APP_PREVIOUS_KEYS` de Laravel.
 - Secretos de terceros (Stripe, Banxico, Turnstile, SMTP) solo en `.env`.
-- `GATEWAY_CREDENTIALS_KEY` respaldada **por separado** de `APP_KEY` y de los backups de BD: quien obtenga un backup no debe poder descifrar las restricted keys de los comercios. Comando `paylink:rotate-gateway-credentials-key` para re-cifrar con una nueva versión de la llave.
+- `GATEWAY_CREDENTIALS_KEY` respaldada **por separado** de `APP_KEY` y de los backups de BD: quien obtenga un backup no debe poder descifrar las restricted keys de los comercios. Comando `axispay:rotate-gateway-credentials-key` para re-cifrar con una nueva versión de la llave.
 - Escaneo de secretos en CI (por ejemplo, gitleaks) y en pre-commit.
 - Cifrado de campos en BD con el cifrador de Laravel: secrets de webhooks, secretos 2FA, PII del pagador.
 
@@ -2181,10 +2181,10 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 
 ### 25.5 Usuarios de base de datos
 
-- `paylink_app`: `SELECT`, `INSERT`, `UPDATE`, `DELETE` sobre el esquema de la aplicación. Sin DDL. Sin `DELETE` sobre `audit_logs` (se puede reforzar con un trigger que rechace `UPDATE`/`DELETE`).
-- `paylink_migrator`: DDL; solo se usa durante el despliegue.
-- `paylink_backup`: privilegios mínimos para `mariabackup`.
-- `paylink_readonly` (opcional): para análisis y soporte.
+- `axispay_app`: `SELECT`, `INSERT`, `UPDATE`, `DELETE` sobre el esquema de la aplicación. Sin DDL. Sin `DELETE` sobre `audit_logs` (se puede reforzar con un trigger que rechace `UPDATE`/`DELETE`).
+- `axispay_migrator`: DDL; solo se usa durante el despliegue.
+- `axispay_backup`: privilegios mínimos para `mariabackup`.
+- `axispay_readonly` (opcional): para análisis y soporte.
 
 ---
 
@@ -2377,7 +2377,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | 7 | Retención de PII del pagador (propuesta: 24 meses) y aviso de privacidad del tenant obligatorio | `PROPUESTO` | Validar con asesoría legal (contrato de encargo de tratamiento de datos) | Fase 8 |
 | 8 | IVA y obligaciones fiscales del operador al cobrar a sus tenants | `PENDIENTE` (fuera del sistema) | Validar con el contador: cobrar IVA en México normalmente implica emitir CFDI | Negocio |
 | 9 | Términos y condiciones: comisiones no reembolsables (ADR-012), suspensión (ADR-013), responsabilidades de disputas | `PENDIENTE` | Redactar con asesoría legal | Salida a producción |
-| 10 | Nombre comercial, dominios y prefijo de llaves definitivos | `PENDIENTE` | — | Fase 0 (prefijos) |
+| 10 | Nombre comercial, dominios y prefijo de llaves definitivos | `PARCIALMENTE RESUELTO` (2026-09-24, ADR-0037): nombre interno `AxisPay` / `axispay`, prefijo de llaves `axp_`, nombre público configurable con `AXISPAY_DISPLAY_NAME`. Dominios: `PENDIENTE` | Definir los dominios antes de la salida a producción | Salida a producción (dominios) |
 | 11 | Tope de markup FX (propuesta: 10%) | `PROPUESTO` | Confirmar | Fase 6 |
 | 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | `PROPUESTO` | Confirmar | Fases 3 y 5 |
 | 13 | Proveedor de correo transaccional y de monitoreo de errores | `PENDIENTE` | Postmark/SES; GlitchTip autoalojado o Sentry | Fase 0 |

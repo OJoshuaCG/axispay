@@ -11,7 +11,7 @@ Integrators authenticate against the API with keys.
 ## Options considered
 
 1. **Laravel Sanctum with `tokenable = Tenant`.** Works, but separating test/live with distinct visible prefixes requires forcing it with a custom model.
-2. **Own `api_keys` table** with per-mode prefixes (`plk_test_` / `plk_live_`), SHA-256 hash, scopes, optional expiration, `last_used_at` and revocation.
+2. **Own `api_keys` table** with per-mode prefixes (`axp_test_` / `axp_live_`), SHA-256 hash, scopes, optional expiration, `last_used_at` and revocation.
 
 ## Decision
 

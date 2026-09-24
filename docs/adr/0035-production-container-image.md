@@ -31,7 +31,7 @@ Option 1. The `Dockerfile` at the repository root builds a single image. `docker
   - `release`: one-shot. It runs `migrate --force --database=mariadb_migrator` and then the idempotent `db:seed` (the permission catalog).
   - `artisan …`: one-off Artisan commands.
 - **Migration ordering.** With `RUN_MIGRATIONS=true`, a long-running role runs the release steps before it starts. Otherwise it waits until `migrate:status --pending=1` reports no pending migration, so new code never runs against an old schema. The migrator credentials are removed from the environment before the runtime caches are built. The cached config and the PHP processes never hold them.
-- **Runtime caches.** `config:cache`, `route:cache`, `view:cache` and `event:cache` run at container start, not at build. They depend on the environment: the hosts in `config/paylink.php` shape the routes.
+- **Runtime caches.** `config:cache`, `route:cache`, `view:cache` and `event:cache` run at container start, not at build. They depend on the environment: the hosts in `config/axispay.php` shape the routes.
 - **Security.**
   - The process runs as `www-data`. The code is owned by root and read-only; only `storage/` and `bootstrap/cache` are writable.
   - No `.env` is present. The build checks this, and `.dockerignore` keeps `.env*`, `storage/`, `vendor/` and `node_modules/` out of the build context.
@@ -41,7 +41,7 @@ Option 1. The `Dockerfile` at the repository root builds a single image. `docker
   - The image defaults to `LOG_CHANNEL=stderr` with `Monolog\Formatter\JsonFormatter`, and the `RedactSensitiveLogData` tap stays in place. PHP-FPM forwards worker output undecorated. No log file is written in the container.
   - Access logs are off in Nginx and PHP-FPM, because request URLs can carry single-use tokens (signed invitation and impersonation links).
 - **Health.**
-  - `HEALTHCHECK` runs `paylink-healthcheck`, which depends on the role. `web` requests `/up` on 127.0.0.1. `/up` is registered without `Route::domain()`, so it answers on any Host. `worker` and `scheduler` check that their Artisan process is alive.
+  - `HEALTHCHECK` runs `axispay-healthcheck`, which depends on the role. `web` requests `/up` on 127.0.0.1. `/up` is registered without `Route::domain()`, so it answers on any Host. `worker` and `scheduler` check that their Artisan process is alive.
 - **Shutdown.**
   - On SIGTERM, `web` sends SIGQUIT to Nginx and FPM, which drain gracefully. FPM waits for running requests up to `process_control_timeout = 25s`.
   - `queue:work`, which needs `pcntl`, finishes the current job and then exits. The orchestrator's stop grace period must exceed `QUEUE_TIMEOUT` (default 60 s). ADR-0036 recommends 90 s.

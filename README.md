@@ -1,4 +1,4 @@
-# Cirox Payments (PayLink)
+# AxisPay
 
 A multi-tenant **payment-links orchestrator** on Stripe Connect.
 
@@ -7,7 +7,7 @@ A multi-tenant **payment-links orchestrator** on Stripe Connect.
 - Each tenant manages users, roles and payments in its own panel.
 - Platform staff operate every tenant from a separate superadmin panel.
 
-"PayLink" is the working name in code (ADR-0028); the display name comes from `APP_NAME`.
+`axispay` / "AxisPay" is the internal name used in code and infrastructure. The public name shown to people is configurable with `AXISPAY_DISPLAY_NAME` (default "AxisPay"); change that one to rebrand, never `APP_NAME` (ADR-0037).
 
 | Surface | Host | For |
 |---|---|---|

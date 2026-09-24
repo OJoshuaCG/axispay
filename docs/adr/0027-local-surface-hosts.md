@@ -12,11 +12,11 @@ All surfaces are served by one Laravel application, separated by domain with `Ro
 
 1. **`*.localhost` hosts** (`admin.localhost`, `app.localhost`, `pay.localhost`, `api.localhost`). Browsers and most resolvers map `*.localhost` to the loopback address without configuration.
 2. **Path prefixes** (`/admin`, `/api`). Breaks cookie isolation and diverges from production routing.
-3. **A custom local domain** (`*.paylink.test`). Needs DNS or hosts-file setup per machine.
+3. **A custom local domain** (`*.axispay.test`). Needs DNS or hosts-file setup per machine.
 
 ## Decision
 
-Local hosts default to `admin.localhost`, `app.localhost`, `pay.localhost` and `api.localhost`, configurable through `PAYLINK_ADMIN_HOST`, `PAYLINK_APP_HOST`, `PAYLINK_PAY_HOST` and `PAYLINK_API_HOST` (`config/paylink.php` → `surfaces`). Production sets them to the real subdomains.
+Local hosts default to `admin.localhost`, `app.localhost`, `pay.localhost` and `api.localhost`, configurable through `AXISPAY_ADMIN_HOST`, `AXISPAY_APP_HOST`, `AXISPAY_PAY_HOST` and `AXISPAY_API_HOST` (`config/axispay.php` → `surfaces`). Production sets them to the real subdomains.
 
 ## Rationale
 

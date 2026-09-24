@@ -1,6 +1,6 @@
 # Frontend design system
 
-This is the entry point to the Cirox Payments frontend design system (Laravel 13 Blade components + Tailwind CSS v4). The UI ships in English and Spanish, light and dark, and must work from 320px phones to desktop. It is for anyone, human or agent, who writes CSS, Blade components or views. Read the golden rules below before touching UI code; the linked pages hold the detail.
+This is the entry point to the AxisPay frontend design system (Laravel 13 Blade components + Tailwind CSS v4). The UI ships in English and Spanish, light and dark, and must work from 320px phones to desktop. It is for anyone, human or agent, who writes CSS, Blade components or views. Read the golden rules below before touching UI code; the linked pages hold the detail.
 
 ## Quick path
 

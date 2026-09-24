@@ -54,7 +54,7 @@ Base HTML document: meta tags, theme pre-paint script, fonts, Vite assets, skip 
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
-| `title` | string\|null | `null` | Rendered as `{title} · {app name}`, or the app name alone |
+| `title` | string\|null | `null` | Rendered as `{title} · {display name}` (`Brand::displayName()`), or the display name alone |
 
 | Slot | Where it renders |
 |---|---|
@@ -369,7 +369,7 @@ Groups `<x-language-switcher>` and `<x-theme-toggle>` for page headers (`role="g
 
 ```blade
 <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-stack-lg">
-    <span class="min-w-0 truncate font-semibold">{{ config('app.name') }}</span>
+    <span class="min-w-0 truncate font-semibold">{{ \App\Modules\Shared\Support\Brand::displayName() }}</span>
     <x-site-controls />
 </header>
 ```
