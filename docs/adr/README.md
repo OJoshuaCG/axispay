@@ -38,3 +38,5 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0032](0032-identity-invitations-reauthentication-2fa.md) | Identity: 2FA, invitations and re-authentication | Accepted (Phase 1) |
 | [ADR-0033](0033-impersonation.md) | Audited impersonation across hosts | Accepted (Phase 1) |
 | [ADR-0034](0034-phase-1-security-hardening.md) | Phase 1 security hardening (escalation guard, locks, session cookies, throttling, accepted enumeration risk) | Accepted (Phase 1) |
+| [ADR-0035](0035-production-container-image.md) | Production container image (Nginx + PHP-FPM, one image, several roles) | Accepted (by project owner delegation, 2026-09-24) |
+| [ADR-0036](0036-dokploy-deployment.md) | Deployment on Dokploy with one Application per role | Accepted (Dokploy chosen by the project owner, 2026-09-24) |
