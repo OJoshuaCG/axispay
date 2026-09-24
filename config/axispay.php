@@ -6,18 +6,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Product identity (ADR-028)
+    | Product identity (ADR-0037)
     |--------------------------------------------------------------------------
     |
-    | "PayLink" is the working name used in code, prefixes and namespaces. The
-    | display name shown to people comes from APP_NAME. Final naming is open
-    | question #10 of the master plan.
+    | "axispay" is the internal name used in code, config keys, prefixes and
+    | infrastructure. It never changes with branding.
+    |
+    | display_name is the public name shown to people (layouts, panels, 2FA
+    | issuer, mail sender). To rebrand, change AXISPAY_DISPLAY_NAME only; do
+    | not change APP_NAME, which drives cache, Redis and session prefixes.
     |
     */
 
-    'product_code' => 'paylink',
+    'product_code' => 'axispay',
 
-    'api_key_prefix' => 'plk',
+    'display_name' => env('AXISPAY_DISPLAY_NAME', 'AxisPay'),
+
+    'api_key_prefix' => 'axp',
 
     /*
     |--------------------------------------------------------------------------
@@ -26,10 +31,10 @@ return [
     */
 
     'surfaces' => [
-        'admin' => env('PAYLINK_ADMIN_HOST', 'admin.localhost'),
-        'app' => env('PAYLINK_APP_HOST', 'app.localhost'),
-        'pay' => env('PAYLINK_PAY_HOST', 'pay.localhost'),
-        'api' => env('PAYLINK_API_HOST', 'api.localhost'),
+        'admin' => env('AXISPAY_ADMIN_HOST', 'admin.localhost'),
+        'app' => env('AXISPAY_APP_HOST', 'app.localhost'),
+        'pay' => env('AXISPAY_PAY_HOST', 'pay.localhost'),
+        'api' => env('AXISPAY_API_HOST', 'api.localhost'),
     ],
 
     /*
@@ -37,8 +42,8 @@ return [
     | `session.domain` must be null (checked at boot).
     */
     'session_cookies' => [
-        'admin' => 'paylink_admin_session',
-        'app' => 'paylink_app_session',
+        'admin' => 'axispay_admin_session',
+        'app' => 'axispay_app_session',
     ],
 
     /*
@@ -97,7 +102,7 @@ return [
     'passwords' => [
         // Plan 17.3: at least 12 characters and not found in known breaches.
         'min_length' => 12,
-        'check_uncompromised' => (bool) env('PAYLINK_PASSWORD_CHECK_UNCOMPROMISED', true),
+        'check_uncompromised' => (bool) env('AXISPAY_PASSWORD_CHECK_UNCOMPROMISED', true),
     ],
 
     'impersonation' => [
