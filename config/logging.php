@@ -54,8 +54,9 @@ return [
     |                    "errorlog", "monolog", "custom", "stack"
     |
     | Every channel that writes somewhere taps RedactSensitiveLogData, which
-    | strips secrets and PII (plan section 23.3). Production uses the `json`
-    | channel (LOG_STACK=json): structured JSON lines, rotated daily.
+    | strips secrets and PII (plan section 23.3). The production container
+    | uses `stderr` with the JSON formatter (ADR-0035); a server without
+    | containers can use the `json` channel (LOG_STACK=json), rotated daily.
     |
     */
 
