@@ -5,6 +5,8 @@
 #   web        Nginx + PHP-FPM on port 8080 (default)
 #   worker     php artisan queue:work (queues from QUEUE_NAMES)
 #   scheduler  php artisan schedule:work (runs schedule:run every minute)
+#   all-in-one supervisord: web + both workers + scheduler in one container
+#              (staging and local/test only, ADR-0039)
 #   release    one-shot: migrate with the migrator user, seed the catalog, exit
 #
 # No .env is baked in: every setting comes from the container environment.
@@ -95,6 +97,13 @@ ENV APP_ENV=production \
     LOG_CHANNEL=stderr \
     LOG_STDERR_FORMATTER="Monolog\\Formatter\\JsonFormatter" \
     LOG_LEVEL=info
+
+# Supervisor runs the all-in-one role only (ADR-0039). The package's default
+# config (control socket under /var/run) is replaced by ours.
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends supervisor \
+    && rm -rf /var/lib/apt/lists/* /etc/supervisor/conf.d/*
+COPY docker/app/supervisord.conf /etc/supervisor/supervisord.conf
 
 # Code is owned by root and read-only for the runtime user.
 COPY --from=vendor /var/www/html /var/www/html

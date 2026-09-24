@@ -5,9 +5,15 @@
 #   web        Nginx + PHP-FPM on :8080 (default)
 #   worker     queue:work on QUEUE_NAMES (default critical,default,low)
 #   scheduler  schedule:work (runs schedule:run every minute)
+#   all-in-one supervisord running php-fpm, nginx, two workers (critical;
+#              default,low) and the scheduler in one container. Staging and
+#              local/test servers only (ADR-0039); production uses one
+#              container per role (ADR-0036).
 #   release    one-shot: wait for the database, migrate with the migrator
 #              user (--database=mariadb_migrator), seed the catalog, exit
 #   artisan    php artisan <args...> (one-off commands)
+#   queue-work <queues>  internal: the queue:work process that supervisord
+#              starts in the all-in-one role (no schema wait, no cache warm-up)
 #
 # Anything else is executed as is. tini is PID 1 and forwards signals.
 #
@@ -105,7 +111,27 @@ prepare_schema() {
     unset DB_MIGRATOR_USERNAME DB_MIGRATOR_PASSWORD DB_MIGRATOR_URL
 }
 
-echo "$role" > /tmp/axispay-role
+# queue:work with the flags shared by the `worker` role and the all-in-one
+# programs. SIGTERM (redeploy, scale down): the current job finishes, then the
+# process exits. --memory exits with a non-zero status so the orchestrator (or
+# supervisord) restarts a fresh process.
+run_queue_worker() {
+    local queues="$1"
+    log INFO "Worker started on queues ${queues}"
+    exec php artisan queue:work "${QUEUE_CONNECTION:-database}" \
+        --queue="$queues" \
+        --sleep="${QUEUE_SLEEP:-3}" \
+        --tries="${QUEUE_TRIES:-3}" \
+        --timeout="${QUEUE_TIMEOUT:-60}" \
+        --memory="${QUEUE_MEMORY:-192}" \
+        --no-interaction
+}
+
+# The health check reads the container's role. Processes started inside the
+# container (queue-work under supervisord) must not overwrite it.
+if [[ "$role" != "queue-work" ]]; then
+    echo "$role" > /tmp/axispay-role
+fi
 
 case "$role" in
     web)
@@ -141,18 +167,7 @@ case "$role" in
         require_env APP_KEY
         prepare_schema
         warm_caches
-        queues="${QUEUE_NAMES:-critical,default,low}"
-        log INFO "Worker started on queues ${queues}"
-        # SIGTERM (redeploy, scale down): the current job finishes, then the
-        # process exits. --memory exits with a non-zero status so the
-        # orchestrator restarts a fresh process.
-        exec php artisan queue:work "${QUEUE_CONNECTION:-database}" \
-            --queue="$queues" \
-            --sleep="${QUEUE_SLEEP:-3}" \
-            --tries="${QUEUE_TRIES:-3}" \
-            --timeout="${QUEUE_TIMEOUT:-60}" \
-            --memory="${QUEUE_MEMORY:-192}" \
-            --no-interaction
+        run_queue_worker "${QUEUE_NAMES:-critical,default,low}"
         ;;
 
     scheduler)
@@ -161,6 +176,25 @@ case "$role" in
         warm_caches
         log INFO "Scheduler started (schedule:run every minute)"
         exec php artisan schedule:work --no-interaction
+        ;;
+
+    all-in-one)
+        require_env APP_KEY
+        export PHP_FPM_MAX_CHILDREN="${PHP_FPM_MAX_CHILDREN:-10}"
+        # supervisord expands these in its config: a worker gets its job's
+        # timeout plus a margin before it is killed on stop.
+        export QUEUE_TIMEOUT="${QUEUE_TIMEOUT:-60}"
+        export QUEUE_STOP_WAIT_SECONDS=$((QUEUE_TIMEOUT + 15))
+        prepare_schema
+        warm_caches
+        log INFO "All-in-one role started (nginx :8080, php-fpm max_children=${PHP_FPM_MAX_CHILDREN}, workers critical and default,low, scheduler)"
+        # supervisord receives SIGTERM from tini and stops the workers and the
+        # scheduler first, then nginx, then php-fpm (priorities in the config).
+        exec supervisord --nodaemon --configuration /etc/supervisor/supervisord.conf
+        ;;
+
+    queue-work)
+        run_queue_worker "${1:?queue-work needs a queue list, for example critical}"
         ;;
 
     release)
