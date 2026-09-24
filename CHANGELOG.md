@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ADR-0038 (decision only, implementation in Phases 4 and 8): the platform
+  logo is managed from the superadmin panel, and the checkout always shows
+  the platform in its footer ("Powered by" + logo and name) with the
+  merchant's brand in the header; `show_platform_badge` becomes
+  `platform_badge_style` (`standard` / `subtle`) and can no longer hide it.
 - Production deployment (ADR-0035, ADR-0036):
   - Multi-stage `Dockerfile` (PHP 8.4 FPM + Nginx, Composer `--no-dev` with
     `check-platform-reqs`, pnpm + Vite build, non-root, no `.env`) and

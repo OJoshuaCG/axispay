@@ -1923,7 +1923,11 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - **Colores:** hex `#RRGGBB`; validar el **contraste WCAG AA (≥ 4.5:1)** del texto del botón sobre el color primario; si no cumple, se rechaza el color o se calcula automáticamente el color de texto (blanco o negro) que sí cumple.
 - **Vista previa** en vivo en el panel.
 - Los **dominios personalizados** por tenant (`pagos.cliente.com`) quedan fuera del MVP (requieren emitir certificados TLS por tenant).
-- La página muestra discretamente "Procesado por Stripe"; el nombre de nuestra plataforma puede ocultarse (white label) según el plan (configurable por el superadmin: `show_platform_badge`).
+- **Marca de la plataforma siempre visible para el pagador** (ADR-0038, decidido por el responsable del proyecto el 2026-09-24):
+  - **Header** del checkout: logo y nombre del comercio (branding del tenant).
+  - **Footer** del checkout: "Powered by" con el logo y el nombre de la plataforma, y "Procesado por Stripe". Se muestra en todos los estados de la página (11.2). Sin logo, se muestra solo el nombre.
+  - El **logo de la plataforma** se configura desde el panel superadmin, con las mismas reglas de carga que el logo del tenant (formatos, magic bytes, re-codificación, tamaños, nombre aleatorio); el cambio queda en el audit log. El nombre sale de `AXISPAY_DISPLAY_NAME` (ADR-0037).
+  - El white label **no** puede ocultar la plataforma. `show_platform_badge` se reemplaza por `platform_badge_style` (`standard` por defecto, o `subtle`), configurable por el superadmin por tenant o plan; ningún valor elimina el footer.
 
 ---
 
@@ -2281,7 +2285,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 ### Fase 4 — Checkout y pagos con tarjeta (sin FX)
 
 - **Spike técnico (máximo 1–2 días):** validar con Stripe en modo test el flujo deferred intent + ConfirmationToken con direct charges (`stripeAccount`), la inspección de `payment_method_preview.card.country`, la actualización de moneda y monto del PaymentIntent antes de confirmar y el comportamiento de `elements.update()`. Documentar el resultado en un ADR. **Si el comportamiento difiere de lo previsto en 11.4 y 13, detenerse y reportar antes de continuar.**
-- Página de pago (estados, branding básico, campos del pagador, Payment Element), endpoints internos, intentos (un PaymentIntent activo por link con restricción de BD), 3DS, página de completado y polling.
+- Página de pago (estados, branding básico —header con el nombre del comercio y footer "Powered by" con el nombre de la plataforma, ADR-0038—, campos del pagador, Payment Element), endpoints internos, intentos (un PaymentIntent activo por link con restricción de BD), 3DS, página de completado y polling.
 - Handlers de `payment_intent.*`; reconciliación de intentos.
 - Protección anti card testing (rate limits, Turnstile, bloqueos), cabeceras de seguridad y CSP.
 - Registro de aperturas.
@@ -2318,7 +2322,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 ### Fase 8 — Métricas, branding completo y campos del pagador
 
 - Rollups diarios, dashboard del tenant, exportación CSV.
-- Branding completo (logo re-codificado, contraste, vista previa).
+- Branding completo (logo re-codificado, contraste, vista previa), incluido el **logo de la plataforma** gestionado desde el panel superadmin con el mismo servicio de carga y `platform_badge_style` (ADR-0038).
 - Catálogo de campos del pagador, configuración por tenant y por link, cifrado, retención y purga.
 - **Aceptación:** métricas correctas en la zona horaria del tenant (pruebas con pagos cerca de la medianoche); sin suma entre monedas; purga de PII probada.
 
