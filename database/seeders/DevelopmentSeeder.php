@@ -23,9 +23,9 @@ use RuntimeException;
  */
 final class DevelopmentSeeder extends Seeder
 {
-    public const string ADMIN_EMAIL = 'superadmin@paylink.test';
+    public const string ADMIN_EMAIL = 'superadmin@axispay.test';
 
-    public const string OWNER_EMAIL = 'owner@demo.paylink.test';
+    public const string OWNER_EMAIL = 'owner@demo.axispay.test';
 
     public const string PASSWORD = 'local-dev-password';
 
@@ -65,8 +65,8 @@ final class DevelopmentSeeder extends Seeder
 
         $this->command->warn('Local development accounts (never use outside your machine):');
         $this->command->table(['Panel', 'URL host', 'E-mail', 'Password'], [
-            ['admin', config()->string('paylink.surfaces.admin'), self::ADMIN_EMAIL, self::PASSWORD],
-            ['app', config()->string('paylink.surfaces.app'), self::OWNER_EMAIL, self::PASSWORD],
+            ['admin', config()->string('axispay.surfaces.admin'), self::ADMIN_EMAIL, self::PASSWORD],
+            ['app', config()->string('axispay.surfaces.app'), self::OWNER_EMAIL, self::PASSWORD],
         ]);
         $this->command->line('Both accounts must set up 2FA (TOTP) on first sign-in.');
     }

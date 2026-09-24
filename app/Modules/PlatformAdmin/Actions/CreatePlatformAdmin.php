@@ -11,7 +11,7 @@ use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 use SensitiveParameter;
 
 /**
- * Creates a platform admin (console only: `paylink:create-platform-admin` and
+ * Creates a platform admin (console only: `axispay:create-platform-admin` and
  * the local DevelopmentSeeder). 2FA is set up on first sign-in, where it is
  * mandatory.
  */

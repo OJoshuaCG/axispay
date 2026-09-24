@@ -42,8 +42,8 @@ final readonly class UseSurfaceSessionCookie
 
     public static function cookieFor(string $host): ?string
     {
-        $surfaces = config('paylink.surfaces');
-        $cookies = config('paylink.session_cookies');
+        $surfaces = config('axispay.surfaces');
+        $cookies = config('axispay.session_cookies');
 
         if (! is_array($surfaces) || ! is_array($cookies)) {
             return null;

@@ -44,8 +44,8 @@ it('redacts secret-looking values anywhere in a string', function (string $input
     'stripe test secret key' => ['sk_test_51HxAbCdEf', '[REDACTED]'],
     'restricted key' => ['using rk_live_51HxAbCdEf now', 'using [REDACTED] now'],
     'webhook secret' => ['whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw', '[REDACTED]'],
-    'live api key' => ['plk_live_4eC39HqLyjWDarjtT1zdp7dc', '[REDACTED]'],
-    'test api key' => ['Bearer plk_test_4eC39HqLyjWDarjtT1zdp7dc', 'Bearer [REDACTED]'],
+    'live api key' => ['axp_live_4eC39HqLyjWDarjtT1zdp7dc', '[REDACTED]'],
+    'test api key' => ['Bearer axp_test_4eC39HqLyjWDarjtT1zdp7dc', 'Bearer [REDACTED]'],
     'client secret' => ['pi_3MtwBw_secret_YrKJUKribcBjcG8HVhfZluoGH', '[REDACTED]'],
     'bearer token' => ['Authorization: Bearer abc.def-ghi', 'Authorization: Bearer [REDACTED]'],
     'email' => ['payer jane.doe+tag@example.com.mx paid', 'payer [REDACTED] paid'],
@@ -59,7 +59,7 @@ it('redacts secret-looking values anywhere in a string', function (string $input
 
 it('redacts nested structures and exceptions', function (): void {
     $redacted = (new Redactor)->redactArray([
-        'headers' => ['authorization' => ['Bearer plk_live_x'], 'accept' => ['application/json']],
+        'headers' => ['authorization' => ['Bearer axp_live_x'], 'accept' => ['application/json']],
         'payload' => ['data' => ['object' => ['receipt_email' => 'a@b.co', 'note' => 'card 4242424242424242']]],
         'exception' => new RuntimeException('Stripe rejected sk_live_abc123'),
     ]);

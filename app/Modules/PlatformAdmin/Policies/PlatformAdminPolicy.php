@@ -8,7 +8,7 @@ use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 
 /**
  * Platform admins are listed for superadmins only and created from the
- * console (`paylink:create-platform-admin`).
+ * console (`axispay:create-platform-admin`).
  */
 final class PlatformAdminPolicy
 {

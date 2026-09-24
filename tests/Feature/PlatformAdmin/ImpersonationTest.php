@@ -31,7 +31,7 @@ function startImpersonation(?User $target = null): StartedImpersonation
  */
 function impersonationSession(StartedImpersonation $started): array
 {
-    return ['paylink.impersonation' => ['id' => $started->session->id, 'platform_admin_id' => $started->session->platform_admin_id]];
+    return ['axispay.impersonation' => ['id' => $started->session->id, 'platform_admin_id' => $started->session->platform_admin_id]];
 }
 
 it('is superadmin only and needs a reason', function (): void {
@@ -101,7 +101,7 @@ it('can be stopped from the banner and returns to the admin host', function (): 
 
     actingAs($target, 'web')->withSession(impersonationSession($started));
 
-    post(appUrl('/impersonation/stop'))->assertRedirectContains(config()->string('paylink.surfaces.admin').'/tenants/'.$target->tenant_id);
+    post(appUrl('/impersonation/stop'))->assertRedirectContains(config()->string('axispay.surfaces.admin').'/tenants/'.$target->tenant_id);
 
     expect(ImpersonationSession::query()->withoutGlobalScopes()->find($started->session->id)?->end_reason)->toBe('stopped')
         ->and(auth('web')->check())->toBeFalse();

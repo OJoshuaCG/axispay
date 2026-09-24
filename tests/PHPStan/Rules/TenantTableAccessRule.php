@@ -154,7 +154,7 @@ final class TenantTableAccessRule implements Rule
             RuleErrorBuilder::message(sprintf(
                 'Calling %s() outside the tenancy scope-bypass whitelist is forbidden (plan 6.5). Use TenantContext::runAsPlatform() or add a justified entry to config/tenancy.php.',
                 $method,
-            ))->identifier('paylink.scopeBypass')->build(),
+            ))->identifier('axispay.scopeBypass')->build(),
         ];
     }
 
@@ -173,7 +173,7 @@ final class TenantTableAccessRule implements Rule
 
         return [
             RuleErrorBuilder::message('Dynamic method calls on query builders or models cannot be verified by the tenancy rule (plan 6.5); call the method by name.')
-                ->identifier('paylink.dynamicQueryCall')
+                ->identifier('axispay.dynamicQueryCall')
                 ->build(),
         ];
     }
@@ -208,7 +208,7 @@ final class TenantTableAccessRule implements Rule
                 RuleErrorBuilder::message(sprintf(
                     'Cannot verify the table name passed to %s(): use a string literal so the tenant-table check can run (plan 6.5).',
                     $method,
-                ))->identifier('paylink.tenantTableAccess')->build(),
+                ))->identifier('axispay.tenantTableAccess')->build(),
             ];
         }
 
@@ -220,7 +220,7 @@ final class TenantTableAccessRule implements Rule
                     RuleErrorBuilder::message($method === 'table'
                         ? sprintf('DB::table(\'%s\') bypasses the fail-closed tenant scope; use the Eloquent model (plan 6.5).', $name)
                         : sprintf('%s(\'%s\') reads a tenant table without its tenant scope; use the Eloquent model or a relation (plan 6.5).', $method, $name))
-                        ->identifier('paylink.tenantTableAccess')
+                        ->identifier('axispay.tenantTableAccess')
                         ->build(),
                 ];
             }
@@ -239,7 +239,7 @@ final class TenantTableAccessRule implements Rule
         if ($sql === null) {
             return [
                 RuleErrorBuilder::message('Raw SQL must be a string literal so the tenant-table check can inspect it (plan 6.5).')
-                    ->identifier('paylink.rawTenantSql')
+                    ->identifier('axispay.rawTenantSql')
                     ->build(),
             ];
         }
@@ -251,7 +251,7 @@ final class TenantTableAccessRule implements Rule
                         RuleErrorBuilder::message(sprintf(
                             'Raw SQL on tenant table [%s] bypasses the fail-closed tenant scope (plan 6.5).',
                             $table,
-                        ))->identifier('paylink.rawTenantSql')->build(),
+                        ))->identifier('axispay.rawTenantSql')->build(),
                     ];
                 }
             }

@@ -2,7 +2,7 @@
 # Role-aware container healthcheck (ADR-0035). The entrypoint records the role.
 set -euo pipefail
 
-role="$(cat /tmp/paylink-role 2>/dev/null || echo web)"
+role="$(cat /tmp/axispay-role 2>/dev/null || echo web)"
 
 case "$role" in
     web)

@@ -22,7 +22,7 @@ final class AdminPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        $host = config('paylink.surfaces.admin');
+        $host = config('axispay.surfaces.admin');
 
         return PanelDefaults::apply($panel, requireTwoFactor: true)
             ->id('admin')

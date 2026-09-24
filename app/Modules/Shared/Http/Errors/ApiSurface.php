@@ -17,7 +17,7 @@ final class ApiSurface
 
     public static function host(): string
     {
-        $host = config('paylink.surfaces.api');
+        $host = config('axispay.surfaces.api');
 
         return is_string($host) ? strtolower($host) : '';
     }

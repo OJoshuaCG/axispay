@@ -75,14 +75,14 @@ final readonly class StartImpersonation
 
     private function maxMinutes(): int
     {
-        $minutes = config('paylink.impersonation.max_minutes', 30);
+        $minutes = config('axispay.impersonation.max_minutes', 30);
 
         return is_int($minutes) ? min(30, max(1, $minutes)) : 30;
     }
 
     private function handoffSeconds(): int
     {
-        $seconds = config('paylink.impersonation.handoff_seconds', 120);
+        $seconds = config('axispay.impersonation.handoff_seconds', 120);
 
         return is_int($seconds) ? max(10, $seconds) : 120;
     }

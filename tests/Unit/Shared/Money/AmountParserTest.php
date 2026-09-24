@@ -120,14 +120,14 @@ it('names the offending parameter and uses HTTP 400', function (): void {
 });
 
 it('reads the limits from configuration', function (): void {
-    config(['paylink.currencies.USD.min_charge_minor' => 1_000]);
+    config(['axispay.currencies.USD.min_charge_minor' => 1_000]);
 
     expect(amountErrorCode('9.99'))->toBe(ApiErrorCode::AmountBelowMinimum)
         ->and(parseAmount('10.00'))->toBe(1_000);
 });
 
 it('rejects a currency that is disabled in configuration', function (): void {
-    config(['paylink.currencies.MXN.enabled' => false]);
+    config(['axispay.currencies.MXN.enabled' => false]);
 
     expect(amountErrorCode('100.00', 'MXN'))->toBe(ApiErrorCode::CurrencyNotSupported);
 });

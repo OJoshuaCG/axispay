@@ -14,12 +14,12 @@ it('scrubs secrets and PII from every part of a Sentry event', function (): void
     $event = Event::createEvent();
     $event->setRequest([
         'url' => 'https://api.localhost/v1/payment_links',
-        'headers' => ['Authorization' => 'Bearer plk_live_abc', 'Accept' => 'application/json'],
+        'headers' => ['Authorization' => 'Bearer axp_live_abc', 'Accept' => 'application/json'],
         'cookies' => ['session' => 'abc'],
         'data' => ['amount' => '10.00', 'payer' => ['email' => 'jane@example.com']],
     ]);
     $event->setExtra(['stripe_key' => 'rk_live_abc', 'note' => 'mail jane@example.com']);
-    $event->setTags(['tenant' => '01J8Z3Q6T4Y0V8KX2M1N5P7R9S', 'api_key' => 'plk_test_x']);
+    $event->setTags(['tenant' => '01J8Z3Q6T4Y0V8KX2M1N5P7R9S', 'api_key' => 'axp_test_x']);
     $event->setContext('runtime', ['name' => 'php', 'version' => '8.5.0']);
     $event->setContext('payer', ['name' => 'Jane Doe']);
     $event->setExceptions([new ExceptionDataBag(new RuntimeException('Card 4242424242424242 with sk_live_abc'))]);

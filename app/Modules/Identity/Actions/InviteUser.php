@@ -126,7 +126,7 @@ final readonly class InviteUser
     private function throttle(string $tenantId): void
     {
         $key = 'invitations:'.$tenantId;
-        $max = config('paylink.invitations.max_per_hour', 20);
+        $max = config('axispay.invitations.max_per_hour', 20);
 
         if (RateLimiter::tooManyAttempts($key, is_int($max) ? $max : 20)) {
             throw InvitationNotAllowedException::throttled();
@@ -137,7 +137,7 @@ final readonly class InviteUser
 
     private function expiresHours(): int
     {
-        $hours = config('paylink.invitations.expires_hours', 72);
+        $hours = config('axispay.invitations.expires_hours', 72);
 
         return is_int($hours) ? $hours : 72;
     }

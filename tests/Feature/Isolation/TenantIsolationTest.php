@@ -103,7 +103,7 @@ it('isolates tenant panel resources between tenants', function (string $slug, st
 })->with('isolated_app_resources');
 
 it('covers every tenant-panel route with an isolation test', function (): void {
-    $appHost = config()->string('paylink.surfaces.app');
+    $appHost = config()->string('axispay.surfaces.app');
     $covered = array_keys(isolatedAppResources());
     $uncovered = [];
 
@@ -132,7 +132,7 @@ it('covers every tenant-panel route with an isolation test', function (): void {
 
 it('has no API routes without an isolation dataset yet (Phase 3 adds them)', function (): void {
     $apiRoutes = collect(Route::getRoutes()->getRoutes())
-        ->filter(static fn (RouteDefinition $route): bool => $route->getDomain() === config()->string('paylink.surfaces.api'))
+        ->filter(static fn (RouteDefinition $route): bool => $route->getDomain() === config()->string('axispay.surfaces.api'))
         ->map(static fn (RouteDefinition $route): string => (string) $route->getName())
         ->values()
         ->all();

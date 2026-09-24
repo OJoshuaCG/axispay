@@ -28,7 +28,7 @@ final class AppPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
-        $host = config('paylink.surfaces.app');
+        $host = config('axispay.surfaces.app');
 
         return PanelDefaults::apply($panel, requireTwoFactor: true)
             ->id('app')

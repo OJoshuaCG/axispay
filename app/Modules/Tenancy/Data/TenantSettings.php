@@ -7,7 +7,7 @@ namespace App\Modules\Tenancy\Data;
 /**
  * Typed view of `tenants.settings` (plan 7.3). The JSON is always read through
  * this DTO, never as a loose array. Unknown keys are dropped and every value
- * is clamped to the platform limits in config/paylink.php.
+ * is clamped to the platform limits in config/axispay.php.
  */
 final readonly class TenantSettings
 {
@@ -36,8 +36,8 @@ final readonly class TenantSettings
      */
     public static function fromArray(array $data): self
     {
-        $platformMaxHours = self::configInt('paylink.limits.max_expiration_hours', 2160);
-        $platformMaxMarkup = self::configInt('paylink.limits.max_fx_markup_bps', 1000);
+        $platformMaxHours = self::configInt('axispay.limits.max_expiration_hours', 2160);
+        $platformMaxMarkup = self::configInt('axispay.limits.max_fx_markup_bps', 1000);
         $minHours = 1;
 
         $links = self::section($data, 'links');

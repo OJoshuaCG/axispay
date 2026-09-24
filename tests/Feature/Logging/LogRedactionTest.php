@@ -38,7 +38,7 @@ it('redacts message, context and shared context of a log record', function (): v
     Context::add('payer_email', 'jane@example.com');
 
     Log::channel('capture')->warning('Charge for jane@example.com with rk_live_abcdef failed', [
-        'api_key' => 'plk_live_4eC39HqLyjWDarjtT1zdp7dc',
+        'api_key' => 'axp_live_4eC39HqLyjWDarjtT1zdp7dc',
         'nested' => ['password' => 'hunter2', 'amount_minor' => 15050],
         'card' => '4242424242424242',
     ]);

@@ -18,7 +18,7 @@ use Throwable;
  *  - Keys: any array key that names a secret or PII field has its whole value
  *    replaced, whatever the value is.
  *  - Values: every string is scanned for secret-looking tokens (Stripe and
- *    PayLink keys, webhook secrets, bearer tokens, client secrets), e-mail
+ *    AxisPay keys, webhook secrets, bearer tokens, client secrets), e-mail
  *    addresses and PAN-like digit runs.
  */
 final class Redactor
@@ -60,8 +60,8 @@ final class Redactor
         '/\b(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
         // Webhook signing secrets (Stripe and Standard Webhooks).
         '/\bwhsec_[A-Za-z0-9+\/=]+/' => self::MASK,
-        // PayLink API keys.
-        '/\bplk_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
+        // AxisPay API keys.
+        '/\baxp_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
         // Stripe PaymentIntent / SetupIntent client secrets.
         '/\b(?:pi|seti)_[A-Za-z0-9]+_secret_[A-Za-z0-9]+/' => self::MASK,
         // Bearer tokens in free text.

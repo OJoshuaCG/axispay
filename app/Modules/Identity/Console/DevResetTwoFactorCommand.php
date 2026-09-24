@@ -19,14 +19,14 @@ use Illuminate\Console\Command;
  */
 final class DevResetTwoFactorCommand extends Command
 {
-    protected $signature = 'paylink:dev-reset-2fa {email : E-mail of the tenant user or platform admin}';
+    protected $signature = 'axispay:dev-reset-2fa {email : E-mail of the tenant user or platform admin}';
 
     protected $description = 'Local only: reset 2FA of a user or platform admin';
 
     public function handle(TenantContext $context, AuditLogger $audit): int
     {
         if (! app()->environment('local')) {
-            $this->error('paylink:dev-reset-2fa only runs with APP_ENV=local.');
+            $this->error('axispay:dev-reset-2fa only runs with APP_ENV=local.');
 
             return self::FAILURE;
         }
@@ -42,7 +42,7 @@ final class DevResetTwoFactorCommand extends Command
             $reset++;
         }
 
-        $user = $context->runAsPlatform('local 2FA reset (paylink:dev-reset-2fa)', static fn (): ?User => User::query()->where('email', $email)->first());
+        $user = $context->runAsPlatform('local 2FA reset (axispay:dev-reset-2fa)', static fn (): ?User => User::query()->where('email', $email)->first());
 
         if ($user !== null) {
             $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null])->save();

@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-$appHost = config('paylink.surfaces.app');
+$appHost = config('axispay.surfaces.app');
 
 Route::domain(is_string($appHost) ? $appHost : 'app.localhost')->group(function (): void {
     // Invitations (plan 17.3): signed links, single-use tokens.

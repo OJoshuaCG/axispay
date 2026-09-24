@@ -34,8 +34,8 @@ RUN install-php-extensions pdo_mysql intl bcmath gmp zip pcntl \
     && rm -f /etc/nginx/sites-enabled/default /usr/local/etc/php-fpm.d/*.conf \
     && mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-COPY docker/app/php.ini "$PHP_INI_DIR/conf.d/zz-paylink.ini"
-COPY docker/app/php-fpm.conf /usr/local/etc/php-fpm.d/zz-paylink.conf
+COPY docker/app/php.ini "$PHP_INI_DIR/conf.d/zz-axispay.ini"
+COPY docker/app/php-fpm.conf /usr/local/etc/php-fpm.d/zz-axispay.conf
 COPY docker/app/nginx.conf /etc/nginx/nginx.conf
 
 WORKDIR /var/www/html
@@ -87,7 +87,7 @@ RUN pnpm run build
 FROM base AS runtime
 
 ARG APP_VERSION=dev
-LABEL org.opencontainers.image.title="paylink" \
+LABEL org.opencontainers.image.title="axispay" \
       org.opencontainers.image.version="${APP_VERSION}"
 
 ENV APP_ENV=production \
@@ -99,8 +99,8 @@ ENV APP_ENV=production \
 # Code is owned by root and read-only for the runtime user.
 COPY --from=vendor /var/www/html /var/www/html
 COPY --from=assets /app/public/build /var/www/html/public/build
-COPY --chmod=0755 docker/app/entrypoint.sh /usr/local/bin/paylink-entrypoint
-COPY --chmod=0755 docker/app/healthcheck.sh /usr/local/bin/paylink-healthcheck
+COPY --chmod=0755 docker/app/entrypoint.sh /usr/local/bin/axispay-entrypoint
+COPY --chmod=0755 docker/app/healthcheck.sh /usr/local/bin/axispay-healthcheck
 
 # Only storage/ and bootstrap/cache are writable at runtime; the code is not.
 RUN mkdir -p storage/framework/cache/data storage/framework/sessions \
@@ -115,8 +115,8 @@ EXPOSE 8080
 STOPSIGNAL SIGTERM
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=3 \
-    CMD ["paylink-healthcheck"]
+    CMD ["axispay-healthcheck"]
 
-ENTRYPOINT ["tini", "--", "paylink-entrypoint"]
+ENTRYPOINT ["tini", "--", "axispay-entrypoint"]
 # No default arguments: the role comes from CONTAINER_ROLE (default web).
 CMD []

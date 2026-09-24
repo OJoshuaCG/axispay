@@ -19,8 +19,8 @@ it('uses a separate session cookie per panel host', function (string $url, strin
     expect(in_array($cookie, $names, true))->toBeTrue()
         ->and(in_array($other, $names, true))->toBeFalse();
 })->with([
-    'admin' => [fn (): string => adminUrl('/login'), 'paylink_admin_session', 'paylink_app_session'],
-    'app' => [fn (): string => appUrl('/login'), 'paylink_app_session', 'paylink_admin_session'],
+    'admin' => [fn (): string => adminUrl('/login'), 'axispay_admin_session', 'axispay_app_session'],
+    'app' => [fn (): string => appUrl('/login'), 'axispay_app_session', 'axispay_admin_session'],
 ]);
 
 it('refuses to boot with a shared session cookie domain', function (): void {
@@ -35,6 +35,6 @@ it('only touches the app-host session when an impersonation is consumed', functi
     $response = get($started->handoffUrl);
     $names = array_map(static fn ($c): string => $c->getName(), $response->headers->getCookies());
 
-    expect(in_array('paylink_app_session', $names, true))->toBeTrue()
-        ->and(in_array('paylink_admin_session', $names, true))->toBeFalse();
+    expect(in_array('axispay_app_session', $names, true))->toBeTrue()
+        ->and(in_array('axispay_admin_session', $names, true))->toBeFalse();
 });

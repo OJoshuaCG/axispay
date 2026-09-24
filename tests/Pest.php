@@ -44,7 +44,7 @@ pest()->use(RefreshDatabase::class)
  */
 function apiUrl(string $path): string
 {
-    $host = config('paylink.surfaces.api');
+    $host = config('axispay.surfaces.api');
 
     return 'http://'.(is_string($host) ? $host : 'api.localhost').'/'.ltrim($path, '/');
 }
@@ -54,7 +54,7 @@ function apiUrl(string $path): string
  */
 function appUrl(string $path = '/'): string
 {
-    return 'http://'.config()->string('paylink.surfaces.app').'/'.ltrim($path, '/');
+    return 'http://'.config()->string('axispay.surfaces.app').'/'.ltrim($path, '/');
 }
 
 /**
@@ -62,7 +62,7 @@ function appUrl(string $path = '/'): string
  */
 function adminUrl(string $path = '/'): string
 {
-    return 'http://'.config()->string('paylink.surfaces.admin').'/'.ltrim($path, '/');
+    return 'http://'.config()->string('axispay.surfaces.admin').'/'.ltrim($path, '/');
 }
 
 /**

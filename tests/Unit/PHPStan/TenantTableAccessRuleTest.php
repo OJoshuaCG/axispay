@@ -53,7 +53,7 @@ final class TenantTableAccessRuleTest extends RuleTestCase
     public function test_only_the_project_tests_directory_is_exempt(): void
     {
         // A path that merely contains "/tests/" (e.g. a vendor package) is not exempt.
-        $dir = sys_get_temp_dir().'/paylink-rule-'.bin2hex(random_bytes(4)).'/vendor/package/tests';
+        $dir = sys_get_temp_dir().'/axispay-rule-'.bin2hex(random_bytes(4)).'/vendor/package/tests';
         mkdir($dir, 0700, true);
         $file = $dir.'/BypassInVendorTests.php';
         file_put_contents($file, <<<'PHP'

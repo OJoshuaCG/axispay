@@ -21,7 +21,7 @@ use function Laravel\Prompts\text;
  */
 final class CreatePlatformAdminCommand extends Command
 {
-    protected $signature = 'paylink:create-platform-admin';
+    protected $signature = 'axispay:create-platform-admin';
 
     protected $description = 'Create a platform admin (2FA is set up on first sign-in)';
 

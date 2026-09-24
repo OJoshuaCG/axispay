@@ -105,7 +105,7 @@ prepare_schema() {
     unset DB_MIGRATOR_USERNAME DB_MIGRATOR_PASSWORD DB_MIGRATOR_URL
 }
 
-echo "$role" > /tmp/paylink-role
+echo "$role" > /tmp/axispay-role
 
 case "$role" in
     web)

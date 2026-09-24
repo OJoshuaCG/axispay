@@ -13,7 +13,7 @@ use Illuminate\Contracts\Session\Session;
  */
 final class ImpersonationState
 {
-    private const string SESSION_KEY = 'paylink.impersonation';
+    private const string SESSION_KEY = 'axispay.impersonation';
 
     public function __construct(private readonly Session $session) {}
 

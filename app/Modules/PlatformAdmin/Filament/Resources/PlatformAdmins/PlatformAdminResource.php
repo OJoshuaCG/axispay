@@ -16,7 +16,7 @@ use Filament\Tables\Table;
 
 /**
  * Admin panel: list of platform admins (superadmins only). Admins are created
- * from the console (`paylink:create-platform-admin`).
+ * from the console (`axispay:create-platform-admin`).
  */
 final class PlatformAdminResource extends Resource
 {

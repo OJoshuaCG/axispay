@@ -140,7 +140,7 @@ it('rejects a link without a valid signature', function (): void {
 });
 
 it('enforces the password policy, including the breached-password check', function (): void {
-    config(['paylink.passwords.check_uncompromised' => true]);
+    config(['axispay.passwords.check_uncompromised' => true]);
     // SHA-1 of "password-password" is reported as breached by the fake HIBP range API.
     $hash = strtoupper(sha1('password-password'));
     Http::fake(['api.pwnedpasswords.com/*' => Http::response(substr($hash, 5).':12345', 200)]);
@@ -202,7 +202,7 @@ it('requires re-authentication to invite with a sensitive role (H1)', function (
 });
 
 it('throttles invitations per tenant and audits refusals without the e-mail (M7)', function (): void {
-    config(['paylink.invitations.max_per_hour' => 2]);
+    config(['axispay.invitations.max_per_hour' => 2]);
     Notification::fake();
     $other = tenantUser();
     $owner = tenantUser();

@@ -29,17 +29,17 @@
         <env name="DB_URL" value=""/>
         <env name="DB_HOST" value="127.0.0.1"/>
         <env name="DB_PORT" value="33061"/>
-        <env name="DB_DATABASE" value="paylink_testing"/>
-        <env name="DB_USERNAME" value="paylink_app"/>
-        <env name="DB_PASSWORD" value="paylink_app"/>
+        <env name="DB_DATABASE" value="axispay_testing"/>
+        <env name="DB_USERNAME" value="axispay_app"/>
+        <env name="DB_PASSWORD" value="axispay_app"/>
         <env name="DB_SOCKET" value=""/>
-        <env name="PAYLINK_API_HOST" value="api.localhost"/>
-        <env name="PAYLINK_APP_HOST" value="app.localhost"/>
-        <env name="PAYLINK_ADMIN_HOST" value="admin.localhost"/>
-        <env name="PAYLINK_PAY_HOST" value="pay.localhost"/>
+        <env name="AXISPAY_API_HOST" value="api.localhost"/>
+        <env name="AXISPAY_APP_HOST" value="app.localhost"/>
+        <env name="AXISPAY_ADMIN_HOST" value="admin.localhost"/>
+        <env name="AXISPAY_PAY_HOST" value="pay.localhost"/>
         <!-- No network in tests: the breached-password check (HIBP) is off by
              default and enabled with Http::fake() where it is tested. -->
-        <env name="PAYLINK_PASSWORD_CHECK_UNCOMPROMISED" value="false"/>
+        <env name="AXISPAY_PASSWORD_CHECK_UNCOMPROMISED" value="false"/>
         <env name="LOG_CHANNEL" value="stack"/>
         <env name="LOG_STACK" value="single"/>
         <env name="SENTRY_LARAVEL_DSN" value=""/>

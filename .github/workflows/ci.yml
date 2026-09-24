@@ -30,7 +30,7 @@ jobs:
 
       # Same image tag as compose.yaml. GitHub service containers cannot take
       # server arguments, so MariaDB is started here with the flags that mirror
-      # docker/mariadb/conf.d/paylink.cnf, plus the same init script.
+      # docker/mariadb/conf.d/axispay.cnf, plus the same init script.
       - name: Start MariaDB 11.8
         run: |
           docker run --detach --name mariadb \

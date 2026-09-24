@@ -50,7 +50,7 @@ it('shows the test/live selector and switches mode, audited', function (): void 
 
     post(appUrl('/mode'), ['livemode' => '1', 'redirect' => '/users'])->assertRedirect('/users');
 
-    expect(session('paylink.livemode'))->toBeTrue()
+    expect(session('axispay.livemode'))->toBeTrue()
         ->and(AuditLog::query()->withoutGlobalScopes()->where('action', AuditAction::LivemodeSwitched->value)->sole()->tenant_id)->toBe($owner->tenant_id);
 });
 

@@ -9,7 +9,7 @@ use LogicException;
 
 /**
  * Reads the per-currency configuration (enabled flag and charge limits in minor
- * units) from config/paylink.php.
+ * units) from config/axispay.php.
  */
 final readonly class CurrencyLimits
 {
@@ -17,7 +17,7 @@ final readonly class CurrencyLimits
 
     public function isEnabled(CurrencyCode $currency): bool
     {
-        return (bool) $this->config->get("paylink.currencies.{$currency->value}.enabled", false);
+        return (bool) $this->config->get("axispay.currencies.{$currency->value}.enabled", false);
     }
 
     /**
@@ -43,10 +43,10 @@ final readonly class CurrencyLimits
 
     private function intSetting(CurrencyCode $currency, string $key): int
     {
-        $value = $this->config->get("paylink.currencies.{$currency->value}.{$key}");
+        $value = $this->config->get("axispay.currencies.{$currency->value}.{$key}");
 
         if (! is_int($value)) {
-            throw new LogicException("Missing integer setting paylink.currencies.{$currency->value}.{$key}.");
+            throw new LogicException("Missing integer setting axispay.currencies.{$currency->value}.{$key}.");
         }
 
         return $value;

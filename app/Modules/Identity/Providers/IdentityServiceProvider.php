@@ -56,10 +56,10 @@ final class IdentityServiceProvider extends ServiceProvider
 
         // Plan 17.3: at least 12 characters and not in known breaches.
         Password::defaults(static function (): Password {
-            $min = config('paylink.passwords.min_length', 12);
+            $min = config('axispay.passwords.min_length', 12);
             $rule = Password::min(is_int($min) ? $min : 12);
 
-            return config('paylink.passwords.check_uncompromised', true) === true ? $rule->uncompromised() : $rule;
+            return config('axispay.passwords.check_uncompromised', true) === true ? $rule->uncompromised() : $rule;
         });
     }
 }

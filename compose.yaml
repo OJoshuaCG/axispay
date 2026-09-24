@@ -1,6 +1,6 @@
 # Local development services. Production uses an external, dedicated MariaDB
 # server (see docs/adr/0026-local-and-production-database.md).
-name: paylink
+name: axispay
 
 services:
   mariadb:

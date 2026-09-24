@@ -12,7 +12,7 @@ use Illuminate\Contracts\Session\Session;
  */
 final readonly class LivemodeSelector
 {
-    private const string SESSION_KEY = 'paylink.livemode';
+    private const string SESSION_KEY = 'axispay.livemode';
 
     public function __construct(private Session $session) {}
 

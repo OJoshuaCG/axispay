@@ -11,7 +11,7 @@ use Brick\Money\Currency;
  *
  * The minor-unit exponent comes from brick/money's ISO 4217 data so it is never
  * hand-maintained. Whether a currency is enabled and its charge limits live in
- * config/paylink.php (see CurrencyLimits).
+ * config/axispay.php (see CurrencyLimits).
  */
 enum CurrencyCode: string
 {
