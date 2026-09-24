@@ -2,7 +2,7 @@
 <x-layouts.app :title="__('identity.invitation.title')">
     <x-slot:header>
         <header class="mx-auto flex w-full max-w-narrow flex-wrap items-center justify-between gap-x-4 gap-y-2 px-gutter py-stack-lg">
-            <span class="min-w-0 truncate font-semibold">{{ config('app.name') }}</span>
+            <span class="min-w-0 truncate font-semibold">{{ \App\Modules\Shared\Support\Brand::displayName() }}</span>
             <x-site-controls />
         </header>
     </x-slot:header>

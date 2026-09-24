@@ -71,7 +71,7 @@
     <x-slot:header>
         <header class="sticky top-0 z-sticky border-b border-line bg-page pt-safe-top">
             <div class="mx-auto flex w-full max-w-wide flex-wrap items-center justify-between gap-x-4 gap-y-2 px-gutter py-stack-sm">
-                <p class="min-w-0 font-semibold break-words">{{ config('app.name') }} &middot; {{ __('design-system.title') }}</p>
+                <p class="min-w-0 font-semibold break-words">{{ \App\Modules\Shared\Support\Brand::displayName() }} &middot; {{ __('design-system.title') }}</p>
                 <x-site-controls theme-labels />
             </div>
         </header>

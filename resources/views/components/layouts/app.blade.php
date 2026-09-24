@@ -20,7 +20,7 @@
 ])
 
 @php
-    $appName = config('app.name');
+    $appName = \App\Modules\Shared\Support\Brand::displayName();
     $cspNonce = \Illuminate\Support\Facades\Vite::cspNonce();
 @endphp
 

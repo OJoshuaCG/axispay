@@ -8,6 +8,7 @@ use App\Http\Middleware\SetLocale;
 use App\Modules\Identity\Auth\AuditedAppAuthentication;
 use App\Modules\Identity\Filament\Pages\EditProfile;
 use App\Modules\Identity\Filament\Pages\Login;
+use App\Modules\Shared\Support\Brand;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -39,9 +40,9 @@ final class PanelDefaults
             ->font('Jost', provider: ViteFontProvider::class)
             ->viteTheme('resources/css/filament/theme.css')
             ->darkMode()
-            ->brandName(static fn (): string => self::appName())
+            ->brandName(static fn (): string => Brand::displayName())
             ->multiFactorAuthentication(
-                [AuditedAppAuthentication::make()->recoverable()->brandName(self::appName())],
+                [AuditedAppAuthentication::make()->recoverable()->brandName(Brand::displayName())],
                 isRequired: $requireTwoFactor,
             )
             ->middleware([
@@ -60,12 +61,5 @@ final class PanelDefaults
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.theme-bridge'))
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, static fn (): View => view('filament.partials.panel-controls'))
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls'));
-    }
-
-    private static function appName(): string
-    {
-        $name = config('app.name');
-
-        return is_string($name) && $name !== '' ? $name : 'PayLink';
     }
 }

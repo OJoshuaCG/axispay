@@ -3,7 +3,7 @@
         <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-stack-lg">
             <span class="inline-flex min-w-0 items-center gap-2 text-lg font-semibold tracking-snug">
                 <x-icon name="shield-check" size="lg" class="text-feature" />
-                <span class="truncate">{{ config('app.name') }}</span>
+                <span class="truncate">{{ \App\Modules\Shared\Support\Brand::displayName() }}</span>
             </span>
 
             <x-site-controls />
@@ -22,7 +22,7 @@
         </section>
 
         <footer class="border-t border-line py-stack-lg text-sm text-fg-secondary">
-            {{ __('welcome.copyright', ['year' => date('Y'), 'app' => config('app.name')]) }}
+            {{ __('welcome.copyright', ['year' => date('Y'), 'app' => \App\Modules\Shared\Support\Brand::displayName()]) }}
         </footer>
     </div>
 </x-layouts.app>
