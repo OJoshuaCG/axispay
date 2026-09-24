@@ -61,6 +61,7 @@ The full guide, with local accounts, environment keys and quality checks, is in 
 | [docs/README.md](docs/README.md) | Index of every document |
 | [docs/adr/](docs/adr/README.md) | Architecture decision records |
 | [docs/deployment/dokploy.md](docs/deployment/dokploy.md) | Production deployment |
+| [docs/deployment/dokploy-all-in-one.md](docs/deployment/dokploy-all-in-one.md) | Staging and local test deployment in one container |
 | [docs/frontend/README.md](docs/frontend/README.md) | Before touching any UI |
 | [CHANGELOG.md](CHANGELOG.md) | What changed |
 

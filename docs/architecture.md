@@ -145,5 +145,5 @@ Business tables (links, payments; Phase 3+) also carry `livemode`, so test and l
 
 ## Runtime and deployment
 
-- A single image serves every role (`web`, `worker`, `scheduler`, `release`): Nginx + PHP-FPM with no Octane, JSON logs to stderr, and runtime caches built at start (ADR-0035).
-- Production runs on Dokploy with one Application per role (ADR-0036). The guide is [`deployment/dokploy.md`](deployment/dokploy.md).
+- A single image serves every role (`web`, `worker`, `scheduler`, `release`, and `all-in-one` for staging and local servers, ADR-0039): Nginx + PHP-FPM with no Octane, JSON logs to stderr, and runtime caches built at start (ADR-0035).
+- Production runs on Dokploy with one Application per role (ADR-0036). The guide is [`deployment/dokploy.md`](deployment/dokploy.md); staging and local servers can use [`deployment/dokploy-all-in-one.md`](deployment/dokploy-all-in-one.md).

@@ -81,4 +81,5 @@ Option 1. There are four Applications per Dokploy environment (staging and produ
 - **Replicas.** Scale `web` above one replica only after the first deploy. A new service with several replicas starts them in parallel, and each would try to migrate. Later deploys update one task at a time.
 - **No approval gate** for production in Dokploy. Deploying is restricted to the people who hold deploy rights in Dokploy.
 - **Plan 25.4 is superseded** on the symlink-release mechanism only. All other rules of section 25 stand.
+- **Staging and local/test servers may use one all-in-one Application instead** ([ADR-0039](0039-all-in-one-container-role.md)); production keeps the four Applications.
 - **Admin host allowlist (plan 4.1, recommended).** It is applied as a Traefik `ipAllowList` middleware in the `web` Application's Traefik file. Dokploy rewrites a domain's router when that domain is edited, so the middleware must be re-attached after changing the admin domain.

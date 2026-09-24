@@ -7,6 +7,8 @@ AxisPay runs on [Dokploy](https://docs.dokploy.com) as **four Applications built
 
 Why this shape: [ADR-0036](../adr/0036-dokploy-deployment.md). What the image does: [ADR-0035](../adr/0035-production-container-image.md).
 
+> **Staging, demos or a local test server without TLS?** One all-in-one Application is enough: [dokploy-all-in-one.md](dokploy-all-in-one.md) (ADR-0039). Production always uses the four Applications below.
+
 > **Scope.** This guide covers what exists today: Phases 0–1 (tenancy, identity, panels). Stripe, Banxico and Turnstile settings arrive in later phases; they are listed under [Not needed yet](#not-needed-yet).
 >
 > **Verified against** the Dokploy docs and the Dokploy v0.30.6 source on 2026-09-24. Items marked **(verify)** could not be confirmed in the docs. Check them in your Dokploy version.
@@ -533,7 +535,8 @@ These settings are defined by later phases of the master plan (section 27). Do n
 | File | Purpose |
 |---|---|
 | `Dockerfile` | Multi-stage build (PHP extensions, Composer `--no-dev`, pnpm + Vite, runtime) |
-| `docker/app/entrypoint.sh` | Roles `web`, `worker`, `scheduler`, `release`, `artisan` |
+| `docker/app/entrypoint.sh` | Roles `web`, `worker`, `scheduler`, `all-in-one`, `release`, `artisan` |
+| `docker/app/supervisord.conf` | Programs of the `all-in-one` role ([dokploy-all-in-one.md](dokploy-all-in-one.md)) |
 | `docker/app/healthcheck.sh` | Role-aware health check |
 | `docker/app/nginx.conf`, `php-fpm.conf`, `php.ini` | Web server, FPM pool, OPcache and PHP settings |
 | `config/trustedproxy.php` | `TRUSTED_PROXIES` |

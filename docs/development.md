@@ -180,6 +180,20 @@ live in `phpunit.xml` (`<env>` entries), so they do not depend on `.env`.
   `php artisan migrate --force --database=mariadb_migrator`. The production
   image does this at deploy time (`RUN_MIGRATIONS=true` on the web service).
 
+## Scheduling
+
+There are no scheduled tasks yet (`routes/console.php`). Every task added in
+later phases **must** use `withoutOverlapping()` and `onOneServer()`:
+
+```php
+Schedule::command('some:command')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+```
+
+Both take their locks from the default cache store, which is `database`, shared
+by every container. That keeps a task from running twice when two schedulers
+overlap: a start-first deploy, an extra replica, or the all-in-one container
+next to another deployment (ADR-0039).
+
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs Pint, Larastan and Pest on PHP 8.4 and 8.5

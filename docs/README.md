@@ -7,7 +7,7 @@ Start with [`../rules.md`](../rules.md) (non-negotiable rules), then the plan.
 | Document | What it is |
 |---|---|
 | [plans/master.md](plans/master.md) | Master plan: scope, data model, API contract, security, phases. The source of truth (Spanish). |
-| [adr/README.md](adr/README.md) | Index of the architecture decision records (ADR-0001 to ADR-0036) |
+| [adr/README.md](adr/README.md) | Index of the architecture decision records (ADR-0001 to ADR-0039) |
 
 ## Building
 
@@ -36,8 +36,10 @@ Start with [`../rules.md`](../rules.md) (non-negotiable rules), then the plan.
 | Document | What it is |
 |---|---|
 | [deployment/dokploy.md](deployment/dokploy.md) | Step-by-step production deployment on Dokploy: environments, variables, domains, health checks, rollbacks, troubleshooting |
+| [deployment/dokploy-all-in-one.md](deployment/dokploy-all-in-one.md) | One-container deployment for staging, demos and local test servers (including without TLS) |
 | [adr/0035-production-container-image.md](adr/0035-production-container-image.md) | What the production image does and why |
 | [adr/0036-dokploy-deployment.md](adr/0036-dokploy-deployment.md) | Why one Dokploy Application per role, and gaps against plan section 25 |
+| [adr/0039-all-in-one-container-role.md](adr/0039-all-in-one-container-role.md) | Why staging and local servers may run everything in one container |
 
 Runbooks (plan 24.5) will live in `docs/runbooks/` once the operations they cover exist.
 

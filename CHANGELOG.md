@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `all-in-one` container role for staging and local/test Dokploy servers
+  (ADR-0039): supervisord runs php-fpm, nginx, `worker-critical`,
+  `worker-default` and the scheduler as `www-data` in one container, with
+  graceful stop (workers first, web last) and a health check that requires
+  `/up` plus every worker and the scheduler. The `worker` role and the
+  all-in-one workers build `queue:work` from one entrypoint function.
+  New guide `docs/deployment/dokploy-all-in-one.md`, including a local test
+  deployment without TLS (`.test` hosts, `SESSION_SECURE_COOKIE=false`,
+  optional mkcert). Convention: every scheduled task uses
+  `withoutOverlapping()` and `onOneServer()`. Production keeps four
+  Applications (ADR-0036).
 - ADR-0038 (decision only, implementation in Phases 4 and 8): the platform
   logo is managed from the superadmin panel, and the checkout always shows
   the platform in its footer ("Powered by" + logo and name) with the

@@ -42,3 +42,4 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0036](0036-dokploy-deployment.md) | Deployment on Dokploy with one Application per role | Accepted (Dokploy chosen by the project owner, 2026-09-24) |
 | [ADR-0037](0037-product-naming-axispay.md) | Product naming: AxisPay internal name, configurable display name, `axp_` key prefix | Accepted (by the project owner, 2026-09-24) |
 | [ADR-0038](0038-platform-branding-powered-by.md) | Platform branding: platform logo and an always-visible "Powered by" on the checkout | Accepted (by the project owner, 2026-09-24) |
+| [ADR-0039](0039-all-in-one-container-role.md) | All-in-one container role for staging and local deployments | Accepted (by the project owner, 2026-09-24) |
