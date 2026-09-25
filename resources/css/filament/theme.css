@@ -23,11 +23,21 @@
 @source '../../views/filament/**/*.blade.php';
 @source '../../views/components/language-switcher.blade.php';
 
-/* Jost, self-hosted (App\Support\Filament\ViteFontProvider). */
+/*
+ * Fonts, self-hosted (App\Support\Filament\ViteFontProvider, ADR-0042).
+ * Filament's own `@theme inline` (imported above) maps --font-sans and
+ * --font-mono to its --font-family / --mono-font-family variables; these
+ * later declarations win, so the panels use the same stacks as the Blade
+ * pages. --font-mono is the numeric stack on purpose: Filament's native
+ * `->fontFamily(FontFamily::Mono)` on a TextColumn / TextEntry (class
+ * `fi-font-mono`) is the panel convention for money and numeric columns
+ * (docs/frontend/payments-ui.md). --font-numeric itself comes from theme.css.
+ */
 @theme inline {
     --font-sans:
-        var(--font-jost, 'Jost'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        var(--font-mukta, 'Mukta'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: var(--font-numeric);
 }
 
 /*

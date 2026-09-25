@@ -7,11 +7,13 @@
  */
 
 /*
- * Monetary figures: tabular (equal-width) digits so amounts align in columns
- * and do not shift while updating. Jost ships a `tnum` feature (verified: all
- * digits 580 units at 400, 630 at 700). Jost has no `zero` feature, so
- * slashed-zero only takes effect in fallback fonts that support it.
+ * Monetary figures (ADR-0042): Geist Mono (`--font-numeric`) so amounts align
+ * in columns and do not shift while updating. Geist Mono is monospace (every
+ * digit 600 units wide), so `tabular-nums` changes nothing in it; it is kept for
+ * the fallback faces, which are not all monospace. Geist Mono has no `zero`
+ * feature: slashed-zero only takes effect in fallback fonts that support it.
  */
 @utility amount {
+    font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums slashed-zero;
 }

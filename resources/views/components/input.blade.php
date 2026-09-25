@@ -16,6 +16,10 @@
     Class routing: `class` goes to the <input> (e.g. class="amount");
     `wrapper-class` goes to the outer wrapper (e.g. wrapper-class="md:col-span-2").
 
+    Amount inputs: class="amount" sets the numeric face (Geist Mono,
+    --font-numeric) and tabular figures, like <x-amount> (ADR-0042). There is
+    no separate `numeric` prop on purpose: one way to mark money.
+
     Label, hint, error and affix text are user-facing: pass translated strings.
     The control is always text-base (16px), so iOS Safari does not zoom on focus.
 

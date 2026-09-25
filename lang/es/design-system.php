@@ -31,6 +31,12 @@ return [
         'links' => 'Un :prose en línea y un :visited.',
         'prose_link' => 'enlace en el texto',
         'visited_link' => 'enlace visitado',
+        'sans_heading' => 'Cobra en segundos',
+        'sans_sample' => 'Cada página, etiqueta y mensaje usa Mukta, en inglés y en español.',
+        'numeric_lead' => 'Todos los dígitos tienen el mismo ancho: los montos se alinean en columnas y no saltan al actualizarse.',
+        'subtotal' => 'Subtotal',
+        'fee' => 'Comisión de procesamiento',
+        'total' => 'Total',
     ],
 
     'foundations' => [

@@ -56,11 +56,25 @@
 
 @theme static {
     /* ---------- Typography ---------- */
-    /* --font-jost is emitted by the @fonts directive (laravel-vite-plugin). */
+    /*
+     * --font-mukta and --font-geist-mono are emitted by the @fonts directive
+     * (laravel-vite-plugin, vite.config.js), each followed by its metric-matched
+     * "<Family> fallback" face. ADR-0042.
+     *   sans     Mukta: all text.
+     *   numeric  Geist Mono: currency amounts and numeric money data (the
+     *            `amount` utility, <x-amount>). Monospace, so digits align.
+     *   mono     Geist Mono too: code, keys, IDs, token names. Same face today,
+     *            separate token on purpose: code styling may change without
+     *            touching how money looks, and vice versa.
+     */
     --font-sans:
-        var(--font-jost, 'Jost'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        var(--font-mukta, 'Mukta'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    --font-numeric:
+        var(--font-geist-mono, 'Geist Mono'), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --font-mono:
+        var(--font-geist-mono, 'Geist Mono'), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+        'Courier New', monospace;
 
     --text-*: initial;
     --text-xs: 0.75rem;

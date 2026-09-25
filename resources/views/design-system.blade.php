@@ -135,6 +135,28 @@
         <section class="flex flex-col gap-stack-lg" aria-labelledby="typography">
             <h2 id="typography" class="text-3xl font-semibold">{{ __('design-system.typography.title') }}</h2>
 
+            {{-- Font families (ADR-0042): Mukta for text, Geist Mono for currency and numeric data. --}}
+            <div class="grid gap-stack-md md:grid-cols-2">
+                <div class="flex min-w-0 flex-col gap-stack-sm rounded-lg border border-line bg-surface p-inset-md">
+                    <span class="font-mono text-xs break-all text-fg-secondary">font-sans &middot; Mukta 400/500/600/700</span>
+                    <p class="text-2xl font-semibold break-words">{{ __('design-system.typography.sans_heading') }}</p>
+                    <p class="break-words">{{ __('design-system.typography.sans_sample') }}</p>
+                    <p class="break-words text-fg-secondary">Aa Bb Cc Ññ Áá Éé Üü ¿? ¡! 0123456789</p>
+                </div>
+                <div class="flex min-w-0 flex-col gap-stack-sm rounded-lg border border-line bg-surface p-inset-md">
+                    <span class="font-mono text-xs break-all text-fg-secondary">font-numeric &middot; Geist Mono 400/600</span>
+                    <p class="text-sm break-words text-fg-secondary">{{ __('design-system.typography.numeric_lead') }}</p>
+                    <dl class="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-6 gap-y-1">
+                        <dt class="break-words text-fg-secondary">{{ __('design-system.typography.subtotal') }}</dt>
+                        <dd class="text-end"><x-amount :value="1250.5" currency="USD" :signed="false" /></dd>
+                        <dt class="break-words text-fg-secondary">{{ __('design-system.typography.fee') }}</dt>
+                        <dd class="text-end"><x-amount :value="-36.26" currency="USD" /></dd>
+                        <dt class="font-semibold break-words">{{ __('design-system.typography.total') }}</dt>
+                        <dd class="text-end"><x-amount :value="1214.24" currency="USD" :signed="false" class="text-xl font-semibold" /></dd>
+                    </dl>
+                </div>
+            </div>
+
             <div class="flex flex-col gap-stack-md">
                 @foreach ($typeScale as [$class, $label])
                     <div class="flex flex-col gap-1 border-b border-line pb-stack-sm sm:flex-row sm:items-baseline sm:gap-6">
@@ -250,7 +272,7 @@
             <div class="grid max-w-content gap-stack-lg md:grid-cols-2">
                 <x-input name="ds-email" type="email" :label="__('design-system.inputs.email')" :placeholder="__('design-system.inputs.email_placeholder')" autocomplete="email" required />
                 <x-input name="ds-card" :label="__('design-system.inputs.card_number')" :hint="__('design-system.inputs.card_hint')" inputmode="numeric" autocomplete="cc-number" />
-                <x-input name="ds-amount" :label="__('design-system.inputs.amount')" value="12.00" :error="__('design-system.inputs.amount_error')" />
+                <x-input name="ds-amount" :label="__('design-system.inputs.amount')" value="12.00" inputmode="decimal" class="amount" :error="__('design-system.inputs.amount_error')" />
                 <x-input name="ds-disabled" :label="__('design-system.inputs.disabled')" :value="__('design-system.inputs.not_editable')" disabled />
                 <x-input name="ds-price" :label="__('design-system.inputs.price')" inputmode="decimal" autocomplete="off" align="end" placeholder="0.00" class="amount" :hint="__('design-system.inputs.price_hint')">
                     <x-slot:prefix>$</x-slot:prefix>

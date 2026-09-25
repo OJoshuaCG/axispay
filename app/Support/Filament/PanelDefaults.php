@@ -24,9 +24,9 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /**
  * Configuration shared by the `admin` and `app` panels (ADR-0025, ADR-0030):
- * design-token palettes, self-hosted Jost, the token-based theme, the
- * dark-mode bridge, the language switcher, audited TOTP 2FA and the profile
- * page. Each panel provider adds its host, guard, resources and rules.
+ * design-token palettes, self-hosted Mukta and Geist Mono, the token-based
+ * theme, the dark-mode bridge, the language switcher, audited TOTP 2FA and the
+ * profile page. Each panel provider adds its host, guard, resources and rules.
  */
 final class PanelDefaults
 {
@@ -37,7 +37,7 @@ final class PanelDefaults
             ->login(Login::class)
             ->profile(EditProfile::class, isSimple: false)
             ->colors(DesignTokenPalette::filamentColors())
-            ->font('Jost', provider: ViteFontProvider::class)
+            ->font('Mukta', provider: ViteFontProvider::class)
             ->viteTheme('resources/css/filament/theme.css')
             ->darkMode()
             ->brandName(static fn (): string => Brand::displayName())

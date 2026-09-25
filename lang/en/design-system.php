@@ -34,6 +34,12 @@ return [
         'links' => 'An inline :prose and a :visited.',
         'prose_link' => 'prose link',
         'visited_link' => 'visited link',
+        'sans_heading' => 'Get paid in seconds',
+        'sans_sample' => 'Every page, label and message is set in Mukta, in English and in Spanish.',
+        'numeric_lead' => 'Every digit has the same width, so amounts line up in columns and do not jump while they update.',
+        'subtotal' => 'Subtotal',
+        'fee' => 'Processing fee',
+        'total' => 'Total',
     ],
 
     'foundations' => [

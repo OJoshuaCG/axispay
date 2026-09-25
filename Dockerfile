@@ -65,7 +65,7 @@ RUN composer dump-autoload --no-dev --optimize \
     && rm -f bootstrap/cache/config.php bootstrap/cache/routes-*.php bootstrap/cache/events.php
 
 # ---------------------------------------------------------------------------
-# assets: Vite build (Tailwind, self-hosted Jost via laravel-vite-plugin
+# assets: Vite build (Tailwind, self-hosted Mukta + Geist Mono via laravel-vite-plugin
 # fonts + fontaine). pnpm is the project's package manager (pnpm-lock.yaml).
 # The Filament theme imports vendor/filament CSS, so vendor is copied in.
 # ---------------------------------------------------------------------------
