@@ -50,6 +50,15 @@ return [
         ],
     ],
 
+    'invitations' => [
+        'status' => [
+            'pending' => 'Pendiente',
+            'accepted' => 'Aceptada',
+            'expired' => 'Vencida',
+            'revoked' => 'Revocada',
+        ],
+    ],
+
     'login' => [
         'throttled' => 'Demasiados intentos fallidos para esta cuenta. Inténtelo de nuevo en :minutes minutos.',
     ],

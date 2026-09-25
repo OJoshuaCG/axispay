@@ -56,6 +56,7 @@ final readonly class CreateTenant
                 $this->context->runAsTenant($tenant->id, false, fn () => $this->inviteUser->handle(
                     new InviteUserData(email: $data->ownerEmail, role: SystemRole::Owner),
                     invitedBy: null,
+                    platformAdmin: $actor,
                 ));
             }
 

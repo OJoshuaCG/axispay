@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Tenancy\Models;
 
+use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Models\UserInvitation;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
 use App\Modules\Tenancy\Data\TenantSettings;
@@ -12,6 +14,7 @@ use Carbon\CarbonImmutable;
 use Database\Factories\TenantFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A customer of the platform (plan 7.1). Not tenant-scoped itself: it is the
@@ -58,6 +61,26 @@ final class Tenant extends Model
         'timezone' => 'America/Mexico_City',
         'default_locale' => 'es',
     ];
+
+    /**
+     * The tenant's users. The related model keeps its fail-closed tenant
+     * scope: reading through this relation still needs the tenant context,
+     * or an allowed scope bypass (platform panel, config/tenancy.php).
+     *
+     * @return HasMany<User, $this>
+     */
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class, 'tenant_id');
+    }
+
+    /**
+     * @return HasMany<UserInvitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(UserInvitation::class, 'tenant_id');
+    }
 
     public function settings(): TenantSettings
     {

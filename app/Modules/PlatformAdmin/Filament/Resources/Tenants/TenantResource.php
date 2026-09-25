@@ -5,13 +5,18 @@ declare(strict_types=1);
 namespace App\Modules\PlatformAdmin\Filament\Resources\Tenants;
 
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\CreateTenant;
+use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\EditTenant;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\ListTenants;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\ViewTenant;
+use App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers\InvitationsRelationManager;
+use App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers\UsersRelationManager;
+use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Support\Locales;
 use BackedEnum;
 use DateTimeZone;
+use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -24,8 +29,11 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 /**
- * Admin panel: tenants (plan 17.4, 21.3). Creation and status changes run
- * through CreateTenant / ChangeTenantStatus; this class only describes the UI.
+ * Admin panel: tenants (plan 17.4, 21.3, ADR-0043). Creation, profile edits,
+ * owner invitations and status changes run through CreateTenant,
+ * UpdateTenantProfile, InviteTenantOwner and ChangeTenantStatus; this class
+ * only describes the UI. There is no delete: a tenant is retired by closing
+ * it (audit_logs reference it with ON DELETE RESTRICT, append-only).
  */
 final class TenantResource extends Resource
 {
@@ -66,7 +74,8 @@ final class TenantResource extends Resource
                 ->label(__('platform.tenants.fields.owner_email'))
                 ->helperText(__('platform.tenants.fields.owner_email_help'))
                 ->email()
-                ->maxLength(254),
+                ->maxLength(254)
+                ->visibleOn('create'),
         ]);
     }
 
@@ -87,7 +96,7 @@ final class TenantResource extends Resource
                 SelectFilter::make('status')->label(__('platform.tenants.fields.status'))->options(TenantStatus::options()),
             ])
             ->defaultSort('created_at', 'desc')
-            ->recordActions([ViewAction::make()]);
+            ->recordActions([ViewAction::make(), EditAction::make()]);
     }
 
     public static function infolist(Schema $schema): Schema
@@ -99,12 +108,16 @@ final class TenantResource extends Resource
                 ->label(__('platform.tenants.fields.status'))
                 ->badge()
                 ->formatStateUsing(static fn (TenantStatus $state): string => $state->label())
-                ->color(static fn (TenantStatus $state): string => self::statusColor($state)),
+                ->color(static fn (TenantStatus $state): string => self::statusColor($state))
+                ->helperText(__('platform.tenants.fields.status_help')),
             TextEntry::make('status_reason')->label(__('platform.tenants.fields.status_reason'))->placeholder('—'),
             TextEntry::make('status_changed_at')->label(__('platform.tenants.fields.status_changed_at'))->dateTime()->placeholder('—'),
             TextEntry::make('timezone')->label(__('platform.tenants.fields.timezone')),
             TextEntry::make('default_locale')->label(__('platform.tenants.fields.default_locale')),
-            TextEntry::make('support_email')->label(__('platform.tenants.fields.support_email'))->placeholder('—'),
+            TextEntry::make('support_email')
+                ->label(__('platform.tenants.fields.support_email'))
+                ->formatStateUsing(static fn (?string $state): ?string => PlatformPii::email($state))
+                ->placeholder('—'),
             TextEntry::make('id')->label(__('platform.tenants.fields.id'))->copyable(),
         ]);
     }
@@ -115,6 +128,15 @@ final class TenantResource extends Resource
             'index' => ListTenants::route('/'),
             'create' => CreateTenant::route('/create'),
             'view' => ViewTenant::route('/{record}'),
+            'edit' => EditTenant::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getRelations(): array
+    {
+        return [
+            InvitationsRelationManager::class,
+            UsersRelationManager::class,
         ];
     }
 

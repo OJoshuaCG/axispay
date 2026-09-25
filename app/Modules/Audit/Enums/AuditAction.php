@@ -24,12 +24,14 @@ enum AuditAction: string
     case InvitationCreated = 'invitation.created';
     case InvitationAccepted = 'invitation.accepted';
     case InvitationRevoked = 'invitation.revoked';
+    case InvitationResent = 'invitation.resent';
     case InvitationRefused = 'invitation.refused';
     case UserDeactivated = 'user.deactivated';
     case UserReactivated = 'user.reactivated';
     case RoleAssigned = 'role.assigned';
     case RoleRevoked = 'role.revoked';
     case TenantCreated = 'tenant.created';
+    case TenantUpdated = 'tenant.updated';
     case TenantStatusChanged = 'tenant.status_changed';
     case ImpersonationStarted = 'impersonation.started';
     case ImpersonationEnded = 'impersonation.ended';

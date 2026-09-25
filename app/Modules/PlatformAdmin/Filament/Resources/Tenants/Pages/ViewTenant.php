@@ -17,6 +17,7 @@ use App\Modules\Tenancy\Exceptions\TenantCloseNotConfirmedException;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Scopes\TenantScope;
 use Filament\Actions\Action;
+use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -33,6 +34,7 @@ final class ViewTenant extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
+            EditAction::make(),
             $this->changeStatusAction(),
             $this->impersonateAction(),
         ];

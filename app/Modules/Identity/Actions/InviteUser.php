@@ -13,24 +13,27 @@ use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserInvitation;
-use App\Modules\Identity\Notifications\UserInvitationNotification;
+use App\Modules\Identity\Services\InvitationMailer;
+use App\Modules\Identity\Services\InvitationThrottle;
 use App\Modules\Identity\Services\OpaqueTokens;
 use App\Modules\Identity\Services\ReauthenticationWindow;
 use App\Modules\Identity\Services\UserDirectory;
-use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 use App\Modules\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\URL;
 
 /**
  * Invites someone to the current tenant with a predefined role (plan 17.3):
  * single-use token, 72-hour expiry, signed link. A new invitation for the same
- * e-mail revokes the previous pending one. `invitedBy` is null when the
- * platform creates the owner invitation of a new tenant.
+ * e-mail revokes the previous pending one.
+ *
+ * `invitedBy` is null when the platform invites the owner of a tenant
+ * (CreateTenant, InviteTenantOwner). Those callers authorize the platform
+ * admin themselves and pass it as `platformAdmin`, so the audit entries name
+ * the acting admin; the tenant-user checks (RoleGrantGuard, re-authentication)
+ * apply to tenant users only and are not weakened by this path.
  */
 final readonly class InviteUser
 {
@@ -41,9 +44,11 @@ final readonly class InviteUser
         private AuditLogger $audit,
         private RoleGrantGuard $grants,
         private ReauthenticationWindow $reauthentication,
+        private InvitationThrottle $throttle,
+        private InvitationMailer $mailer,
     ) {}
 
-    public function handle(InviteUserData $data, ?User $invitedBy): UserInvitation
+    public function handle(InviteUserData $data, ?User $invitedBy, ?PlatformAdmin $platformAdmin = null): UserInvitation
     {
         $tenantId = $this->context->idOrFail(UserInvitation::class);
 
@@ -59,9 +64,17 @@ final readonly class InviteUser
             if ($data->role->isSensitive()) {
                 $this->reauthentication->ensureConfirmed();
             }
-
-            $this->throttle($tenantId);
         }
+
+        if ($invitedBy !== null || $platformAdmin !== null) {
+            $this->throttle->hit($tenantId);
+        }
+
+        $actor = match (true) {
+            $invitedBy !== null => Actor::user($invitedBy->id),
+            $platformAdmin !== null => Actor::platformAdmin($platformAdmin->id),
+            default => null,
+        };
 
         $email = UserDirectory::normalize($data->email);
 
@@ -71,17 +84,15 @@ final readonly class InviteUser
             $this->audit->record(AuditAction::InvitationRefused, changes: [
                 'recipient_hash' => hash('sha256', $email),
                 'reason' => 'email_not_available',
-            ], actor: $invitedBy !== null ? Actor::user($invitedBy->id) : null);
+            ], actor: $actor);
 
             throw new EmailNotAvailableException;
         }
 
         $token = $this->tokens->generate();
-        $expiresAt = CarbonImmutable::now()->addHours($this->expiresHours());
+        $expiresAt = CarbonImmutable::now()->addHours(InvitationMailer::expiresHours());
 
-        $actor = $invitedBy !== null ? Actor::user($invitedBy->id) : null;
-
-        $invitation = DB::transaction(function () use ($email, $data, $token, $expiresAt, $invitedBy, $actor): UserInvitation {
+        $invitation = DB::transaction(function () use ($email, $data, $token, $expiresAt, $invitedBy, $actor, $platformAdmin): UserInvitation {
             UserInvitation::query()
                 ->where('email', $email)
                 ->whereNull('accepted_at')
@@ -102,43 +113,16 @@ final readonly class InviteUser
                 'invited_by_user_id' => $invitedBy?->id,
             ])->save();
 
-            $this->audit->record(AuditAction::InvitationCreated, $invitation, ['role' => $data->role->value], actor: $actor);
+            $this->audit->record(AuditAction::InvitationCreated, $invitation, array_filter([
+                'role' => $data->role->value,
+                'source' => $platformAdmin !== null ? 'platform' : null,
+            ]), actor: $actor);
 
             return $invitation;
         });
 
-        $tenant = Tenant::query()->findOrFail($tenantId);
-
-        Notification::route('mail', $email)->notify(new UserInvitationNotification(
-            acceptUrl: URL::temporarySignedRoute('invitations.show', $expiresAt, ['token' => $token]),
-            tenantName: $tenant->display_name,
-            roleLabel: $data->role->label(),
-            expiresAt: $expiresAt,
-        ));
+        $this->mailer->send($email, $token, $data->role, $expiresAt, $tenantId);
 
         return $invitation;
-    }
-
-    /**
-     * Per-tenant invitation throttle (ADR-0034): every attempt counts,
-     * including refused ones.
-     */
-    private function throttle(string $tenantId): void
-    {
-        $key = 'invitations:'.$tenantId;
-        $max = config('axispay.invitations.max_per_hour', 20);
-
-        if (RateLimiter::tooManyAttempts($key, is_int($max) ? $max : 20)) {
-            throw InvitationNotAllowedException::throttled();
-        }
-
-        RateLimiter::hit($key, 3600);
-    }
-
-    private function expiresHours(): int
-    {
-        $hours = config('axispay.invitations.expires_hours', 72);
-
-        return is_int($hours) ? $hours : 72;
     }
 }

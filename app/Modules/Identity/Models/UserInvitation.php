@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Models;
 
+use App\Modules\Identity\Enums\InvitationStatus;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
@@ -40,7 +41,18 @@ final class UserInvitation extends Model
 
     public function isPending(): bool
     {
-        return $this->accepted_at === null && $this->revoked_at === null && $this->expires_at->isFuture();
+        return $this->status() === InvitationStatus::Pending;
+    }
+
+    /** Accepted and revoked win over expiry: they are final. */
+    public function status(): InvitationStatus
+    {
+        return match (true) {
+            $this->accepted_at !== null => InvitationStatus::Accepted,
+            $this->revoked_at !== null => InvitationStatus::Revoked,
+            $this->expires_at->isFuture() => InvitationStatus::Pending,
+            default => InvitationStatus::Expired,
+        };
     }
 
     /**
