@@ -15,6 +15,13 @@ return [
     'tenants' => [
         'singular' => 'tenant',
         'plural' => 'tenants',
+        'sections' => [
+            'profile' => 'Profile',
+        ],
+        'empty' => [
+            'heading' => 'No tenants yet',
+            'description' => 'Create a tenant to give a business its own panel, then invite its owner.',
+        ],
         'fields' => [
             'id' => 'ID',
             'legal_name' => 'Legal name',
@@ -84,6 +91,11 @@ return [
     'admins' => [
         'singular' => 'platform admin',
         'plural' => 'platform admins',
+        'navigation' => 'Admins',
+        'empty' => [
+            'heading' => 'No platform admins',
+            'description' => 'Platform admins are created from the console with axispay:create-platform-admin.',
+        ],
         'fields' => [
             'name' => 'Name',
             'email' => 'E-mail',

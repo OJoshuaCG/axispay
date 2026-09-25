@@ -6,7 +6,8 @@
  * and persists changes.
  *
  * "system" is expressed by removing data-theme from <html>, which lets
- * `color-scheme: light dark` follow the OS preference.
+ * `color-scheme: light dark` follow the OS preference. With no saved
+ * preference the theme is DEFAULT_THEME (light), like the Filament panels.
  *
  * Browser UI color (<meta name="theme-color">): with a manual theme, every
  * theme-color tag is set to the computed page background, so the browser
@@ -19,6 +20,8 @@
 
 export const STORAGE_KEY = 'theme';
 export const THEMES = ['light', 'dark', 'system'];
+/** Used when nothing (or nothing valid) is saved, or storage is blocked (ADR-0044). */
+export const DEFAULT_THEME = 'light';
 
 const OPTION = '[data-theme-option]';
 const GROUP = '[data-theme-toggle]';
@@ -59,9 +62,9 @@ function syncThemeColor(preference) {
 export function readPreference() {
     try {
         const value = window.localStorage.getItem(STORAGE_KEY);
-        return THEMES.includes(value) ? value : 'system';
+        return THEMES.includes(value) ? value : DEFAULT_THEME;
     } catch {
-        return 'system';
+        return DEFAULT_THEME;
     }
 }
 

@@ -29,7 +29,7 @@
 
     // [utility, CSS variable]
     $semantic = [
-        'Surfaces' => [['bg-page', '--color-page'], ['bg-surface', '--color-surface'], ['bg-surface-alt', '--color-surface-alt'], ['bg-surface-pressed', '--color-surface-pressed']],
+        'Surfaces' => [['bg-page', '--color-page'], ['bg-surface', '--color-surface'], ['bg-surface-alt', '--color-surface-alt'], ['bg-surface-pressed', '--color-surface-pressed'], ['bg-canvas', '--color-canvas'], ['bg-raised', '--color-raised'], ['bg-sunken', '--color-sunken']],
         'Borders' => [['bg-line', '--color-line'], ['bg-line-strong', '--color-line-strong']],
         'Text' => [['bg-fg', '--color-fg'], ['bg-fg-secondary', '--color-fg-secondary'], ['bg-fg-muted', '--color-fg-muted'], ['bg-focus-ring', '--color-focus-ring']],
         'Primary' => [['bg-primary', '--color-primary'], ['bg-primary-hover', '--color-primary-hover'], ['bg-primary-active', '--color-primary-active'], ['bg-primary-subtle', '--color-primary-subtle']],
@@ -42,7 +42,7 @@
         ],
         'Destructive fills' => [['bg-error-fill', '--color-error-fill'], ['bg-error-fill-hover', '--color-error-fill-hover'], ['bg-error-fill-active', '--color-error-fill-active'], ['bg-on-error', '--color-on-error']],
         'Money' => [['bg-amount-positive', '--color-amount-positive'], ['bg-amount-negative', '--color-amount-negative']],
-        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle']],
+        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle'], ['bg-brand-mark', '--color-brand-mark'], ['bg-brand-mark-fg', '--color-brand-mark-fg']],
     ];
 
     $typeScale = [

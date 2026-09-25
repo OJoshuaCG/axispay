@@ -14,6 +14,10 @@ return [
     'users' => [
         'singular' => 'usuario',
         'plural' => 'usuarios',
+        'empty' => [
+            'heading' => 'Aún no hay usuarios',
+            'description' => 'Use «Invitar usuario» para agregar personas a su equipo.',
+        ],
         'fields' => [
             'name' => 'Nombre',
             'email' => 'Correo electrónico',

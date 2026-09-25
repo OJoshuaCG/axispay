@@ -8,8 +8,8 @@ use App\Modules\Audit\Filament\Resources\AuditLogs\Pages\ListAuditLogs;
 use App\Modules\Audit\Filament\Resources\AuditLogs\Pages\ViewAuditLog;
 use App\Modules\Audit\Filament\Support\AuditLogPresenter;
 use App\Modules\Audit\Models\AuditLog;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
-use Filament\Actions\ViewAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -22,6 +22,8 @@ use Filament\Tables\Table;
  */
 final class AuditLogResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = AuditLog::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
@@ -44,7 +46,10 @@ final class AuditLogResource extends Resource
             ->columns(AuditLogPresenter::columns())
             ->filters([AuditLogPresenter::actionFilter()])
             ->defaultSort('created_at', 'desc')
-            ->recordActions([ViewAction::make()]);
+            // A row opens the entry (ListRecords' default record URL).
+            ->emptyStateIcon(Heroicon::OutlinedClipboardDocumentList)
+            ->emptyStateHeading(__('audit.empty.heading'))
+            ->emptyStateDescription(__('audit.empty.description'));
     }
 
     public static function infolist(Schema $schema): Schema

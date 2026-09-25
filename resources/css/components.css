@@ -17,3 +17,68 @@
     font-family: var(--font-numeric);
     font-variant-numeric: tabular-nums slashed-zero;
 }
+
+/*
+ * Segmented control family (ADR-0044): the language switcher, the theme
+ * toggle of the Blade pages and the theme control of the Filament panels.
+ * `seg-group` is the pill-shaped track, `seg-option` one option in it; the
+ * selected option carries aria-pressed="true" (buttons) or
+ * aria-checked="true" (radios).
+ *
+ * Every option is a 44x44px target, except on `desktop:` (>= 1024px with a
+ * precise pointer), where it shrinks to 36x30 so the group is 36px tall and
+ * fits a toolbar row. Touch screens keep 44px at any width.
+ */
+@utility seg-group {
+    display: inline-flex;
+    max-width: 100%;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-full);
+    background-color: var(--color-surface);
+}
+
+@utility seg-option {
+    display: inline-flex;
+    min-width: var(--spacing-touch);
+    min-height: var(--spacing-touch);
+    align-items: center;
+    justify-content: center;
+    gap: calc(var(--spacing) * 1.5);
+    padding-inline: calc(var(--spacing) * 2.5);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    line-height: var(--text-xs--line-height);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--tracking-wider);
+    color: var(--color-fg-secondary);
+    transition-property: color, background-color, box-shadow;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-standard);
+
+    &:hover {
+        color: var(--color-fg);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: 2px;
+    }
+
+    &[aria-pressed='true'],
+    &[aria-checked='true'] {
+        background-color: var(--color-page);
+        color: var(--color-fg);
+        box-shadow:
+            var(--shadow-sm),
+            0 0 0 1px var(--color-line-strong);
+    }
+
+    @variant desktop {
+        min-width: calc(var(--spacing) * 9);
+        min-height: calc(var(--spacing) * 7.5);
+    }
+}

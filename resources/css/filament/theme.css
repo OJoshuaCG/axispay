@@ -17,11 +17,40 @@
 @import '../tokens/semantic.css';
 @import '../theme.css';
 @import '../../../vendor/filament/filament/resources/css/theme.css';
+/* seg-group / seg-option (language switcher, theme control). */
+@import '../components.css';
 
 @source '../../../app/Modules/**/Filament/**/*.php';
 @source '../../../app/Providers/Filament/**/*.php';
 @source '../../views/filament/**/*.blade.php';
 @source '../../views/components/language-switcher.blade.php';
+
+/*
+ * Panel type scale (ADR-0044). Filament's sizes were tuned for Inter; Mukta's
+ * smaller x-height makes the same sizes read about 2px smaller. Remapping the
+ * Tailwind tokens on the panel root raises every Filament text-xs/sm/base at
+ * once (table cells, sidebar, labels, buttons, badges) without touching the
+ * root font size (rem-based spacing stays put) or individual .fi-* classes.
+ * Values live in theme.css (--panel-text-*).
+ *
+ * Deliberately unlayered: the token files are imported before Tailwind
+ * declares its layers, so the @theme variables land unlayered on
+ * `:root, :host`, and any layered rule would lose to them. `html.fi` wins on
+ * specificity.
+ */
+html.fi {
+    --text-xs: var(--panel-text-xs);
+    --text-xs--line-height: var(--panel-text-xs-lh);
+    --text-sm: var(--panel-text-sm);
+    --text-sm--line-height: var(--panel-text-sm-lh);
+
+    @variant lg {
+        --text-sm: var(--panel-text-sm-desktop);
+        --text-sm--line-height: var(--panel-text-sm-desktop-lh);
+        --text-base: var(--panel-text-base-desktop);
+        --text-base--line-height: var(--panel-text-base-desktop-lh);
+    }
+}
 
 /*
  * Fonts, self-hosted (App\Support\Filament\ViteFontProvider, ADR-0042).
@@ -50,8 +79,9 @@
         @apply flex min-w-0 flex-nowrap items-center gap-1 sm:gap-2;
     }
 
+    /* 36px on desktop so the topbar row matches the seg-group controls. */
     .pl-mode-switch {
-        @apply inline-flex min-h-touch items-center gap-2 rounded-md border px-2 text-sm font-semibold sm:px-3;
+        @apply inline-flex min-h-touch items-center gap-2 rounded-md border px-2 text-sm font-semibold sm:px-3 desktop:min-h-9;
     }
 
     .pl-mode-switch[data-mode='test'] {
@@ -111,5 +141,157 @@
 
     input.fi-input {
         min-height: var(--spacing-touch);
+    }
+}
+
+/*
+ * Visible keyboard focus on Filament's navigation (WCAG 2.4.7). Filament
+ * hides the outline on these and only tints the background, which is too
+ * faint to find. Inset, so the ring is never clipped by the sidebar's scroll
+ * container or hidden under the sticky topbar (2.4.11).
+ */
+@layer components {
+    .fi
+        :is(
+            .fi-sidebar-item-btn,
+            .fi-sidebar-group-dropdown-trigger-btn,
+            .fi-tabs-item,
+            .fi-topbar-item-btn,
+            .fi-sidebar-database-notifications-btn
+        ):focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: -2px;
+    }
+}
+
+/*
+ * Surface layering (ADR-0044): canvas behind, raised panels on it, sunken
+ * header rows inside. Replaces Filament's white-on-gray-50 / gray-900 pair,
+ * whose dark cards were almost the same value as the page.
+ */
+@layer components {
+    .fi .fi-body,
+    .fi .fi-simple-layout {
+        background-color: var(--color-canvas);
+    }
+
+    .fi
+        :is(
+            .fi-topbar,
+            .fi-ta-ctn,
+            .fi-simple-main,
+            .fi-modal-window,
+            .fi-dropdown-panel,
+            .fi-section:not(.fi-section-not-contained):not(.fi-aside),
+            .fi-tabs:not(.fi-contained),
+            .fi-empty-state:not(.fi-empty-state-not-contained)
+        ) {
+        background-color: var(--color-raised);
+        --tw-ring-color: var(--color-line);
+    }
+
+    .fi .fi-sidebar {
+        background-color: var(--color-raised);
+
+        @variant lg {
+            border-inline-end: 1px solid var(--color-line);
+        }
+    }
+
+    /* Sidebar: muted icons, a clear active item (tint + start bar), and
+       small uppercase group labels. The active label stays fg, not blue:
+       blue text on the blue tint is under 4.5:1 in dark. */
+    .fi .fi-sidebar-item-btn > .fi-icon {
+        color: var(--color-fg-muted);
+    }
+
+    .fi .fi-sidebar-item.fi-sidebar-item-has-url:not(.fi-active) > .fi-sidebar-item-btn:hover {
+        background-color: var(--color-surface-alt);
+    }
+
+    .fi .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+        background-color: var(--color-primary-subtle);
+        box-shadow: inset 3px 0 0 var(--color-link);
+
+        & > .fi-icon {
+            color: var(--color-link);
+        }
+
+        & > .fi-sidebar-item-label {
+            color: var(--color-fg);
+            font-weight: var(--font-weight-semibold);
+        }
+    }
+
+    .fi .fi-sidebar-item-label {
+        color: var(--color-fg);
+    }
+
+    .fi .fi-sidebar-group-label {
+        font-size: var(--text-xs);
+        line-height: var(--text-xs--line-height);
+        font-weight: var(--font-weight-semibold);
+        letter-spacing: var(--tracking-wider);
+        text-transform: uppercase;
+        color: var(--color-fg-muted);
+    }
+
+    /* Filament's user-menu theme switcher keeps its own state and goes stale
+       once the topbar theme control is used, so it is only offered below md,
+       where the topbar control is hidden. */
+    .fi .fi-dropdown-list:has(> .fi-theme-switcher) {
+        @variant md {
+            display: none;
+        }
+    }
+
+    /* Tables: sunken header row, secondary header text, no zebra. The empty
+       first toolbar slot (no toolbar actions) is dropped so the search field
+       does not sit under a blank row on phones. */
+    .fi .fi-ta-header-toolbar > :first-child:not(:has(*)) {
+        display: none;
+    }
+
+    .fi .fi-ta-table > thead > tr {
+        background-color: var(--color-sunken);
+    }
+
+    .fi .fi-ta-header-cell {
+        color: var(--color-fg-secondary);
+    }
+
+    .fi .fi-ta-empty-state-icon-bg,
+    .fi .fi-empty-state-icon-bg {
+        background-color: var(--color-primary-subtle);
+
+        & .fi-icon {
+            color: var(--color-link);
+        }
+    }
+
+    /* Infolists and page headers. */
+    .fi .fi-in-entry-label {
+        color: var(--color-fg-secondary);
+    }
+
+    .fi .fi-tabs:not(.fi-contained):not(.fi-vertical) {
+        margin-inline: 0;
+    }
+
+    .fi .fi-header-heading {
+        font-weight: var(--font-weight-semibold);
+    }
+
+    /* Sign-in: a soft brand wash behind the card. */
+    .fi .fi-simple-layout {
+        background-image:
+            radial-gradient(60rem 30rem at 0% 0%, var(--color-primary-subtle), transparent 70%),
+            radial-gradient(50rem 30rem at 100% 100%, var(--color-feature-subtle), transparent 70%);
+    }
+
+    .fi .fi-simple-main {
+        box-shadow:
+            var(--shadow-md),
+            0 0 0 1px var(--color-line);
     }
 }

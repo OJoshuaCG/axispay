@@ -35,6 +35,10 @@ return [
     'roles' => [
         'singular' => 'role',
         'plural' => 'roles',
+        'empty' => [
+            'heading' => 'No roles',
+            'description' => 'Roles you can assign to your team appear here.',
+        ],
         'fields' => [
             'name' => 'Role',
             'permissions' => 'Permissions',

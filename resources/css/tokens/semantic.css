@@ -44,6 +44,14 @@
     /* Pressed state of low-emphasis controls (ghost button :active). One step
        beyond surface-alt (the hover state) so press is visibly distinct. */
     --color-surface-pressed: light-dark(var(--color-neutral-200), #2a3346);
+    /* Layering of app shells (Filament panels, ADR-0044): the canvas sits
+       behind everything, raised panels (cards, tables, topbar, sidebar,
+       modals) sit on it, sunken areas (table header rows) sit inside a
+       raised panel. In dark, raised is lighter than the canvas: elevation
+       reads as lightness, not shadow. */
+    --color-canvas: light-dark(var(--color-neutral-50), var(--color-neutral-900));
+    --color-raised: light-dark(var(--color-neutral-0), var(--color-neutral-700));
+    --color-sunken: light-dark(var(--color-neutral-50), var(--color-neutral-800));
 
     /* ---------- Borders ---------- */
     /* #2a3346 is a one-off dark hairline value from the source palette. */
@@ -111,6 +119,10 @@
     /* Decorative only: never for buttons, links or text that must be read. */
     --color-feature: light-dark(var(--color-blue-600), var(--color-green-500));
     --color-feature-subtle: light-dark(var(--color-blue-50), rgb(34 181 115 / 0.12));
+    /* Brand mark tile (panel logo, until the ADR-0038 logo ships): green
+       tile with a near-black glyph (7.2:1). Same in both themes. Decorative. */
+    --color-brand-mark: var(--color-green-500);
+    --color-brand-mark-fg: var(--color-neutral-900);
 
     /* ---------- Focus ---------- */
     /* Solid 2px outline (see base.css). Meets 3:1 against page and surface. */

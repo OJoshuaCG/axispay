@@ -14,6 +14,10 @@ return [
     'users' => [
         'singular' => 'user',
         'plural' => 'users',
+        'empty' => [
+            'heading' => 'No users yet',
+            'description' => 'Use “Invite user” to add people to your team.',
+        ],
         'fields' => [
             'name' => 'Name',
             'email' => 'E-mail',

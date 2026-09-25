@@ -9,24 +9,27 @@ use App\Modules\Identity\Auth\AuditedAppAuthentication;
 use App\Modules\Identity\Filament\Pages\EditProfile;
 use App\Modules\Identity\Filament\Pages\Login;
 use App\Modules\Shared\Support\Brand;
+use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Panel;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /**
  * Configuration shared by the `admin` and `app` panels (ADR-0025, ADR-0030):
  * design-token palettes, self-hosted Mukta and Geist Mono, the token-based
- * theme, the dark-mode bridge, the language switcher, audited TOTP 2FA and the
- * profile page. Each panel provider adds its host, guard, resources and rules.
+ * theme, the dark-mode bridge, the language switcher and theme control, the
+ * brand mark, audited TOTP 2FA and the profile page. Each panel provider adds its host, guard, resources and rules.
  */
 final class PanelDefaults
 {
@@ -39,8 +42,15 @@ final class PanelDefaults
             ->colors(DesignTokenPalette::filamentColors())
             ->font('Mukta', provider: ViteFontProvider::class)
             ->viteTheme('resources/css/filament/theme.css')
+            // Light unless the person picks otherwise; the choice is saved in
+            // localStorage['theme'], which Filament reads first (ADR-0044).
             ->darkMode()
+            ->defaultThemeMode(ThemeMode::Light)
             ->brandName(static fn (): string => Brand::displayName())
+            // Brand tile + name (topbar, mobile sidebar, sign-in card) until
+            // the ADR-0038 logo exists. brandName() stays: titles and alt text.
+            ->brandLogo(static fn (): Htmlable => new HtmlString(view('filament.partials.brand')->render()))
+            ->brandLogoHeight('1.75rem')
             ->multiFactorAuthentication(
                 [AuditedAppAuthentication::make()->recoverable()->brandName(Brand::displayName())],
                 isRequired: $requireTwoFactor,

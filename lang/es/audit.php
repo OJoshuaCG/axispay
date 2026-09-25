@@ -9,6 +9,10 @@ return [
 
     'singular' => 'entrada de auditoría',
     'plural' => 'registro de auditoría',
+    'empty' => [
+        'heading' => 'Aún no hay entradas de auditoría',
+        'description' => 'Aquí se registran los inicios de sesión, los cambios de rol y otras acciones sensibles.',
+    ],
     'platform' => 'Plataforma',
 
     'fields' => [

@@ -21,7 +21,7 @@ use function Pest\Laravel\startSession;
 it('serves the sign-in page on the app host in English and Spanish', function (): void {
     get(appUrl('/'))->assertRedirect(appUrl('/login'));
     get(appUrl('/login?lang=en'))->assertOk()->assertSee('Sign in');
-    get(appUrl('/login?lang=es'))->assertOk()->assertSee('Entre a su cuenta')->assertSee('lang="es"', false);
+    get(appUrl('/login?lang=es'))->assertOk()->assertSee('Inicie sesión')->assertSee('lang="es"', false);
 });
 
 it('renders the dark-mode bridge, the theme and the language switcher', function (): void {
@@ -31,6 +31,22 @@ it('renders the dark-mode bridge, the theme and the language switcher', function
         ->assertSee("root.setAttribute('data-theme', theme)", false)
         ->assertSee('/build/assets/theme-', false)
         ->assertSee(route('locale.update'), false);
+});
+
+it('defaults the panels to the light theme and shows the theme control on sign-in', function (): void {
+    get(appUrl('/login?lang=en'))
+        ->assertOk()
+        ->assertSee('--default-theme-mode: light', false)
+        ->assertSee('data-panel-theme-control', false)
+        ->assertSee(__('ui.theme.label', [], 'en'))
+        ->assertSee(__('ui.theme.dark', [], 'en'));
+});
+
+it('shows the language codes as the visible label, with the native name for screen readers', function (): void {
+    get(appUrl('/login?lang=es'))
+        ->assertOk()
+        ->assertSeeInOrder(['<span>EN</span><span class="sr-only"> English</span>', '<span>ES</span><span class="sr-only"> Español</span>'], false)
+        ->assertSee('title="Español"', false);
 });
 
 it('requires 2FA for users with sensitive permissions only', function (): void {

@@ -42,20 +42,32 @@
 
         <title>{{ filled($title) ? $title.' · '.$appName : $appName }}</title>
 
-        {{-- Apply the saved theme before first paint to avoid a flash. Keep in sync with resources/js/theme.js. --}}
+        {{--
+            Apply the saved theme before first paint to avoid a flash. With no
+            saved (or an unreadable) preference the page is light (ADR-0044);
+            only an explicit "system" follows the OS. Keep in sync with
+            resources/js/theme.js (STORAGE_KEY, THEMES, DEFAULT_THEME).
+        --}}
         <script @if ($cspNonce) nonce="{{ $cspNonce }}" @endif>
             (function () {
+                var theme = null;
                 try {
-                    var theme = window.localStorage.getItem('theme');
-                    if (theme === 'light' || theme === 'dark') {
-                        document.documentElement.setAttribute('data-theme', theme);
-                        var source = document.querySelector('meta[data-theme-color="' + theme + '"]');
-                        var color = source.getAttribute('content');
-                        document.querySelectorAll('meta[data-theme-color]').forEach(function (meta) {
-                            meta.setAttribute('data-default-content', meta.getAttribute('content'));
-                            meta.setAttribute('content', color);
-                        });
-                    }
+                    theme = window.localStorage.getItem('theme');
+                } catch (error) {}
+                if (theme !== 'dark' && theme !== 'system') {
+                    theme = 'light';
+                }
+                if (theme === 'system') {
+                    return;
+                }
+                document.documentElement.setAttribute('data-theme', theme);
+                try {
+                    var source = document.querySelector('meta[data-theme-color="' + theme + '"]');
+                    var color = source.getAttribute('content');
+                    document.querySelectorAll('meta[data-theme-color]').forEach(function (meta) {
+                        meta.setAttribute('data-default-content', meta.getAttribute('content'));
+                        meta.setAttribute('content', color);
+                    });
                 } catch (error) {}
             })();
         </script>

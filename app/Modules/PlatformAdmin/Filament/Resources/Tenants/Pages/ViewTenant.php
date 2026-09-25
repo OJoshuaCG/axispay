@@ -54,6 +54,8 @@ final class ViewTenant extends ViewRecord
         return Action::make('changeStatus')
             ->label(__('platform.tenants.actions.change_status'))
             ->icon(Heroicon::OutlinedArrowsRightLeft)
+            // One primary action per header: Edit (ADR-0044).
+            ->color('gray')
             ->authorize('changeStatus')
             ->schema([
                 Select::make('status')

@@ -15,6 +15,13 @@ return [
     'tenants' => [
         'singular' => 'cliente',
         'plural' => 'clientes',
+        'sections' => [
+            'profile' => 'Perfil',
+        ],
+        'empty' => [
+            'heading' => 'Aún no hay clientes',
+            'description' => 'Cree un cliente para dar a una empresa su propio panel y después invite a su propietario.',
+        ],
         'fields' => [
             'id' => 'ID',
             'legal_name' => 'Razón social',
@@ -84,6 +91,11 @@ return [
     'admins' => [
         'singular' => 'administrador de la plataforma',
         'plural' => 'administradores de la plataforma',
+        'navigation' => 'Administradores',
+        'empty' => [
+            'heading' => 'No hay administradores de la plataforma',
+            'description' => 'Los administradores de la plataforma se crean desde la consola con axispay:create-platform-admin.',
+        ],
         'fields' => [
             'name' => 'Nombre',
             'email' => 'Correo electrónico',

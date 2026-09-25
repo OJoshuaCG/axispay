@@ -11,13 +11,15 @@
 
     Accessibility:
         - role="group" named by ui.language.label ("Language" / "Idioma").
-        - Each option is named by its NATIVE name ("English", "Español") and
-          carries lang="<code>" so screen readers pronounce it correctly.
+        - The visible text is the code ("EN", "ES") at every width, so the
+          control stays compact in toolbars (ADR-0044). The accessible name is
+          "EN English": the visible code first (label-in-name, WCAG 2.5.3),
+          then the NATIVE name in sr-only text; the native name is also the
+          tooltip. Each option carries lang="<code>" so screen readers
+          pronounce it correctly.
         - The active language is marked aria-pressed="true".
-        - Below the `sm` breakpoint the visible text is the code ("EN", "ES")
-          to fit 320px headers; the native name stays as the accessible name
-          (the visible code is part of it, satisfying label-in-name).
-        - Every option is at least 44x44px.
+        - Styled by the seg-group / seg-option utilities (components.css):
+          44x44px options, 36x30 on `desktop:` (large screen, fine pointer).
 --}}
 @props([
     'redirect' => null,
@@ -39,7 +41,7 @@
     <div
         role="group"
         aria-label="{{ __('ui.language.label') }}"
-        class="inline-flex items-center gap-0.5 rounded-full border border-line bg-surface p-0.5"
+        class="seg-group"
     >
         @foreach ($locales as $code => $nativeName)
             <button
@@ -47,11 +49,11 @@
                 name="locale"
                 value="{{ $code }}"
                 lang="{{ $code }}"
+                title="{{ $nativeName }}"
                 aria-pressed="{{ $code === $current ? 'true' : 'false' }}"
-                class="inline-flex min-h-touch min-w-touch items-center justify-center rounded-full px-3 text-sm font-medium text-fg-secondary transition-colors duration-fast ease-standard hover:text-fg aria-pressed:bg-page aria-pressed:text-fg aria-pressed:shadow-sm aria-pressed:ring-1 aria-pressed:ring-line-strong"
+                class="seg-option"
             >
-                <span class="uppercase sm:hidden" aria-hidden="true">{{ $code }}</span>
-                <span class="sr-only sm:not-sr-only">{{ $nativeName }}</span>
+                <span>{{ strtoupper($code) }}</span><span class="sr-only"> {{ $nativeName }}</span>
             </button>
         @endforeach
     </div>

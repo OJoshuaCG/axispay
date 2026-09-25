@@ -13,16 +13,19 @@ use App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers\UsersR
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use App\Support\Locales;
 use BackedEnum;
 use DateTimeZone;
+use Filament\Actions\CreateAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -37,7 +40,15 @@ use Filament\Tables\Table;
  */
 final class TenantResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Tenant::class;
+
+    /** Page titles and breadcrumbs name the record (ADR-0044). */
+    protected static ?string $recordTitleAttribute = 'display_name';
+
+    /** A title attribute would switch on global search, which is not wanted. */
+    protected static bool $isGloballySearchable = false;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingOffice2;
 
@@ -96,12 +107,31 @@ final class TenantResource extends Resource
                 SelectFilter::make('status')->label(__('platform.tenants.fields.status'))->options(TenantStatus::options()),
             ])
             ->defaultSort('created_at', 'desc')
-            ->recordActions([ViewAction::make(), EditAction::make()]);
+            // A row opens the view page (ListRecords' default record URL), so
+            // there is no separate "View" action (ADR-0044).
+            ->recordActions([EditAction::make()])
+            ->emptyStateIcon(Heroicon::OutlinedBuildingOffice2)
+            ->emptyStateHeading(__('platform.tenants.empty.heading'))
+            ->emptyStateDescription(__('platform.tenants.empty.description'))
+            ->emptyStateActions([CreateAction::make()]);
     }
 
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
+            Section::make(__('platform.tenants.sections.profile'))
+                ->columns(2)
+                ->columnSpanFull()
+                ->schema(self::profileEntries()),
+        ]);
+    }
+
+    /**
+     * @return list<TextEntry>
+     */
+    private static function profileEntries(): array
+    {
+        return [
             TextEntry::make('display_name')->label(__('platform.tenants.fields.display_name')),
             TextEntry::make('legal_name')->label(__('platform.tenants.fields.legal_name')),
             TextEntry::make('status')
@@ -118,8 +148,8 @@ final class TenantResource extends Resource
                 ->label(__('platform.tenants.fields.support_email'))
                 ->formatStateUsing(static fn (?string $state): ?string => PlatformPii::email($state))
                 ->placeholder('—'),
-            TextEntry::make('id')->label(__('platform.tenants.fields.id'))->copyable(),
-        ]);
+            TextEntry::make('id')->label(__('platform.tenants.fields.id'))->fontFamily(FontFamily::Mono)->copyable(),
+        ];
     }
 
     public static function getPages(): array

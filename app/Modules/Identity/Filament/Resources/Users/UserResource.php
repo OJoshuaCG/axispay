@@ -15,9 +15,9 @@ use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Filament\Resources\Users\Pages\ListUsers;
 use App\Modules\Identity\Filament\Resources\Users\Pages\ViewUser;
 use App\Modules\Identity\Models\User;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Infolists\Components\IconEntry;
@@ -40,7 +40,15 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class UserResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = User::class;
+
+    /** Page titles and breadcrumbs name the record (ADR-0044). */
+    protected static ?string $recordTitleAttribute = 'name';
+
+    /** A title attribute would switch on global search, which is not wanted. */
+    protected static bool $isGloballySearchable = false;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
@@ -94,8 +102,12 @@ final class UserResource extends Resource
                 TextColumn::make('last_login_at')->label(__('identity.users.fields.last_login_at'))->since()->sortable()->toggleable(),
             ])
             ->defaultSort('name')
+            ->emptyStateIcon(Heroicon::OutlinedUsers)
+            ->emptyStateHeading(__('identity.users.empty.heading'))
+            ->emptyStateDescription(__('identity.users.empty.description'))
+            // A row opens the user (ListRecords' default record URL), so there
+            // is no separate "View" action (ADR-0044).
             ->recordActions([
-                ViewAction::make(),
                 self::changeRolesAction(),
                 self::deactivateAction(),
                 self::reactivateAction(),

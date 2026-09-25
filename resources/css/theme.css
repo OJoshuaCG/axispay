@@ -22,6 +22,14 @@
 }
 
 /*
+ * `desktop:` = a large screen driven by a precise pointer (mouse, trackpad).
+ * Compact controls (the seg-group family in components.css, the panel mode
+ * switch) shrink below the 44px touch target only here; touch screens of any
+ * width keep 44px. See docs/frontend/responsive.md.
+ */
+@custom-variant desktop (@media (width >= 64rem) and (pointer: fine));
+
+/*
  * Motion and layering utilities point at the raw tokens defined below.
  * `inline` makes utilities reference the token directly (var(--duration-fast)).
  * Semantic colors are defined directly as --color-* in tokens/semantic.css.
@@ -45,12 +53,15 @@
 /*
  * Breakpoints: Tailwind defaults, kept on purpose (mobile-first: unprefixed
  * classes are the 320px+ layout, prefixes only ADD changes upward).
- *   base  0-639px     single column, header controls wrap, icon-only toggles,
- *                     language codes ("EN"/"ES")
- *   sm    >=40rem     native language names, 2-column form rows allowed
+ *   base  0-639px     single column, header controls wrap, icon-only toggles.
+ *                     The language switcher shows codes ("EN"/"ES") at every
+ *                     width; the native name is its accessible name.
+ *   sm    >=40rem     2-column form rows allowed
  *   md    >=48rem     theme labels (when enabled), 2-3 column grids
  *   lg    >=64rem     wide grids (swatches, icons), side-by-side sections
  *   xl    >=80rem     only max-width containers change; no new layout
+ *   desktop           >=64rem AND pointer: fine (custom variant above):
+ *                     compact 30-36px controls; touch keeps 44px targets
  * See docs/frontend/responsive.md before adding a custom breakpoint.
  */
 
@@ -186,4 +197,27 @@
 
     /* ---------- States ---------- */
     --opacity-disabled: 0.5;
+}
+
+/*
+ * Panel type scale (Filament admin and app panels only; ADR-0044). Mukta's
+ * Latin x-height is ~0.47em against ~0.54em for Inter, the face Filament's
+ * sizes were tuned for, so 14px Mukta reads like 12px Inter. The panel theme
+ * (resources/css/filament/theme.css) remaps Tailwind's --text-xs/sm/base to
+ * these values on `html.fi`; the Blade pages keep the scale above. Never set
+ * a font size on individual .fi-* classes: change these tokens instead.
+ *   xs            13px everywhere (badges, hints)
+ *   sm            15px below 1024px, 16px from 1024px (table cells, sidebar,
+ *                 labels, buttons)
+ *   base          16px below 1024px, 17px from 1024px
+ */
+:root {
+    --panel-text-xs: 0.8125rem;
+    --panel-text-xs-lh: 1.125rem;
+    --panel-text-sm: 0.9375rem;
+    --panel-text-sm-lh: 1.375rem;
+    --panel-text-sm-desktop: 1rem;
+    --panel-text-sm-desktop-lh: 1.5rem;
+    --panel-text-base-desktop: 1.0625rem;
+    --panel-text-base-desktop-lh: 1.625rem;
 }

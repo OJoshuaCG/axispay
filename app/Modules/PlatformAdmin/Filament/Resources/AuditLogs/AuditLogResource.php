@@ -9,8 +9,8 @@ use App\Modules\Audit\Models\AuditLog;
 use App\Modules\PlatformAdmin\Filament\Resources\AuditLogs\Pages\ListAuditLogs;
 use App\Modules\PlatformAdmin\Filament\Resources\AuditLogs\Pages\ViewAuditLog;
 use App\Modules\Tenancy\Scopes\TenantScope;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
-use Filament\Actions\ViewAction;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class AuditLogResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = AuditLog::class;
 
     protected static ?string $slug = 'audit-logs';
@@ -72,7 +74,10 @@ final class AuditLogResource extends Resource
                     ),
             ])
             ->defaultSort('created_at', 'desc')
-            ->recordActions([ViewAction::make()]);
+            // A row opens the entry (ListRecords' default record URL).
+            ->emptyStateIcon(Heroicon::OutlinedClipboardDocumentList)
+            ->emptyStateHeading(__('audit.empty.heading'))
+            ->emptyStateDescription(__('audit.empty.description'));
     }
 
     public static function infolist(Schema $schema): Schema

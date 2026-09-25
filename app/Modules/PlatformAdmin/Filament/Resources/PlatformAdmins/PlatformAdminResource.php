@@ -7,6 +7,7 @@ namespace App\Modules\PlatformAdmin\Filament\Resources\PlatformAdmins;
 use App\Modules\PlatformAdmin\Enums\PlatformRole;
 use App\Modules\PlatformAdmin\Filament\Resources\PlatformAdmins\Pages\ListPlatformAdmins;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Support\Icons\Heroicon;
@@ -20,7 +21,15 @@ use Filament\Tables\Table;
  */
 final class PlatformAdminResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = PlatformAdmin::class;
+
+    /** Page titles and breadcrumbs name the record (ADR-0044). */
+    protected static ?string $recordTitleAttribute = 'name';
+
+    /** A title attribute would switch on global search, which is not wanted. */
+    protected static bool $isGloballySearchable = false;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
@@ -34,6 +43,12 @@ final class PlatformAdminResource extends Resource
     public static function getPluralModelLabel(): string
     {
         return __('platform.admins.plural');
+    }
+
+    /** Shorter than the plural label, which does not fit the sidebar. */
+    public static function getNavigationLabel(): string
+    {
+        return __('platform.admins.navigation');
     }
 
     public static function table(Table $table): Table
@@ -52,7 +67,10 @@ final class PlatformAdminResource extends Resource
                     ->state(static fn (PlatformAdmin $record): bool => filled($record->two_factor_secret)),
                 TextColumn::make('last_login_at')->label(__('platform.admins.fields.last_login_at'))->since()->placeholder('—'),
             ])
-            ->defaultSort('name');
+            ->defaultSort('name')
+            ->emptyStateIcon(Heroicon::OutlinedUserGroup)
+            ->emptyStateHeading(__('platform.admins.empty.heading'))
+            ->emptyStateDescription(__('platform.admins.empty.description'));
     }
 
     public static function getPages(): array

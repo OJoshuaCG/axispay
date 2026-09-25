@@ -9,8 +9,8 @@ use App\Modules\Access\Filament\Resources\Roles\Pages\ListRoles;
 use App\Modules\Access\Filament\Resources\Roles\Pages\ViewRole;
 use App\Modules\Access\Models\Permission;
 use App\Modules\Access\Models\Role;
+use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
-use Filament\Actions\ViewAction;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class RoleResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Role::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
@@ -71,7 +73,10 @@ final class RoleResource extends Resource
                     ->badge()
                     ->state(static fn (Role $record): string => $record->isSystem() ? __('access.roles.type.system') : __('access.roles.type.custom')),
             ])
-            ->recordActions([ViewAction::make()]);
+            // A row opens the role (ListRecords' default record URL).
+            ->emptyStateIcon(Heroicon::OutlinedShieldCheck)
+            ->emptyStateHeading(__('access.roles.empty.heading'))
+            ->emptyStateDescription(__('access.roles.empty.description'));
     }
 
     public static function infolist(Schema $schema): Schema

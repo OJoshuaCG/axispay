@@ -13,6 +13,9 @@
     toggle stays icon-only (44x44 per option) so it fits 320px headers. The
     label is always the accessible name and the title tooltip.
 
+    Styled by seg-group / seg-option (components.css), the same family as the
+    language switcher and the panel theme control (ADR-0044).
+
     All labels are translated (ui.theme.*). theme.js announces nothing itself:
     the checked state is exposed through aria-checked on the translated radios.
 --}}
@@ -32,7 +35,7 @@
     role="radiogroup"
     aria-label="{{ __('ui.theme.label') }}"
     data-theme-toggle
-    {{ $attributes->class('inline-flex max-w-full shrink-0 items-center gap-0.5 rounded-full border border-line bg-surface p-0.5') }}
+    {{ $attributes->class('seg-group') }}
 >
     @foreach ($options as $value => $option)
         <button
@@ -43,9 +46,7 @@
             data-theme-option="{{ $value }}"
             title="{{ $option['label'] }}"
             @class([
-                'inline-flex min-h-touch min-w-touch items-center justify-center gap-1.5 rounded-full text-sm font-medium text-fg-secondary',
-                'transition-colors duration-fast ease-standard hover:text-fg',
-                'aria-checked:bg-page aria-checked:text-fg aria-checked:shadow-sm aria-checked:ring-1 aria-checked:ring-line-strong',
+                'seg-option',
                 'md:px-3' => $showLabels,
             ])
         >

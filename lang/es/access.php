@@ -35,6 +35,10 @@ return [
     'roles' => [
         'singular' => 'rol',
         'plural' => 'roles',
+        'empty' => [
+            'heading' => 'No hay roles',
+            'description' => 'Aquí aparecen los roles que puede asignar a su equipo.',
+        ],
         'fields' => [
             'name' => 'Rol',
             'permissions' => 'Permisos',

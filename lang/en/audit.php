@@ -9,6 +9,10 @@ return [
 
     'singular' => 'audit entry',
     'plural' => 'audit log',
+    'empty' => [
+        'heading' => 'No audit entries yet',
+        'description' => 'Sign-ins, role changes and other sensitive actions are recorded here.',
+    ],
     'platform' => 'Platform',
 
     'fields' => [
