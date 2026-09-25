@@ -140,8 +140,8 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `QUEUE_CONNECTION` | yes | `database` | ADR-0016 |
 | `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). |
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
-| `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5) |
-| `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | |
+| `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5). `smtp` on 587 upgrades with STARTTLS; implicit TLS on 465 is `smtps`. `MAIL_ENCRYPTION` is **ignored** (Laravel 13 reads `MAIL_SCHEME` only). Example: [Outgoing mail](#outgoing-mail) |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | For a mailbox account, the username is the full address |
 | `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` | yes | `no-reply@example.com` / `AxisPay` | `MAIL_FROM_NAME` defaults to `AXISPAY_DISPLAY_NAME` |
 | `LOG_LEVEL` | no | `info` | The image already logs JSON to stderr |
 | `SENTRY_LARAVEL_DSN` | no | **secret** | Error tracking; disabled while empty (ADR-0029) |
@@ -366,6 +366,10 @@ php artisan axispay:create-platform-admin
 
 The command is interactive and never takes the password as an argument. Sign in at `https://admin.<domain>` and set up 2FA (mandatory for platform admins).
 
+Before inviting anyone, check outgoing mail: `php artisan axispay:mail-test you@example.com` ([Outgoing mail](#outgoing-mail)).
+
+Then create the first tenant: **Tenants → New tenant**. Either fill **Owner e-mail** (the owner gets an invitation valid for 72 hours), or leave it empty and invite the owner later from the tenant's page → **Invitations** → **Invite owner**. The same list resends an invitation (new link, the old one stops working) and revokes it (ADR-0043). Tenants are never deleted: retire one with **Change status → Closed**.
+
 Never run `db:seed --class=DevelopmentSeeder` outside local: it refuses unless `APP_ENV=local`.
 
 ---
@@ -412,6 +416,33 @@ Recovery is done from the `web` container's terminal only (ADR-0041): having she
 4. If the same e-mail belongs to a platform admin and to a tenant user, add `--type=platform` or `--type=tenant`.
 
 Exit codes: `0` done or nothing to do, `1` not found, ambiguous, invalid input or aborted. Nothing is changed unless the command prints `2FA reset …` or `Password reset …`.
+
+### Outgoing mail
+
+Invitations and owner notifications are queued: the `worker` Applications send them.
+
+```sh
+php artisan axispay:mail-test you@example.com          # send now: shows SMTP errors here
+php artisan axispay:mail-test you@example.com --queue  # through the queue, like invitations
+```
+
+It prints the mailer, host, port, scheme, username and sender (the password only as set / not set). On a transport error it prints the exception and exits `1`. It sends one plain test message and changes nothing else; safe in production.
+
+Example for a cPanel mailbox, implicit TLS:
+
+```sh
+MAIL_MAILER=smtp
+MAIL_HOST=mail.example.com
+MAIL_PORT=465
+MAIL_SCHEME=smtps
+MAIL_USERNAME=no-reply@example.com   # the full mailbox address
+MAIL_PASSWORD=<secret>
+MAIL_FROM_ADDRESS=no-reply@example.com   # must be that mailbox (or an address it may send as)
+```
+
+- `MAIL_ENCRYPTION=ssl|tls` from older Laravel guides does nothing in Laravel 13: use `MAIL_SCHEME` (`smtps` for 465; `smtp` for 587, which upgrades with STARTTLS). With `MAIL_SCHEME` empty, port 465 means `smtps`.
+- A `MAIL_FROM_ADDRESS` of another domain is often rejected by the server, or delivered to spam.
+- Publish SPF and DKIM for the sender domain (cPanel: **Email Deliverability**).
 
 ### Logs
 
@@ -517,6 +548,7 @@ Dokploy regenerates a domain's routers when you edit that domain, which drops th
 | Scheduled tasks run twice around a deploy | Scheduler Update Config uses `start-first` | Use `"Order": "stop-first"` |
 | `web` never becomes healthy, deploy rolls back | The start period is too short for the migrations, or the database is unreachable | Increase `StartPeriod`; check the logs (`Database connection … is not reachable`) and the database firewall |
 | Health check fails, but the site works through the domain | A custom health check calls the public host, or uses the wrong port | Use `["CMD", "axispay-healthcheck"]`. `/up` is not tied to a host and answers on `127.0.0.1:8080`. |
+| An invitation (or any e-mail) does not arrive | SMTP settings, no worker, a failed job, or the receiving server drops it | 1. `php artisan axispay:mail-test <you>` in the `web` terminal: an error here is a settings problem (host, port, `MAIL_SCHEME`, full-address username, password, `MAIL_FROM_ADDRESS`). 2. `--queue`: if the synchronous test arrives but this one does not, check the `worker` Applications are running and their logs. 3. `php artisan queue:failed`, then `php artisan queue:retry all` after fixing the cause. 4. Spam folder; SPF and DKIM of the sender domain. The superadmin can **Resend** the invitation from the tenant page (new 72-hour link) ([Outgoing mail](#outgoing-mail)) |
 | An admin or user lost their authenticator and has no recovery code | 2FA cannot be completed | `php artisan axispay:reset-2fa <email>` after verifying their identity ([Account recovery](#account-recovery)) |
 | Someone forgot their password | There is no self-service reset yet | `php artisan axispay:reset-password <email>` ([Account recovery](#account-recovery)) |
 | "Too many sign-in attempts" for one account | 5 failed attempts (password or 2FA code) in 15 minutes lock that account (ADR-0034) | Wait up to 15 minutes. Both recovery commands clear that account's lock. `php artisan cache:clear` clears every lock at once (and the rest of the cache) |

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Invitations created by the platform (on tenant creation or later) are
+  attributed to the acting platform admin in the audit log (before: the
+  current guard, or `system` from the CLI) and now count against the
+  per-tenant invitation limit, which moved to `InvitationThrottle`.
+
 ### Fixed
 
 - Panels: `419 Page Expired` on the second Livewire request of a page (a
@@ -22,6 +29,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tenant lifecycle in the admin panel (ADR-0043). **Edit** a tenant's profile
+  (legal and display name, time zone, default language, support e-mail) from
+  the list or the view page (`UpdateTenantProfile`, superadmin, not on closed
+  tenants, audited as `tenant.updated` with the changed field names; the
+  support e-mail value is never stored in the audit entry). **Invitations**
+  tab on the tenant page: invite an owner to an existing tenant
+  (`InviteTenantOwner`, through `InviteUser` in the tenant context, owner role
+  only), **Resend** pending or expired invitations (`ResendInvitation`: new
+  token and 72-hour expiry, the old link returns 410 at once;
+  `invitation.resent`) and **Revoke** pending ones (`RevokeInvitation`).
+  Read-only **Users** tab (roles, active, 2FA yes/no, last sign-in). E-mails
+  are masked for `support_readonly` (plan 17.4). New policy abilities
+  `update`, `viewMembers`, `sendInvitations`, `revokeInvitations`. Tenants
+  cannot be deleted (audit log FK `RESTRICT`); the view page says so next to
+  the status.
+- `php artisan axispay:mail-test {email} {--queue}`: sends a test e-mail now
+  (or through the queue) and prints the mail settings without the password;
+  exits 1 with the transport error on failure. Outgoing-mail section (cPanel
+  example with `MAIL_SCHEME=smtps`) and "invitation not received"
+  troubleshooting in both Dokploy guides.
 - Production account recovery (ADR-0041): `php artisan axispay:reset-2fa` and
   `php artisan axispay:reset-password` for platform admins and tenant users, in
   every environment. Mandatory reason (stored in the audit log as

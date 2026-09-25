@@ -122,6 +122,29 @@ These are local-only, non-secret credentials. Never create them anywhere else.
 
 - **Invitations:** Users → Invite user. With `MAIL_MAILER=log`, the signed link
   is written to `storage/logs/laravel.log`; open it on the app host.
+- **Tenants in the admin panel** (ADR-0043), superadmin only unless noted:
+  - **Create** with or without an owner e-mail. Without one, invite the owner
+    later from the tenant's view page → **Invitations** → Invite owner (always
+    the owner role; the owner invites everyone else from the tenant panel).
+  - **Edit** (list row or view page): legal and display name, time zone,
+    default language, support e-mail. Not on a closed tenant. The status is
+    changed only with **Change status** (reason; closing asks to retype the
+    display name).
+  - **Invitations** tab: e-mail, role, status (pending, accepted, expired,
+    revoked), invited and expiry dates. **Resend** (pending or expired) issues a
+    new link valid for 72 hours and kills the old one; **Revoke** (pending)
+    kills the link. Both count against the per-tenant invitation limit (resend)
+    and are audited.
+  - **Users** tab: read-only (roles, active, 2FA yes/no, last sign-in).
+    `support_readonly` admins see e-mails masked.
+  - Tenants are never deleted (the audit log references them): close them.
+- **Mail check:** `php artisan axispay:mail-test you@example.com` sends a test
+  message now through the default mailer and prints mailer, host, port, scheme,
+  username and sender (never the password); on a transport error it prints the
+  exception and exits 1. `--queue` queues it like the invitations, to also check
+  the worker. With `MAIL_MAILER=log` the message goes to the log at debug level:
+  locally to `storage/logs/laravel.log`; in the production image only when
+  `LOG_LEVEL=debug` (the image defaults to `info`).
 - **Impersonation:** admin panel → Tenants → a tenant → View as user (reason
   required, read-only, 30 minutes, audited). A banner in the tenant panel stops it.
 - **Test/live selector:** the badge in the tenant panel topbar (test by default).

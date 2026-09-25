@@ -158,7 +158,7 @@ Set them in the Application's **Environment** tab. With only one Application the
 | `CACHE_STORE` | `database` | Also the lock store for scheduled tasks |
 | `QUEUE_CONNECTION` | `database` | |
 | `TRUSTED_PROXIES` | `10.0.1.0/24` | Traefik's network range. **Never `*`.** How to find it: [Trusted proxies](dokploy.md#trusted-proxies) |
-| `MAIL_MAILER` + `MAIL_*` | `smtp` … | Staging: a sandbox SMTP (for example Mailpit or a provider's test inbox). A local test server can use `log` |
+| `MAIL_MAILER` + `MAIL_*` | `smtp` … | Staging: a sandbox SMTP (for example Mailpit or a provider's test inbox). A local test server can use `log` (messages appear in the container log only with `LOG_LEVEL=debug`). Use `MAIL_SCHEME` (`smtps` for 465), never `MAIL_ENCRYPTION`: [Outgoing mail](dokploy.md#outgoing-mail) |
 | `QUEUE_TIMEOUT` | `60` | Seconds per job. Keep it below the queue's `retry_after` (90) |
 | `QUEUE_TRIES` / `QUEUE_SLEEP` / `QUEUE_MEMORY` | `3` / `3` / `192` | Same meaning as in production |
 | `PHP_FPM_MAX_CHILDREN` | `10` | Minimum `6` (the pool's spare-server settings). Lower it on a small server |
@@ -269,6 +269,8 @@ php artisan axispay:create-platform-admin
 ```
 
 It is interactive and never takes the password as an argument. Sign in at the admin host and set up 2FA (mandatory for platform admins).
+
+Check outgoing mail with `php artisan axispay:mail-test you@example.com` (add `--queue` to go through this container's workers). Then create the first tenant (**Tenants → New tenant**) with an **Owner e-mail**, or leave it empty and use **Invite owner** on the tenant's **Invitations** tab later; resend and revoke are on the same list (ADR-0043).
 
 ---
 
@@ -429,6 +431,7 @@ Production never runs this role. To promote the setup:
 | Jobs are retried or duplicated after a deploy; log shows no `stopped: worker-…` | The container was killed before jobs finished (grace period too short, Docker default 10 s) | Stop grace period 150 s (`QUEUE_TIMEOUT` + 90 s) |
 | Browser always switches to `https://` for a `.test` host | The host (or its parent) was once opened over HTTPS and is HSTS-pinned | Clear it at `chrome://net-internals/#hsts` or use a different name |
 | Page never loads on a `.dev` or `.app` host | Those TLDs are HSTS-preloaded | Use `.test` |
+| An invitation (or any e-mail) does not arrive | SMTP settings, a stopped worker, a failed job, or spam filtering | `php artisan axispay:mail-test <you>` (errors are shown here), then with `--queue` (needs the `worker-*` programs running: `ps -eo user,args`), then `php artisan queue:failed`. Check the spam folder and SPF/DKIM. **Resend** the invitation from the tenant page. Details: [Outgoing mail](dokploy.md#outgoing-mail) |
 | Someone lost their authenticator or forgot their password | No self-service recovery yet | [Account recovery](#account-recovery): `axispay:reset-2fa` / `axispay:reset-password` |
 | "Too many sign-in attempts" for one account | 5 failed attempts in 15 minutes (ADR-0034) | Wait up to 15 minutes; the recovery commands clear that account's lock; `php artisan cache:clear` clears every lock |
 | Every 2FA code is rejected | Clock skew on the server or the phone | Enable NTP on the server (`timedatectl`) and automatic time on the phone |
