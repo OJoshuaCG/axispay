@@ -404,6 +404,9 @@ Production never runs this role. To promote the setup:
 |---|---|---|
 | `419 Page Expired` on sign-in over HTTP | `SESSION_SECURE_COOKIE=true` without TLS: the browser drops the cookie | `SESSION_SECURE_COOKIE=false` (HTTP only) or set up [mkcert](#optional-local-https-with-mkcert) |
 | `419` over HTTPS | `TRUSTED_PROXIES` unset or wrong, or hosts do not match | See the [production troubleshooting](dokploy.md#troubleshooting) |
+| Any `419` or sign-in problem | Not known yet | Run `php artisan axispay:doctor` in the container terminal (read-only, prints no secret); fix every `ERROR` row |
+| `419` on the **second** action of a panel page (second sign-in attempt, 2FA set-up) | A bug in versions before the fix of 2026-09-25 (the panel middleware ran twice on Livewire requests) | Deploy a version that includes the fix (see `CHANGELOG.md`) |
+| `419` at random while another Application also serves these hosts | Two Applications (for example this one and the production `web`) have a domain on the same host, with a different `APP_KEY` or database | Keep one Application per host. Compare the `APP_KEY fingerprint` of `axispay:doctor` in both |
 | Container exits at boot: `SESSION_DOMAIN must be empty (null)` | `SESSION_DOMAIN` is set (ADR-0034) | Remove the variable |
 | `Missing required environment variable …` | A variable is missing | Check the Environment tab |
 | Container is unhealthy but the site loads | A worker or the scheduler is not running (supervisord gave up after repeated start failures) | Read the log for `gave up: <program> entered FATAL state` and the error above it (often the database). Swarm replaces the container; fix the cause and redeploy |

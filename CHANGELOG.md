@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Panels: `419 Page Expired` on the second Livewire request of a page (a
+  second sign-in attempt after a wrong password, the 2FA set-up, any action
+  after the first one). The shared panel middleware was registered as Livewire
+  persistent middleware, so every Livewire update re-ran `EncryptCookies` and
+  `StartSession` on Livewire's internal request: the already-decrypted session
+  cookie failed to decrypt, the store switched to a new, never-saved session id,
+  and the next request failed the CSRF check. The middleware is no longer
+  persistent (Livewire's update route runs the `web` group, and Filament makes
+  its own panel middleware persistent). Reproduced and verified with the
+  production image, `web` and `all-in-one` roles, direct and behind a proxy.
+
 ### Added
+
+- `php artisan axispay:doctor`: read-only deployment diagnostics (session and
+  cookie configuration per host, session table, cache, trusted proxies, queue,
+  pending migrations, container role, non-reversible `APP_KEY` fingerprint);
+  exits non-zero on an error. Troubleshooting rows for `419` in both Dokploy
+  guides.
+- Panel session resilience (ADR-0040): a Livewire `419` reloads the page
+  instead of showing Livewire's untranslated prompt (loop guard: once a minute
+  per tab), and `GET /session/ping` (admin and app hosts, `204`, `no-store`,
+  throttled) keeps the session of a visible, actively used tab alive.
 
 - `all-in-one` container role for staging and local/test Dokploy servers
   (ADR-0039): supervisord runs php-fpm, nginx, `worker-critical`,

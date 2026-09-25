@@ -136,6 +136,23 @@ These are local-only, non-secret credentials. Never create them anywhere else.
   `axispay_app_session`); keep `SESSION_DOMAIN` empty or the app will not boot.
 - **Platform admins in other environments:** `php artisan axispay:create-platform-admin`
   (interactive; the password is never passed as an argument).
+- **Deployment diagnostics:** `php artisan axispay:doctor` (read-only, safe in
+  production, prints no secret). It checks `APP_ENV`/`APP_DEBUG`, the `APP_URL`
+  scheme against `SESSION_SECURE_COOKIE`, `SESSION_DOMAIN`, the surface hosts
+  and the session cookie each panel host uses, the session table, the cache,
+  `TRUSTED_PROXIES`, the queue connection and pending migrations. It also shows
+  the container hostname and role and an `APP_KEY` fingerprint (the first 12
+  hex characters of its SHA-256, not reversible) to compare across containers.
+  It exits non-zero when a check fails.
+- **Panel session resilience (ADR-0040):** a Livewire `419` reloads the page
+  (at most once a minute per tab, then Livewire's prompt), and an open panel tab
+  pings `GET /session/ping` every 5 minutes while it is visible and the person
+  has interacted with it.
+- **Panel middleware is not Livewire-persistent.** Livewire's update route
+  already runs the `web` group. Never pass `isPersistent: true` for cookie,
+  session or CSRF middleware: re-running them on Livewire requests switches
+  the session and causes a `419` on the next request
+  (`tests/Feature/Panels/LivewireSessionTest.php`).
 
 ## Quality checks
 
