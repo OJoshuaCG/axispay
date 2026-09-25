@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Providers;
 
+use App\Modules\Shared\Console\DoctorCommand;
 use App\Modules\Shared\Database\SchemaMacros;
 use App\Modules\Shared\Http\Errors\ApiErrorRenderer;
 use App\Modules\Shared\Logging\Redactor;
@@ -30,6 +31,10 @@ final class SharedServiceProvider extends ServiceProvider
     {
         SchemaMacros::register();
         self::assertHostOnlySessionCookies();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([DoctorCommand::class]);
+        }
     }
 
     /**

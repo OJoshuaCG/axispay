@@ -37,7 +37,7 @@ pest()->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
         seed(PermissionCatalogSeeder::class);
     })
-    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation');
+    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console');
 
 /**
  * Absolute URL on the public API host (ADR-027).
