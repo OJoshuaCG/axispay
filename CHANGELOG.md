@@ -22,6 +22,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Production account recovery (ADR-0041): `php artisan axispay:reset-2fa` and
+  `php artisan axispay:reset-password` for platform admins and tenant users, in
+  every environment. Mandatory reason (stored in the audit log as
+  `two_factor.reset` / `password.reset`, actor `system`), confirmation
+  (default No; `--force` only with `--reason`), `--type` when the e-mail
+  exists in both tables, tenant lookup through the audited platform context.
+  Both revoke every session of the account, rotate its "remember me" token and
+  clear its per-account sign-in throttle. The password is only read twice from
+  a hidden prompt and follows `Password::defaults()`. New `ResetTwoFactor` and
+  `ResetPassword` Actions; `axispay:dev-reset-2fa` now uses `ResetTwoFactor`.
+  Account recovery runbook and troubleshooting rows (lost authenticator,
+  forgotten password, throttling, clock skew, `APP_KEY` rotation) in both
+  Dokploy guides.
 - `php artisan axispay:doctor`: read-only deployment diagnostics (session and
   cookie configuration per host, session table, cache, trusted proxies, queue,
   pending migrations, container role, non-reversible `APP_KEY` fingerprint);

@@ -44,3 +44,4 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0038](0038-platform-branding-powered-by.md) | Platform branding: platform logo and an always-visible "Powered by" on the checkout | Accepted (by the project owner, 2026-09-24) |
 | [ADR-0039](0039-all-in-one-container-role.md) | All-in-one container role for staging and local deployments | Accepted (by the project owner, 2026-09-24) |
 | [ADR-0040](0040-panel-session-resilience.md) | Panel session resilience: 419 auto-reload and interaction-gated keep-alive | Proposed |
+| [ADR-0041](0041-production-account-recovery.md) | Production account recovery via audited CLI commands | Proposed |

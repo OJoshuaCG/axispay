@@ -294,6 +294,17 @@ The worker lines do not say which queue they came from. The job class does: chec
 
 Container terminal: `php artisan <command>`, for example `php artisan migrate:status` or `php artisan queue:failed`. The runtime user has no DDL rights; migrations run only through a deploy.
 
+### Account recovery
+
+Lost authenticator or forgotten password, for platform admins and tenant users: from an interactive container terminal (`docker exec -it <container> bash`), after verifying the person's identity out of band:
+
+```sh
+php artisan axispay:reset-2fa person@example.com
+php artisan axispay:reset-password person@example.com
+```
+
+Both ask for a reason (stored in the audit log, never a secret) and a confirmation, sign the account out everywhere and clear its sign-in throttle. The password is only read from a hidden prompt. Details, options and exit codes: [Account recovery](dokploy.md#account-recovery) in the production guide (ADR-0041).
+
 ### Redeploy and rollback
 
 | Situation | What happens / what to do |
@@ -418,4 +429,8 @@ Production never runs this role. To promote the setup:
 | Jobs are retried or duplicated after a deploy; log shows no `stopped: worker-…` | The container was killed before jobs finished (grace period too short, Docker default 10 s) | Stop grace period 150 s (`QUEUE_TIMEOUT` + 90 s) |
 | Browser always switches to `https://` for a `.test` host | The host (or its parent) was once opened over HTTPS and is HSTS-pinned | Clear it at `chrome://net-internals/#hsts` or use a different name |
 | Page never loads on a `.dev` or `.app` host | Those TLDs are HSTS-preloaded | Use `.test` |
+| Someone lost their authenticator or forgot their password | No self-service recovery yet | [Account recovery](#account-recovery): `axispay:reset-2fa` / `axispay:reset-password` |
+| "Too many sign-in attempts" for one account | 5 failed attempts in 15 minutes (ADR-0034) | Wait up to 15 minutes; the recovery commands clear that account's lock; `php artisan cache:clear` clears every lock |
+| Every 2FA code is rejected | Clock skew on the server or the phone | Enable NTP on the server (`timedatectl`) and automatic time on the phone |
+| 2FA and encrypted data fail after changing `APP_KEY` | The old key is gone, so 2FA secrets cannot be decrypted | Never rotate `APP_KEY` without `APP_PREVIOUS_KEYS`. Restore the old key; if it is lost, reset every account's 2FA with `axispay:reset-2fa` |
 | `404` for every page on a host | The host differs from its `AXISPAY_*_HOST` value | Make them identical |

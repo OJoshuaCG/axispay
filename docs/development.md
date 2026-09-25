@@ -127,11 +127,29 @@ These are local-only, non-secret credentials. Never create them anywhere else.
 - **Test/live selector:** the badge in the tenant panel topbar (test by default).
 - **Reset 2FA of a local account** (lost authenticator, fresh seed):
   `php artisan axispay:dev-reset-2fa owner@demo.axispay.test` (works for tenant
-  users and platform admins; refuses to run unless `APP_ENV=local`; audited).
+  users and platform admins; no prompts; refuses to run unless `APP_ENV=local`;
+  audited through the same `ResetTwoFactor` Action as the production command).
   The next sign-in asks to set 2FA up again.
+- **Account recovery in any environment** (ADR-0041), for platform admins and
+  tenant users. Both commands show the account, ask for a reason (10 to 500
+  characters, stored in the audit log, never a secret) and a confirmation
+  (default No), sign the account out everywhere (sessions and "remember me")
+  and clear its sign-in throttle on both panels:
+  - `php artisan axispay:reset-2fa <email> [--type=platform|tenant] [--reason=…] [--force]`
+    removes the 2FA secret and recovery codes (`two_factor.reset`). An account
+    without 2FA is a no-op. `--force` skips the confirmation only together
+    with `--reason`; without a terminal both are required.
+  - `php artisan axispay:reset-password <email> [--type=platform|tenant] [--reason=…]`
+    reads the new password twice from a hidden prompt (never an argument or
+    option; refuses `--no-interaction` and a missing terminal), applies
+    `Password::defaults()` and records `password.reset` without the password.
+  - `--type` is required when the e-mail belongs to both a platform admin and a
+    tenant user. Exit code `0` on success or no-op, `1` otherwise. In a
+    container use `docker exec -it`. Runbook: [deployment/dokploy.md](deployment/dokploy.md#account-recovery).
 - **Sign-in throttling:** 5 failed attempts per account in 15 minutes lock that
   account's sign-in for the rest of the window (plus Filament's per-IP limit).
-  Locally, clear it with `php artisan cache:clear`.
+  Locally, clear it with `php artisan cache:clear`; both recovery commands
+  clear it for the account they recover.
 - **Session cookies:** each host has its own (`axispay_admin_session`,
   `axispay_app_session`); keep `SESSION_DOMAIN` empty or the app will not boot.
 - **Platform admins in other environments:** `php artisan axispay:create-platform-admin`

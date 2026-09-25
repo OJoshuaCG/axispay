@@ -389,6 +389,30 @@ Use the `web` container's terminal: `php artisan <command>`. Examples: `php arti
 - The runtime user has no DDL rights, so run migrations only through a deploy.
 - To retry failed jobs: `php artisan queue:retry all`.
 
+### Account recovery
+
+Recovery is done from the `web` container's terminal only (ADR-0041): having shell access to the server is the strong factor, and there is no self-service reset or panel action yet. Both commands work for platform admins and tenant users, in every environment, and write an audit entry (`two_factor.reset` / `password.reset`, actor `system`, with the reason). Open an interactive terminal (`docker exec -it <container> bash`); without a TTY the prompts cannot run.
+
+1. **Verify the requester's identity out of band** (a phone number on file, in person, the tenant owner) before touching the account. For a platform admin, involve a second superadmin.
+2. **Lost authenticator** (and no recovery code left):
+
+   ```sh
+   php artisan axispay:reset-2fa person@example.com
+   ```
+
+   It shows the account (type, name, tenant, whether 2FA is on), asks for a reason (10 to 500 characters, stored in the audit log: a ticket number and how the identity was verified, never a secret) and asks to confirm (default **No**). It removes the 2FA secret and the recovery codes, deletes every session of the account, rotates its "remember me" token and clears its sign-in throttle. Platform admins, and tenant users with a sensitive permission, must set 2FA up again on their next sign-in. An account without 2FA is left as is (exit code 0).
+   Non-interactive (automation): `--reason="OPS-123: identity verified by phone" --force`. `--force` without `--reason` is refused.
+3. **Forgotten password:**
+
+   ```sh
+   php artisan axispay:reset-password person@example.com --reason="OPS-124: identity verified by phone"
+   ```
+
+   The new password is typed twice at a hidden prompt; it is never an argument or option, and the command refuses `--no-interaction`. The same policy as account creation applies (12 characters minimum, breached-password check when `AXISPAY_PASSWORD_CHECK_UNCOMPROMISED=true`). Every session is signed out and the sign-in throttle is cleared; 2FA is not changed. Hand the password over through a separate secure channel and ask the person to change it from **Profile**.
+4. If the same e-mail belongs to a platform admin and to a tenant user, add `--type=platform` or `--type=tenant`.
+
+Exit codes: `0` done or nothing to do, `1` not found, ambiguous, invalid input or aborted. Nothing is changed unless the command prints `2FA reset …` or `Password reset …`.
+
 ### Logs
 
 - Every role writes JSON lines to stderr, redacted by `RedactSensitiveLogData`. Read them in each Application's **Logs** tab.
@@ -493,6 +517,11 @@ Dokploy regenerates a domain's routers when you edit that domain, which drops th
 | Scheduled tasks run twice around a deploy | Scheduler Update Config uses `start-first` | Use `"Order": "stop-first"` |
 | `web` never becomes healthy, deploy rolls back | The start period is too short for the migrations, or the database is unreachable | Increase `StartPeriod`; check the logs (`Database connection … is not reachable`) and the database firewall |
 | Health check fails, but the site works through the domain | A custom health check calls the public host, or uses the wrong port | Use `["CMD", "axispay-healthcheck"]`. `/up` is not tied to a host and answers on `127.0.0.1:8080`. |
+| An admin or user lost their authenticator and has no recovery code | 2FA cannot be completed | `php artisan axispay:reset-2fa <email>` after verifying their identity ([Account recovery](#account-recovery)) |
+| Someone forgot their password | There is no self-service reset yet | `php artisan axispay:reset-password <email>` ([Account recovery](#account-recovery)) |
+| "Too many sign-in attempts" for one account | 5 failed attempts (password or 2FA code) in 15 minutes lock that account (ADR-0034) | Wait up to 15 minutes. Both recovery commands clear that account's lock. `php artisan cache:clear` clears every lock at once (and the rest of the cache) |
+| Every 2FA code is rejected although the app shows it | The server clock (or the phone's) is off; codes are accepted only within about ±4 minutes (Filament's window of 8 periods of 30 s) | Enable NTP on the Dokploy server (`timedatectl` should show `System clock synchronized: yes`) and automatic time on the phone |
+| 2FA codes and encrypted data fail after a change of `APP_KEY` (`The MAC is invalid`, sign-in errors) | `APP_KEY` was rotated or lost: 2FA secrets and other encrypted columns can no longer be decrypted | **Never rotate `APP_KEY` without keeping the old key in `APP_PREVIOUS_KEYS`.** Restore the previous key, or put it in `APP_PREVIOUS_KEYS`. If it is lost for good, reset the 2FA of every account with `axispay:reset-2fa` (it does not need to decrypt the old secret) |
 | `404` for every page on a host | The host is not equal to the `AXISPAY_*_HOST` value (routes are bound with `Route::domain()`) | Make the domain and the variable identical |
 | Let's Encrypt certificate is not issued | DNS is not pointing to the server yet, or port 80 is blocked | Fix DNS or the firewall; Traefik retries |
 
