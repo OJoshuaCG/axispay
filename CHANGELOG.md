@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Panels and Blade pages default to the **light** theme (ADR-0044); a saved
+  choice is kept, and "System" still follows the OS. The panels have a
+  visible light/dark/system control on the sign-in pages and in the topbar
+  (from 768px; below that, in the user menu).
+- Panel type scale for Mukta: table cells, sidebar, labels and buttons are
+  15px below 1024px and 16px from 1024px (were 14px), badges 13px (were 12px),
+  base text 17px on desktop.
+- Language switcher shows the codes EN / ES at every width, in a compact
+  segmented control shared with the theme controls (36px tall with a mouse on
+  large screens, 44px targets on touch). On the sign-in pages the controls
+  are right-aligned.
+- Panel surfaces: canvas, raised and sunken layers (new `canvas`, `raised`,
+  `sunken` tokens), a bordered sidebar with a clearer active item, sunken
+  table header rows, a soft background on the sign-in page, a brand tile
+  next to the product name, semibold page titles.
+- Panel copy and tables: sentence-case labels ("Crear cliente",
+  "Administradores"), page titles that name the record, rows that open the
+  view page (the "View" row action is gone), empty states, a two-column
+  tenant profile section with a copyable monospace ID, and Spanish
+  "Inicio" / "Inicie sesión" / "Iniciar sesión" instead of Filament's
+  "Escritorio" / "Entre a su cuenta" / "Entrar".
+
 - Invitations created by the platform (on tenant creation or later) are
   attributed to the acting platform admin in the audit log (before: the
   current guard, or `system` from the CLI) and now count against the
@@ -16,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Panels: keyboard focus on sidebar items, tabs and topbar buttons is a
+  visible 2px outline (Filament showed only a faint background tint).
+- Panels: the language switcher on the sign-in pages was centred instead of
+  right-aligned.
+- Panels: an empty table toolbar row above the search field on phones.
 - Panels: `419 Page Expired` on the second Livewire request of a page (a
   second sign-in attempt after a wrong password, the 2FA set-up, any action
   after the first one). The shared panel middleware was registered as Livewire

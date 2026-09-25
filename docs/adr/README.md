@@ -47,3 +47,4 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0041](0041-production-account-recovery.md) | Production account recovery via audited CLI commands | Proposed |
 | [ADR-0042](0042-typography-mukta-geist-mono.md) | Typography: Mukta for text, Geist Mono for currency and numeric data | Accepted (by the project owner, 2026-09-25) |
 | [ADR-0043](0043-tenant-lifecycle-platform-panel.md) | Tenant lifecycle management in the platform panel (edit, invite owner, resend, revoke, no hard delete) | Proposed |
+| [ADR-0044](0044-panel-ux-theme-language-type-surfaces.md) | Panel UX: default light theme, visible theme and language controls, panel type scale for Mukta, surface layering | Proposed |

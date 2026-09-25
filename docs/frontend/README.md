@@ -39,9 +39,11 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Which color a role uses in light or dark (e.g. what `primary` maps to) | `resources/css/tokens/semantic.css` |
 | Shadows (`shadow-xs` ... `shadow-xl`) | `resources/css/tokens/semantic.css` (they use `light-dark()`) |
 | Spacing, layout widths, type scale, font families, weights, tracking, radius, icon sizes, motion, z-index, disabled opacity | `resources/css/theme.css` |
-| The `dark:` variant definition | `resources/css/theme.css` |
+| The `dark:` and `desktop:` variant definitions | `resources/css/theme.css` |
 | Global element defaults (body, links, focus outline, selection, reduced motion) | `resources/css/base.css` |
-| Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures) | `resources/css/components.css` |
+| Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures; `seg-group` / `seg-option`: segmented controls) | `resources/css/components.css` |
+| Panel type scale (Filament text sizes for Mukta) | `resources/css/theme.css` (`--panel-text-*`), applied in `resources/css/filament/theme.css` |
+| Panel theme control, default panel theme | `resources/views/filament/partials/theme-control.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Import order of the CSS layers | `resources/css/app.css` |
 | Font loading (Mukta and Geist Mono weights, subsets, preload, fontaine fallback metrics) | `vite.config.js` |
 | Breakpoint contract, safe-area and gutter tokens | `resources/css/theme.css` |

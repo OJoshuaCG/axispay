@@ -14,13 +14,18 @@ Tailwind's default breakpoints are kept: they match common device classes and ev
 
 | Range | Prefix | What changes |
 |---|---|---|
-| 0–639px | (none) | Single column. Header controls wrap to their own line. Theme toggle icon-only. Language switcher shows codes ("EN"/"ES"). Button rows wrap; row labels take a full line |
-| ≥ 640px (40rem) | `sm:` | Native language names. 2-column form rows allowed. Row labels go inline (`sm:w-24`) |
+| 0–639px | (none) | Single column. Header controls wrap to their own line. Theme toggle icon-only. Language switcher shows codes ("EN"/"ES"), as at every width. Button rows wrap; row labels take a full line |
+| ≥ 640px (40rem) | `sm:` | 2-column form rows allowed. Row labels go inline (`sm:w-24`) |
 | ≥ 768px (48rem) | `md:` | Theme labels (when `theme-labels`). 2–3 column grids (inputs, cards) |
 | ≥ 1024px (64rem) | `lg:` | Wide grids (swatches, icons). Side-by-side sections |
 | ≥ 1280px (80rem) | `xl:` | Nothing new: only `max-w-*` containers stop growing |
+| ≥ 1024px and `pointer: fine` | `desktop:` | Compact controls (see below). Not a layout breakpoint |
 
 The same table is a comment at the top of `resources/css/theme.css`.
+
+### Compact controls (`desktop:`)
+
+`desktop:` is a custom variant in `theme.css`: `@media (width >= 64rem) and (pointer: fine)`, a large screen driven by a mouse or trackpad. Only there may a control drop below the 44px touch target, so toolbar rows can be 36px tall: `seg-option` (language switcher, theme controls) becomes 36x30px (group 36px; the EN/ES group is about 80px wide instead of 147px) and the app panel's `.pl-mode-switch` 36px tall. A touch screen of any width (tablet, touch laptop reporting a coarse primary pointer) keeps 44px. Do not use `desktop:` for layout; use `lg:`.
 
 ## Rules
 
@@ -81,7 +86,9 @@ BASE_URL=http://127.0.0.1:8000 node check.mjs --shots ./shots
 
 **Why it is not in the root `package.json`:** Playwright downloads a browser and is not needed to build or run the app. It lives in its own folder with its own `package.json` (`node_modules` and `shots` are gitignored, and `app.css` excludes `tools/` from Tailwind's scan). It is a manual check, not a test suite, and nothing runs it automatically.
 
-Last run (2026-09-23): 56 page/locale/theme/width combinations for `/` and `/design-system`, **0 issues**, no JS errors. Panels (Phase 1): app `/login`, app `/users`, admin `/login`, admin `/tenants` in en/es × light/dark × 7 widths: **no page overflow, no JS errors**; the remaining findings are the Filament-internal controls listed in [theming.md](theming.md#touch-target-exceptions-filament-internals). Known false positive handled by the script: the `sm` button `::before` hit area is not counted as overflowing content.
+Last panel run (2026-09-25, ADR-0044, production image): admin `/login`, `/tenants`, `/tenants/{id}`, app `/login`, `/users`, `/profile` in en/es × light/dark × 7 widths (168 combinations): **no page overflow, no element escaping the viewport**.
+
+Earlier run (2026-09-23): 56 page/locale/theme/width combinations for `/` and `/design-system`, **0 issues**, no JS errors. Panels (Phase 1): app `/login`, app `/users`, admin `/login`, admin `/tenants` in en/es × light/dark × 7 widths: **no page overflow, no JS errors**; the remaining findings are the Filament-internal controls listed in [theming.md](theming.md#touch-target-exceptions-filament-internals). Known false positive handled by the script: the `sm` button `::before` hit area is not counted as overflowing content.
 
 ## Checklist
 

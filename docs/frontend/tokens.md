@@ -82,6 +82,11 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 | `surface-pressed` | neutral-200 | `#2a3346` (same hairline value as dark `line`) | Pressed state of low-emphasis controls (ghost button `:active`) |
 | `line` | neutral-200 | `#2a3346` (one-off) | Hairlines, dividers, card borders |
 | `line-strong` | neutral-450 | neutral-500 | Input and control edges (3:1) |
+| `canvas` | neutral-50 | neutral-900 | Background of app shells behind raised panels (Filament panel body, sign-in page) |
+| `raised` | neutral-0 | neutral-700 | Panels on the canvas: topbar, sidebar, tables, sections, modals, dropdowns |
+| `sunken` | neutral-50 | neutral-800 | Areas inside a raised panel, e.g. table header rows |
+
+`canvas` / `raised` / `sunken` are the layering of the Filament panels (ADR-0044): in dark, elevation reads as lightness (raised is lighter than the canvas). `fg-muted` stays at 4.96:1 (light) and 5.8:1 (dark) on `raised`; `fg-secondary` on `sunken` is 5.5:1 / 9.8:1.
 
 ### Text
 
@@ -109,6 +114,8 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 | `accent-subtle` | green-50 | `rgb(34 181 115 / 0.15)` | Tinted background |
 | `feature` | blue-600 | green-500 | Decorative brand color only |
 | `feature-subtle` | blue-50 | `rgb(34 181 115 / 0.12)` | Decorative background |
+| `brand-mark` | green-500 | same | Brand mark tile (panel logo stand-in, `fill-brand-mark`) until the ADR-0038 logo exists |
+| `brand-mark-fg` | neutral-900 | same | Glyph on the brand mark tile (`stroke-brand-mark-fg`, 7.2:1). Decorative |
 
 ### Status
 
@@ -185,6 +192,19 @@ The type scale below was kept when Mukta replaced Jost: every size sets an expli
 | `text-4xl` | `clamp(2.125rem, 1.6rem + 2.2vw, 3rem)` | 1.15 | -0.02em |
 | `text-5xl` | `clamp(2.5rem, 1.75rem + 3.2vw, 3.75rem)` | 1.1 | -0.025em |
 
+### Panel type scale (Filament panels only)
+
+Filament's sizes were tuned for Inter; Mukta's smaller x-height (0.47em vs about 0.54em) made the panels' 14px text read like 12px. The panel theme (`resources/css/filament/theme.css`) remaps Tailwind's `--text-xs/sm/base` on `html.fi` to these tokens from `theme.css` (ADR-0044). Blade pages keep the scale above. Never set a font size on individual `.fi-*` classes; change these tokens.
+
+| Token | Value | Applies to |
+|---|---|---|
+| `--panel-text-xs` / `-lh` | 0.8125rem (13px) / 1.125rem | `text-xs` in the panels (badges, hints) |
+| `--panel-text-sm` / `-lh` | 0.9375rem (15px) / 1.375rem | `text-sm` below 1024px (table cells, sidebar, labels, buttons) |
+| `--panel-text-sm-desktop` / `-lh` | 1rem (16px) / 1.5rem | `text-sm` from 1024px |
+| `--panel-text-base-desktop` / `-lh` | 1.0625rem (17px) / 1.625rem | `text-base` from 1024px (form inputs) |
+
+Page titles (`text-3xl`, up to 36px) and the sign-in heading (`text-2xl`, 24px) are unchanged.
+
 | Weights | Tracking |
 |---|---|
 | `font-normal` 400, `font-medium` 500, `font-semibold` 600, `font-bold` 700 | `tracking-tight` -0.02em, `tracking-snug` -0.01em, `tracking-normal` 0em, `tracking-wide` 0.02em, `tracking-wider` 0.06em |
@@ -201,7 +221,7 @@ Only the four loaded Mukta weights exist; there is no `font-light` or `font-blac
 | `rounded-lg` | 0.75rem (cards) |
 | `rounded-xl` | 1rem |
 | `rounded-2xl` | 1.5rem |
-| `rounded-full` | 9999px (badges, theme toggle) |
+| `rounded-full` | 9999px (badges, segmented controls) |
 
 ## Shadows
 
@@ -278,5 +298,9 @@ Note the split between `error` (text and icons) and `error-fill` (solid destruct
 5. **Check contrast** for every text or UI pairing in both themes against the thresholds in [accessibility.md](accessibility.md#contrast).
 6. **Add it to the preview.** Add a swatch or sample to `resources/views/design-system.blade.php`, written as a literal class.
 7. **Update this page.**
+
+## Segmented controls (`seg-group`, `seg-option`)
+
+Custom utilities in `resources/css/components.css` for the language switcher, the Blade theme toggle and the panel theme control. `seg-group` is the pill track (`surface`, `line` border); `seg-option` one option: 44x44px, `text-xs` semibold `tracking-wider` `fg-secondary`; `aria-pressed="true"` or `aria-checked="true"` gives the selected look (`page` fill, `fg`, `shadow-sm` and a 1px `line-strong` ring, 3.5:1). On `desktop:` (see [responsive.md](responsive.md#compact-controls-desktop)) an option is 36x30px.
 
 If a token needs its own utility mapping (as motion and z-index do), add it to the `@theme inline` block in `theme.css`.

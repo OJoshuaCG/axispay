@@ -76,6 +76,7 @@ Not measured: `line` hairlines (decorative, not required to meet 3:1). Brand `gr
 - `resources/css/base.css` defines the single indicator: `:where(:focus-visible) { outline: 2px solid var(--color-focus-ring); outline-offset: 2px; }`.
 - It is an outline, not a box-shadow: it survives forced-colors mode and is never clipped.
 - There is intentionally no focus utility. Components must not restyle it.
+- Filament panels: `base.css` is not loaded there. The panel theme adds the same 2px `focus-ring` outline to Filament's sidebar items and group triggers, tabs, topbar items and the notifications button, inset (`outline-offset: -2px`) so the sidebar's scroll container does not clip it and the sticky topbar does not cover it (2.4.7, 2.4.11; ADR-0044). Filament's other controls keep their own focus rings.
 - Exceptions in the code: `<x-input>` with affixes draws the same outline on its frame (`has-[input:focus-visible]:outline-focus-ring`) because the inner input uses `outline-none`; `<main>` uses `focus-visible:outline-none` because it only receives programmatic focus from the skip link.
 
 ## Touch targets
@@ -88,7 +89,7 @@ Not measured: `line` hairlines (decorative, not required to meet 3:1). Brand `gr
 | `<x-button size="sm">` | Yes, hit area: looks 36px (`min-h-9`), a transparent `::before` with `-inset-1` makes the tappable area 44px tall. Keep ≥ 8px between adjacent `sm` buttons |
 | Icon-only button | Yes: `md` `size-touch`, `lg` `size-12`, `sm` `size-9` + `::before` (44x44 hit area) |
 | `<x-input>` | Yes (`min-h-touch`) |
-| Theme toggle and language switcher options | Yes (`min-h-touch min-w-touch`) |
+| Theme toggle and language switcher options (`seg-option`) | Yes (44x44). On `desktop:` only (≥ 1024px and a fine pointer) they are 36x30, above the 24px minimum of 2.5.8; touch screens keep 44px |
 | Inline prose links | Exempt (WCAG 2.5.8 inline exception) |
 
 ## ARIA conventions per component
@@ -100,7 +101,7 @@ Not measured: `line` hairlines (decorative, not required to meet 3:1). Brand `gr
 | `<x-icon>` | Decorative by default: `aria-hidden="true"`. With `label`: `role="img"` + `aria-label`. Always `focusable="false"`. |
 | `<x-button>` | Loading: keeps focus (no `disabled` attribute), sets `aria-disabled="true"`, `aria-busy="true"`, `data-loading`, and renders an sr-only `role="status"` with `loadingLabel` (default `ui.button.loading`: "Processing" / "Procesando"). Icon-only buttons require `label` (becomes `aria-label`); missing it follows the [invalid input policy](components.md#invalid-input-policy). A disabled link button drops `href` and gets `role="link"` + `aria-disabled="true"`. |
 | `<x-theme-toggle>` | `role="radiogroup"` named by `ui.theme.label` ("Color theme" / "Tema de color"); options are `role="radio"` with `aria-checked`. Roving tabindex: Tab reaches the checked option, arrow keys move and select, Home/End jump to the ends. Option names are sr-only text unless `showLabels` (visible from `md` up). |
-| `<x-language-switcher>` | Native `<form>` + submit buttons (no JS). `role="group"` named by `ui.language.label`; each button named by its native language name with `lang="<code>"`; current language `aria-pressed="true"`. Below `sm` the visible code ("ES") is part of the accessible name ("Español"), satisfying label-in-name (2.5.3). |
+| `<x-language-switcher>` | Native `<form>` + submit buttons (no JS). `role="group"` named by `ui.language.label`; each button shows the code and is named "ES Español" (visible code first, native name in sr-only text, satisfying label-in-name 2.5.3) with `lang="<code>"`; current language `aria-pressed="true"`. |
 | `<x-badge>` / `<x-payment-status>` | Text is the meaning; the icon is decorative. |
 | `<x-amount>` | Sign character (`+`, U+2212 `−`) carries direction; color is secondary. Screen readers may not announce `+`, so add context in text where direction matters (e.g. a "Refund" label). |
 | `<x-layouts.app>` | Translated skip link (`ui.layout.skip_to_content`) to `#main`, offset from notches (`top-edge start-edge`); `<main id="main" tabindex="-1">`; `lang` from the request locale. |

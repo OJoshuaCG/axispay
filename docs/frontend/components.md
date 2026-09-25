@@ -16,7 +16,7 @@ This is the catalogue of Blade components in `resources/views/components/`: purp
 | Amount | `<x-amount>` | Any displayed monetary value |
 | Icon | `<x-icon>` | Heroicons SVG |
 | Theme toggle | `<x-theme-toggle>` | Light / Dark / System switch |
-| Language switcher | `<x-language-switcher>` | English / Español switch (no-JS form) |
+| Language switcher | `<x-language-switcher>` | EN / ES switch (no-JS form) |
 | Site controls | `<x-site-controls>` | Language switcher + theme toggle for page headers |
 
 ## Conventions for all components
@@ -344,12 +344,12 @@ One submit button per entry in `config('app.supported_locales')`, inside a CSRF-
 
 | Behavior | Detail |
 |---|---|
-| Names | Native names ("English", "Español"), each button has `lang="<code>"` so screen readers pronounce it right |
-| Below `sm` | Visible text is the code ("EN", "ES"); the native name stays the accessible name |
+| Names | Visible text is the code ("EN", "ES") at every width; the accessible name is code + native name ("EN English", label-in-name), the native name is also the tooltip; each button has `lang="<code>"` so screen readers pronounce it right |
+| Styling | `seg-group` / `seg-option` ([tokens.md](tokens.md#segmented-controls-seg-group-seg-option)), shared with the theme controls |
 | Current language | `aria-pressed="true"` |
 | Group | `role="group"` named by `ui.language.label` |
 | After submit | Cookie `locale` (1 year, SameSite=Lax), redirect to the same page with any `?lang=` removed |
-| Target size | 44x44px minimum |
+| Target size | 44x44px; 36x30px on `desktop:` (≥ 1024px with a fine pointer, [responsive.md](responsive.md#compact-controls-desktop)) |
 
 ```blade
 <x-language-switcher />
