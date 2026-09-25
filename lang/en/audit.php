@@ -46,6 +46,8 @@ return [
         'two_factor_enabled' => '2FA enabled',
         'two_factor_disabled' => '2FA disabled',
         'two_factor_recovery_codes_regenerated' => '2FA recovery codes regenerated',
+        'two_factor_reset' => '2FA reset by an operator',
+        'password_reset' => 'Password reset by an operator',
         'reauthentication_confirmed' => 'Identity confirmed',
         'reauthentication_failed' => 'Identity confirmation failed',
         'invitation_created' => 'Invitation sent',

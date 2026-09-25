@@ -7,6 +7,8 @@ namespace App\Modules\Identity\Providers;
 use App\Modules\Identity\Auth\TenantUserProvider;
 use App\Modules\Identity\Auth\UpdateLastLogin;
 use App\Modules\Identity\Console\DevResetTwoFactorCommand;
+use App\Modules\Identity\Console\ResetPasswordCommand;
+use App\Modules\Identity\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ImpersonationState;
 use Illuminate\Auth\Events\Login;
@@ -35,7 +37,11 @@ final class IdentityServiceProvider extends ServiceProvider
         Event::listen(Login::class, UpdateLastLogin::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([DevResetTwoFactorCommand::class]);
+            $this->commands([
+                DevResetTwoFactorCommand::class,
+                ResetTwoFactorCommand::class,
+                ResetPasswordCommand::class,
+            ]);
         }
 
         // Plan 17.4: an impersonation session is read-only. Every ability

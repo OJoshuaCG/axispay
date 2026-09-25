@@ -46,6 +46,8 @@ return [
         'two_factor_enabled' => '2FA activado',
         'two_factor_disabled' => '2FA desactivado',
         'two_factor_recovery_codes_regenerated' => 'Códigos de recuperación de 2FA regenerados',
+        'two_factor_reset' => '2FA restablecido por un operador',
+        'password_reset' => 'Contraseña restablecida por un operador',
         'reauthentication_confirmed' => 'Identidad confirmada',
         'reauthentication_failed' => 'Confirmación de identidad fallida',
         'invitation_created' => 'Invitación enviada',

@@ -4,18 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Console;
 
-use App\Modules\Audit\Data\Actor;
-use App\Modules\Audit\Enums\AuditAction;
-use App\Modules\Audit\Services\AuditLogger;
-use App\Modules\Identity\Models\User;
-use App\Modules\PlatformAdmin\Models\PlatformAdmin;
-use App\Modules\Tenancy\TenantContext;
+use App\Modules\Identity\Actions\ResetTwoFactor;
+use App\Modules\Identity\Data\AccountRecoveryRequest;
+use App\Modules\Identity\Services\RecoverableAccounts;
 use Illuminate\Console\Command;
 
 /**
- * LOCAL ONLY: removes the 2FA secret and recovery codes of a tenant user or
- * platform admin, so the next sign-in asks to set 2FA up again. Refuses to run
- * outside APP_ENV=local. Audited.
+ * LOCAL ONLY: resets the 2FA of every tenant user and platform admin with the
+ * given e-mail, without prompts, so the next sign-in asks to set 2FA up
+ * again. Refuses to run outside APP_ENV=local; in any other environment use
+ * `axispay:reset-2fa` (ADR-0041). Same Action, so it is audited too.
  */
 final class DevResetTwoFactorCommand extends Command
 {
@@ -23,37 +21,24 @@ final class DevResetTwoFactorCommand extends Command
 
     protected $description = 'Local only: reset 2FA of a user or platform admin';
 
-    public function handle(TenantContext $context, AuditLogger $audit): int
+    public function handle(RecoverableAccounts $accounts, ResetTwoFactor $reset): int
     {
         if (! app()->environment('local')) {
-            $this->error('axispay:dev-reset-2fa only runs with APP_ENV=local.');
+            $this->error('axispay:dev-reset-2fa only runs with APP_ENV=local. Use axispay:reset-2fa instead.');
 
             return self::FAILURE;
         }
 
-        $email = mb_strtolower(trim((string) $this->argument('email')));
-        $reset = 0;
+        $found = $accounts->findByEmail((string) $this->argument('email'), 'local 2FA reset (axispay:dev-reset-2fa)');
 
-        $admin = PlatformAdmin::query()->where('email', $email)->first();
-
-        if ($admin !== null) {
-            $admin->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null])->save();
-            $audit->record(AuditAction::TwoFactorDisabled, $admin, ['source' => 'dev-reset-2fa'], platform: true, actor: Actor::system());
-            $reset++;
-        }
-
-        $user = $context->runAsPlatform('local 2FA reset (axispay:dev-reset-2fa)', static fn (): ?User => User::query()->where('email', $email)->first());
-
-        if ($user !== null) {
-            $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null])->save();
-            $audit->record(AuditAction::TwoFactorDisabled, $user, ['source' => 'dev-reset-2fa'], tenantId: $user->tenant_id, actor: Actor::system());
-            $reset++;
-        }
-
-        if ($reset === 0) {
+        if ($found === []) {
             $this->error('No user or platform admin with that e-mail.');
 
             return self::FAILURE;
+        }
+
+        foreach ($found as $account) {
+            $reset->handle(new AccountRecoveryRequest($account, 'local development reset', source: 'dev-reset-2fa'));
         }
 
         $this->info('2FA reset. The next sign-in will ask to set it up again.');

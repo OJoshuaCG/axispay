@@ -17,6 +17,8 @@ enum AuditAction: string
     case TwoFactorEnabled = 'two_factor.enabled';
     case TwoFactorDisabled = 'two_factor.disabled';
     case TwoFactorRecoveryCodesRegenerated = 'two_factor.recovery_codes_regenerated';
+    case TwoFactorReset = 'two_factor.reset';
+    case PasswordReset = 'password.reset';
     case ReauthenticationConfirmed = 'reauthentication.confirmed';
     case ReauthenticationFailed = 'reauthentication.failed';
     case InvitationCreated = 'invitation.created';
