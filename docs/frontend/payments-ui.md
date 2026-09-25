@@ -4,7 +4,7 @@ This page covers how money and payment flows are presented: amounts, amount and 
 
 ## Quick rules
 
-1. Display every amount with `<x-amount>`. Never format money by hand in a view.
+1. Display every amount with `<x-amount>`. Never format money by hand in a view. Money is always set in Geist Mono (`font-numeric`), through `<x-amount>` or the `amount` utility; never pick its font family by hand.
 2. Signed amounts always show `+` or `−`; color is never the only signal.
 3. Amount inputs: `inputmode="decimal"`, `align="end"`, `class="amount"`, currency in an affix.
 4. Payment statuses come only from `App\Enums\PaymentStatus` via `<x-payment-status>`.
@@ -15,13 +15,29 @@ This page covers how money and payment flows are presented: amounts, amount and 
 
 ## Amounts
 
-### Tabular figures
+### Numeric font
 
-The `amount` utility (`resources/css/components.css`) sets `font-variant-numeric: tabular-nums slashed-zero`, so digits have equal width, columns align and values do not shift while updating.
+Text is Mukta (`font-sans`); currency amounts and numeric money data are Geist Mono (`font-numeric`, token `--font-numeric`, ADR-0042). The `amount` utility (`resources/css/components.css`) sets both the face and `font-variant-numeric: tabular-nums slashed-zero`, so digits have equal width, columns align and values do not shift while updating.
 
-- Jost has a `tnum` feature, so tabular figures work in the brand font.
-- Jost has **no** `zero` feature: slashed zero only appears in fallback fonts that support it. Do not rely on it to distinguish 0 from O.
-- `<x-amount>` applies `amount` automatically. Add `class="amount"` yourself on amount inputs and on any other numeric column.
+- Geist Mono is monospace: every digit is 600 units wide, so figures align without any OpenType feature. `tabular-nums` is kept for the fallback faces, which are not all monospace.
+- Geist Mono has **no** `zero` feature: slashed zero only appears in fallback fonts that support it. Do not rely on it to distinguish 0 from O.
+- Loaded weights: 400 (every amount) and 600 (emphasized totals, `font-semibold`). `font-medium` on an amount renders 400, `font-bold` renders 600.
+- `<x-amount>` applies `amount` automatically. Add `class="amount"` yourself on amount inputs (there is no separate `numeric` prop) and on any other numeric money column.
+- Geist Mono is wider than Mukta: a 9-character amount at `text-base` is about 86px. Keep amounts `whitespace-nowrap` (as `<x-amount>` does) in a `minmax(0,1fr)_auto` grid so the label wraps, not the amount.
+- IDs, keys and code use `font-mono`. It is the same face today, but a separate token: do not use `font-mono` for money or `font-numeric` for code.
+
+### Filament panels
+
+In the panels, `--font-mono` resolves to the numeric stack (`resources/css/filament/theme.css`), so Filament's native API is the convention for money and numeric columns:
+
+```php
+use Filament\Support\Enums\FontFamily;
+
+TextColumn::make('amount')->money(...)->fontFamily(FontFamily::Mono)->alignEnd();
+TextEntry::make('amount')->money(...)->fontFamily(FontFamily::Mono);
+```
+
+`fontFamily(FontFamily::Mono)` adds `fi-font-mono`, compiled to `font-family: var(--font-numeric)`. For other components (stats, custom Blade in a panel), render `<x-amount>` or add the `font-numeric` utility class; the panel theme only generates classes found in its `@source` paths.
 
 ### `<x-amount>` behavior
 
@@ -176,7 +192,7 @@ The session key above is illustrative; store a translated message (or a key) in 
 
 ## Checklist
 
-- [ ] All amounts use `<x-amount>`; numeric columns use `amount` and `text-end`.
+- [ ] All amounts use `<x-amount>`; numeric columns use `amount` and `text-end` (Filament: `->fontFamily(FontFamily::Mono)`), so money is always Geist Mono.
 - [ ] `currency` comes from the transaction; `locale` is left to the viewer (forced only for fixed-locale documents).
 - [ ] Checked in English and Spanish: amounts, dates and status labels follow the language.
 - [ ] Amount inputs have `inputmode="decimal"`, `align="end"`, `class="amount"` and a currency affix.

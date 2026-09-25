@@ -142,6 +142,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Typography (ADR-0042): Mukta replaces Jost as the text face (Blade pages and
+  both Filament panels), and Geist Mono is the face for currency and numeric
+  money data, exposed as the token `--font-numeric` / utility `font-numeric`.
+  The `amount` utility (and so `<x-amount>` and `class="amount"` inputs) now
+  sets the numeric face; Filament money columns use
+  `->fontFamily(FontFamily::Mono)`, mapped to `--font-numeric` in the panel
+  theme. `--font-mono` (code) is Geist Mono too. Both faces are self-hosted from
+  `@fontsource/mukta` and `@fontsource/geist-mono` (latin subset; Mukta
+  400/500/600/700 with 400 and 600 preloaded and a fontaine fallback, Geist
+  Mono 400/600 without preload); `@fontsource/jost` is removed. Fonts are now
+  loaded through the plugin's `local()` provider on the packages' WOFF2 files:
+  with `fontsource()`, browsers downloaded each weight twice (woff2 preload
+  unused, woff applied). The
+  `/design-system` typography section shows both faces.
 - Renamed the product to AxisPay (ADR-0037, supersedes ADR-0028): internal
   name `axispay` replaces the working name `paylink` in `config/axispay.php`,
   `AXISPAY_*` environment variables, `axispay:*` Artisan commands, session keys

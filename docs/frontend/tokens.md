@@ -161,7 +161,17 @@ Defined in `theme.css`. `--spacing: 0.25rem` keeps Tailwind's numeric scale (`p-
 
 ## Typography
 
-Font families: `font-sans` = Jost (self-hosted, then system fallbacks), `font-mono` = system monospace stack. `--font-jost` is emitted by the `@fonts` directive in the layout; `vite.config.js` loads Jost 400/500/600/700, latin subset, `display: swap`, preloading 400 and 600, with `optimizedFallbacks: true`: `fontaine` (devDependency, optional peer of `laravel-vite-plugin`) emits a metric-matched `"Jost fallback"` face (local Arial with ascent/descent/line-gap/size-adjust overrides) so the font swap barely shifts layout. Removing `fontaine` silently disables it (the plugin only warns).
+Font families (ADR-0042):
+
+| Utility | Token | Face | Use |
+|---|---|---|---|
+| `font-sans` (default) | `--font-sans` | Mukta, then system sans-serif | All text |
+| `font-numeric` | `--font-numeric` | Geist Mono, then `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | Currency amounts and numeric money data. Applied by `<x-amount>` and the `amount` utility; do not add it by hand where those fit |
+| `font-mono` | `--font-mono` | Geist Mono, then the system monospace stack | Code, keys, IDs, token names. Never for money |
+
+`--font-mukta` and `--font-geist-mono` are emitted by the `@fonts` directive in the layout (and by `ViteFontProvider` in the panels). `vite.config.js` loads Mukta 400/500/600/700 and Geist Mono 400/600 from the pinned `@fontsource/*` packages, one latin-subset WOFF2 file per weight (latin covers English, Spanish, `€` and U+2212 MINUS SIGN), `display: swap`, preloading Mukta 400 and 600 only. It uses the plugin's `local()` provider on those files, not `fontsource()`: in laravel-vite-plugin 3.2.0 `fontsource()` emits the woff2 and woff of a weight as two rules with identical descriptors, the woff wins, and browsers downloaded both (see the comment in `vite.config.js`). Mukta has `optimizedFallbacks: true`: `fontaine` (devDependency, optional peer of `laravel-vite-plugin`) emits a metric-matched `"Mukta fallback"` face (local Arial with ascent/descent/line-gap/size-adjust overrides) so the font swap barely shifts layout. Removing `fontaine` silently disables it (the plugin only warns). Geist Mono has it off: fontaine does not detect it as monospace and would put a scaled Arial in front of the monospace stack; the system monospace fonts already share its 0.6em digit width.
+
+The type scale below was kept when Mukta replaced Jost: every size sets an explicit line height, so Mukta's tall ascent/descent (1.13/0.53em, sized for Devanagari) do not change the line box. Its Latin x-height is 0.468em and cap height 0.63em (Geist Mono: 0.53em / 0.71em). Checked on `/design-system` from 320 to 1440px in both languages.
 
 | Utility | Size | Line height | Letter spacing |
 |---|---|---|---|
@@ -179,7 +189,7 @@ Font families: `font-sans` = Jost (self-hosted, then system fallbacks), `font-mo
 |---|---|
 | `font-normal` 400, `font-medium` 500, `font-semibold` 600, `font-bold` 700 | `tracking-tight` -0.02em, `tracking-snug` -0.01em, `tracking-normal` 0em, `tracking-wide` 0.02em, `tracking-wider` 0.06em |
 
-Only the four loaded Jost weights exist; there is no `font-light` or `font-black`.
+Only the four loaded Mukta weights exist; there is no `font-light` or `font-black`. Geist Mono loads 400 and 600 only: on amounts, `font-medium` renders 400 and `font-bold` renders 600.
 
 ## Radius
 

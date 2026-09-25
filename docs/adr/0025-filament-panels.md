@@ -18,6 +18,7 @@ The plan names Filament for the two back-office panels (plan section 5: "two pan
 
 - Two Filament panels: `admin` (platform, `platform` guard, on the admin host) and `app` (tenant, on the app host). They are created in Phase 1.
 - Both panels are themed from the existing design tokens (colors from `resources/css/tokens/*`, Jost, light/dark, English/Spanish translations). A Filament theme must read the tokens, never redefine values.
+  - *Update 2026-09-25 ([ADR-0042](0042-typography-mukta-geist-mono.md)):* the fonts are now Mukta (text) and Geist Mono (currency and numeric data).
 - The checkout (`pay` host) stays on Blade + design-system components + Stripe.js, without Filament.
 - Filament resources contain no business logic; they call Actions (rules.md rule 12).
 

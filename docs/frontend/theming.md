@@ -138,7 +138,7 @@ The panels use the same tokens through a separate Vite entry, `resources/css/fil
 |---|---|---|
 | Token import | `resources/css/filament/theme.css` | Imports `primitives.css`, `semantic.css` and `theme.css` **before** Filament's theme, so our values win over Tailwind's defaults (palette, shadows, radius, type scale). `base.css` is not imported. |
 | Filament palettes | `app/Support/Filament/DesignTokenPalette.php` | Registers Filament's `primary`, `info`, `success`, `gray`, `warning`, `danger` scales from the hex values in `primitives.css` (missing steps map to the nearest primitive; see `MAP`). No color is copied. |
-| Font | `app/Support/Filament/ViteFontProvider.php` | Self-hosted Jost (`Vite::fonts()`), `--font-sans` → `--font-jost`. |
+| Font | `app/Support/Filament/ViteFontProvider.php` | Self-hosted Mukta and Geist Mono (`Vite::fonts()`); the panel theme maps `--font-sans` → `--font-mukta` and `--font-mono` → `--font-numeric` (Geist Mono), so `->fontFamily(FontFamily::Mono)` is the money-column convention ([payments-ui.md](payments-ui.md#filament-panels)). |
 | Dark-mode bridge | `resources/views/filament/partials/theme-bridge.blade.php` (render hook `HEAD_END`) | Mirrors Filament's `.dark` class on `<html>` into `data-theme="dark|light"` before first paint and on every change (`MutationObserver`). |
 | Panel chrome | `resources/views/filament/**`, `.pl-*` classes in the panel theme | Language switcher, test/live badge, banners; semantic tokens only. |
 

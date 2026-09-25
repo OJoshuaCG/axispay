@@ -23,12 +23,13 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 3. **Change a value in one place.** Each kind of value has exactly one home file (table below). Components read tokens; they never redefine them.
 4. **Primary is for action; feature is decorative.** `primary` (buttons, focus, selection) marks the main transactional action. `feature` / `feature-subtle` is brand decoration only, never buttons, links or text that must be read.
 5. **Accent green is for non-transactional calls to action** (marketing, onboarding). Never use `variant="accent"` for pay or confirm buttons.
-6. **Money always goes through `<x-amount>`** (or at minimum the `amount` utility for tabular figures). Signed amounts always carry `+` or `−`; color is never the only signal. See [payments-ui.md](payments-ui.md).
-7. **Payment states come from `App\Enums\PaymentStatus`** via `<x-payment-status>`. Never hand-pick a badge color or label for a status.
-8. **Every user-facing string goes through `__()`**, with the key in both `lang/en` and `lang/es` (including `label`, sr-only text and JS strings passed via `data-*`). Never concatenate translated fragments. See [i18n.md](i18n.md).
-9. **Design mobile-first and verify at 320px** in Spanish (the longest strings): no horizontal scroll, no clipped text, 44px targets, 16px inputs. See [responsive.md](responsive.md).
-10. **Check both themes.** Semantic tokens swap automatically; if something only looks right in one theme, the token choice is wrong. See [theming.md](theming.md).
-11. **Invalid component input throws locally and degrades in production** (one policy, `App\Support\ComponentMisuse`). See [components.md](components.md#invalid-input-policy).
+6. **Money always goes through `<x-amount>`** (or at minimum the `amount` utility). Signed amounts always carry `+` or `−`; color is never the only signal. See [payments-ui.md](payments-ui.md).
+7. **Currency and numeric money data always use `font-numeric` (Geist Mono)**, through `<x-amount>` or the `amount` utility (amount inputs: `class="amount"`; Filament columns: `->fontFamily(FontFamily::Mono)`). Text is Mukta (`font-sans`). Never set a font family by hand on money. See [payments-ui.md](payments-ui.md#numeric-font) and ADR-0042.
+8. **Payment states come from `App\Enums\PaymentStatus`** via `<x-payment-status>`. Never hand-pick a badge color or label for a status.
+9. **Every user-facing string goes through `__()`**, with the key in both `lang/en` and `lang/es` (including `label`, sr-only text and JS strings passed via `data-*`). Never concatenate translated fragments. See [i18n.md](i18n.md).
+10. **Design mobile-first and verify at 320px** in Spanish (the longest strings): no horizontal scroll, no clipped text, 44px targets, 16px inputs. See [responsive.md](responsive.md).
+11. **Check both themes.** Semantic tokens swap automatically; if something only looks right in one theme, the token choice is wrong. See [theming.md](theming.md).
+12. **Invalid component input throws locally and degrades in production** (one policy, `App\Support\ComponentMisuse`). See [components.md](components.md#invalid-input-policy).
 
 ## Where do I change X?
 
@@ -40,9 +41,9 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Spacing, layout widths, type scale, font families, weights, tracking, radius, icon sizes, motion, z-index, disabled opacity | `resources/css/theme.css` |
 | The `dark:` variant definition | `resources/css/theme.css` |
 | Global element defaults (body, links, focus outline, selection, reduced motion) | `resources/css/base.css` |
-| Custom utilities Tailwind cannot express (`amount`) | `resources/css/components.css` |
+| Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures) | `resources/css/components.css` |
 | Import order of the CSS layers | `resources/css/app.css` |
-| Font loading (Jost weights, subsets, preload, fontaine fallback metrics) | `vite.config.js` |
+| Font loading (Mukta and Geist Mono weights, subsets, preload, fontaine fallback metrics) | `vite.config.js` |
 | Breakpoint contract, safe-area and gutter tokens | `resources/css/theme.css` |
 | A user-facing string (English / Spanish) | `lang/en/<domain>.php` and `lang/es/<domain>.php` |
 | Supported languages | `config/app.php` → `supported_locales` |

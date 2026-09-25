@@ -75,7 +75,7 @@ The full guide, with local accounts, environment keys and quality checks, is in 
 | Queues / cache / sessions | Laravel `database` drivers |
 | Money | `brick/money` (minor units, never floats) |
 | Permissions | `spatie/laravel-permission` with teams (team = tenant) |
-| Frontend | Blade, Tailwind CSS 4, Vite 8, self-hosted Jost; pnpm |
+| Frontend | Blade, Tailwind CSS 4, Vite 8, self-hosted Mukta (text) and Geist Mono (money); pnpm |
 | Errors | Sentry SDK (Sentry or GlitchTip) |
 | Quality | Pest, Larastan (level max) with a custom tenancy rule, Pint, GitHub Actions |
 | Runtime | Nginx + PHP-FPM container on Dokploy (no Octane) |

@@ -124,7 +124,7 @@ Business tables (links, payments; Phase 3+) also carry `livemode`, so test and l
   - `DesignTokenPalette` builds the Filament palettes from `primitives.css`.
   - `resources/css/filament/theme.css` is the panel theme.
   - A dark-mode bridge keeps Filament and the design system in sync (ADR-0030).
-- Jost is self-hosted through `laravel-vite-plugin` fonts (`ViteFontProvider`), so no font CDN is used.
+- Mukta (text) and Geist Mono (currency and numeric data, ADR-0042) are self-hosted through `laravel-vite-plugin` fonts (`ViteFontProvider` in the panels), so no font CDN is used.
 - Frontend rules: [`frontend/README.md`](frontend/README.md).
 
 ## Internationalization
