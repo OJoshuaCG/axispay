@@ -45,6 +45,14 @@ final class PanelDefaults
                 [AuditedAppAuthentication::make()->recoverable()->brandName(Brand::displayName())],
                 isRequired: $requireTwoFactor,
             )
+            // Not persistent on purpose: Livewire's update route already runs
+            // the `web` group (cookies, session, CSRF, SetLocale), and Filament
+            // itself makes AuthenticateSession and its panel middleware
+            // persistent. Re-running EncryptCookies/StartSession on the fake
+            // request that Livewire builds for persistent middleware decrypts
+            // the already-decrypted session cookie, fails, and swaps the store
+            // to a new, never-saved session id: the next request then fails
+            // the CSRF check with a 419.
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
@@ -57,8 +65,10 @@ final class PanelDefaults
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-            ], isPersistent: true)
+            ])
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.theme-bridge'))
+            // 419 auto-reload and session keep-alive (ADR-0040).
+            ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.session-resilience'))
             ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, static fn (): View => view('filament.partials.panel-controls'))
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls'));
     }

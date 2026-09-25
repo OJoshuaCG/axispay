@@ -6,6 +6,7 @@ use App\Http\Controllers\LocaleController;
 use App\Modules\Identity\Http\Controllers\InvitationController;
 use App\Modules\PlatformAdmin\Http\Controllers\ImpersonationController;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
+use App\Modules\Shared\Http\Controllers\SessionPingController;
 use App\Modules\Tenancy\Http\Controllers\LivemodeController;
 use App\Modules\Tenancy\Http\Middleware\ResolveTenantContext;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +42,25 @@ Route::domain(is_string($appHost) ? $appHost : 'app.localhost')->group(function 
             ->name('app.livemode.update');
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Both panel hosts
+|--------------------------------------------------------------------------
+|
+| Session keep-alive of the panels (ADR-0040): 204, never cached. Guests may
+| ping too, so an open sign-in page keeps a valid CSRF token.
+|
+*/
+
+foreach (['admin', 'app'] as $panel) {
+    $panelHost = config("axispay.surfaces.{$panel}");
+
+    Route::domain(is_string($panelHost) ? $panelHost : "{$panel}.localhost")
+        ->middleware('throttle:30,1')
+        ->get('/session/ping', SessionPingController::class)
+        ->name("{$panel}.session.ping");
+}
 
 /*
 |--------------------------------------------------------------------------
