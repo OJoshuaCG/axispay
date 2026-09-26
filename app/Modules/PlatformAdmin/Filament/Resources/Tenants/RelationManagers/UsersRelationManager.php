@@ -5,32 +5,54 @@ declare(strict_types=1);
 namespace App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers;
 
 use App\Modules\Access\Models\Role;
+use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
+use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Models\User;
+use App\Modules\PlatformAdmin\Actions\PromoteToOwner;
+use App\Modules\PlatformAdmin\Exceptions\OwnerPromotionNotAllowedException;
+use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
+use App\Modules\PlatformAdmin\Services\TenantOwnership;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Scopes\TenantScope;
 use App\Modules\Tenancy\TenantContext;
+use Filament\Actions\Action;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Textarea;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\On;
 
 /**
- * Users of the viewed tenant, read-only (ADR-0043). No write actions: user
- * management belongs to the tenant's owners; support uses impersonation.
+ * Users of the viewed tenant (ADR-0043). User management belongs to the
+ * tenant's owners and support uses impersonation; the one write action is
+ * "Make owner" (ADR-0045): a superadmin grants the owner role to an active
+ * user, with a reason and a fresh re-authentication, through PromoteToOwner.
  * 2FA is shown as enabled or not, never a secret.
  *
- * Same scope handling as InvitationsRelationManager. Role assignments are
- * team-scoped (team = tenant) and the team follows the TenantContext, so they
- * are read inside the user's own tenant context.
+ * Same scope handling as InvitationsRelationManager: the relation keeps its
+ * `tenant_id = owner` constraint, so another tenant's user is never loaded
+ * and cannot be acted on. Role assignments are team-scoped (team = tenant)
+ * and the team follows the TenantContext, so they are read inside the
+ * user's own tenant context.
  */
 final class UsersRelationManager extends RelationManager
 {
     protected static string $relationship = 'users';
+
+    /**
+     * Per-request memo of the tenant's owner IDs (one query per render).
+     *
+     * @var list<string>|null
+     */
+    private ?array $ownerIds = null;
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
     {
@@ -78,7 +100,78 @@ final class UsersRelationManager extends RelationManager
                     ->toggleable(),
             ])
             ->defaultSort('name')
+            ->recordActions([$this->promoteOwnerAction()])
             ->emptyStateHeading(__('platform.tenants.users.empty'));
+    }
+
+    /** An owner was granted or invited elsewhere on the page. */
+    #[On('tenant-ownership-changed')]
+    public function refreshAfterOwnershipChange(): void
+    {
+        $this->ownerIds = null;
+    }
+
+    private function tenant(): Tenant
+    {
+        $owner = $this->getOwnerRecord();
+
+        abort_unless($owner instanceof Tenant, 404);
+
+        return $owner;
+    }
+
+    private function promoteOwnerAction(): Action
+    {
+        return Action::make('promoteOwner')
+            ->label(__('platform.tenants.users.actions.promote_owner'))
+            ->icon(Heroicon::OutlinedShieldCheck)
+            ->color('warning')
+            ->visible(fn (?User $record): bool => $record instanceof User
+                && ! $record->isDisabled()
+                && PlatformActor::current()->can('promoteOwner', $this->tenant())
+                && ! in_array($record->id, $this->ownerIds(), true))
+            ->modalHeading(__('platform.tenants.users.actions.promote_owner_heading'))
+            ->modalDescription(__('platform.tenants.users.actions.promote_owner_help'))
+            ->modalSubmitActionLabel(__('platform.tenants.users.actions.promote_owner_submit'))
+            ->schema([
+                Textarea::make('reason')
+                    ->label(__('platform.tenants.users.fields.promotion_reason'))
+                    ->helperText(__('platform.tenants.users.fields.promotion_reason_help'))
+                    ->required()
+                    ->minLength(PromoteToOwner::MIN_REASON_LENGTH)
+                    ->maxLength(500),
+                Reauthentication::field(),
+            ])
+            ->action(function (array $data, User $record, Action $action): void {
+                Reauthentication::confirm($data);
+
+                try {
+                    app(PromoteToOwner::class)->handle(
+                        PlatformActor::current(),
+                        $this->tenant(),
+                        $record,
+                        is_string($data['reason'] ?? null) ? $data['reason'] : '',
+                    );
+                } catch (OwnerPromotionNotAllowedException $e) {
+                    Notification::make()->danger()->title(__('platform.tenants.users.errors.'.$e->reason))->send();
+                    $action->halt();
+                } catch (ReauthenticationRequiredException) {
+                    Notification::make()->danger()->title(__('platform.tenants.users.errors.reauthentication'))->send();
+                    $action->halt();
+                }
+
+                $this->ownerIds = null;
+                $this->dispatch('tenant-ownership-changed');
+                Notification::make()->success()->title(__('platform.tenants.users.notifications.promoted'))->send();
+            });
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function ownerIds(): array
+    {
+        return $this->ownerIds ??= app(TenantOwnership::class)->ownerIds($this->tenant());
     }
 
     /**

@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Modules\Access\Models;
 
 use App\Modules\Access\Enums\SystemRole;
+use App\Modules\Identity\Models\User;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
@@ -36,6 +38,20 @@ final class Role extends SpatieRole
     public function systemRole(): ?SystemRole
     {
         return $this->isSystem() ? SystemRole::tryFrom($this->name) : null;
+    }
+
+    /**
+     * Tenant users holding this role, in ANY team. Unlike spatie's users(),
+     * the related model does not depend on the default auth guard (which is
+     * `platform` in the admin panel). No team filter: callers must constrain
+     * `model_has_roles.team_id` themselves (TenantOwnership pins it to the
+     * user's tenant). User keeps its fail-closed tenant scope.
+     *
+     * @return MorphToMany<User, $this>
+     */
+    public function tenantUsers(): MorphToMany
+    {
+        return $this->morphedByMany(User::class, 'model', 'model_has_roles', 'role_id', 'model_id');
     }
 
     public function displayName(): string

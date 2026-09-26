@@ -44,7 +44,7 @@ it('creates a tenant in pending_onboarding, audited, and invites its owner', fun
 });
 
 it('lets only superadmins create tenants', function (): void {
-    app(CreateTenant::class)->handle(platformAdmin(superadmin: false), new CreateTenantData('X', 'X'));
+    app(CreateTenant::class)->handle(platformAdmin(superadmin: false), new CreateTenantData('X', 'X', 'owner@x.test'));
 })->throws(AuthorizationException::class);
 
 it('changes status through allowed transitions only, with a reason, audited and notifying owners', function (): void {

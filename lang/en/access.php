@@ -63,6 +63,12 @@ return [
             'line' => 'The role :role was assigned to a member of your team.',
             'review' => 'If you did not expect this change, review your team in the panel.',
         ],
+        'owner_granted' => [
+            'subject' => 'Platform support granted the owner role',
+            'line' => 'Platform support granted the owner role in :tenant to a member of your team.',
+            'line_self' => 'Platform support made you an owner of :tenant. Owners have full access, including the payment gateway connection.',
+            'review' => 'If you did not expect this change, review your team in the panel or contact support.',
+        ],
     ],
 
 ];

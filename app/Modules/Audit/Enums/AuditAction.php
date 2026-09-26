@@ -38,6 +38,7 @@ enum AuditAction: string
     case PlatformContextEntered = 'platform_context.entered';
     case LivemodeSwitched = 'livemode.switched';
     case PlatformAdminCreated = 'platform_admin.created';
+    case OwnerPromoted = 'owner.promoted';
 
     public function label(): string
     {

@@ -11,7 +11,8 @@ use App\Modules\Tenancy\Models\Tenant;
 /**
  * Tenants are managed from the admin panel only. `support_readonly` can look;
  * only `superadmin` creates tenants, edits their profile, manages their
- * invitations and changes their status (plan 17.4, 21.3, ADR-0043).
+ * invitations, changes their status and grants the owner role to one of
+ * their users (plan 17.4, 21.3, ADR-0043, ADR-0045).
  *
  * Tenants are never deleted: audit_logs reference them with ON DELETE
  * RESTRICT and the audit trail is append-only. A tenant is retired by
@@ -61,6 +62,15 @@ final class TenantPolicy
     public function changeStatus(PlatformAdmin $admin, Tenant $tenant): bool
     {
         return $admin->isSuperadmin() && $tenant->status->allowedTransitions() !== [];
+    }
+
+    /**
+     * Grant the owner role to an active user of the tenant (ADR-0045): the
+     * platform-only way to recover ownership. Not for a closed tenant.
+     */
+    public function promoteOwner(PlatformAdmin $admin, Tenant $tenant): bool
+    {
+        return $admin->isSuperadmin() && $tenant->status !== TenantStatus::Closed;
     }
 
     public function delete(PlatformAdmin $admin, Tenant $tenant): bool

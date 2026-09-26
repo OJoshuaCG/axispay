@@ -62,6 +62,7 @@ it('creates a tenant from the panel through the CreateTenant action', function (
             'display_name' => 'Panel Co',
             'timezone' => 'America/Mexico_City',
             'default_locale' => 'es',
+            'owner_email' => 'owner@panel-co.test',
         ])
         ->call('create')
         ->assertHasNoFormErrors();

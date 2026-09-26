@@ -34,10 +34,14 @@ return [
             'default_locale' => 'Default language',
             'support_email' => 'Support e-mail',
             'owner_email' => 'Owner e-mail',
-            'owner_email_help' => 'Optional. Receives an invitation to join as owner.',
+            'owner_email_help' => 'Receives an invitation to join as owner. Every tenant needs one. It cannot belong to an existing user: e-mails are unique across the platform.',
+            'owner' => 'Owner',
             'created_at' => 'Created',
             'close_confirmation' => 'Type ":name" to confirm closing this tenant',
             'status_help' => 'Tenants are never deleted: the audit trail keeps referring to them. Retire a tenant by changing its status to Closed.',
+        ],
+        'filters' => [
+            'without_active_owner' => 'No active owner',
         ],
         'actions' => [
             'change_status' => 'Change status',
@@ -47,6 +51,25 @@ return [
         ],
         'errors' => [
             'status_change' => 'The status could not be changed. Check the transition and the confirmation.',
+            'owner_email_taken' => 'This e-mail already belongs to a user. E-mails are unique across the platform and a user belongs to one tenant only, so use another address for the owner.',
+        ],
+        'ownership' => [
+            'state' => [
+                'active' => 'Active',
+                'pending_invitation' => 'Pending invitation',
+                'none' => 'None',
+            ],
+            'callout' => [
+                'heading' => 'This tenant has no active owner',
+                'body' => 'Nobody can connect the payment gateway or manage the owners until an owner joins.',
+                'no_invitation' => 'No owner invitation is pending.',
+                'pending_invitation' => 'An owner invitation to :email is pending until :date.',
+                'expired_invitation' => 'The last owner invitation, to :email, expired on :date.',
+                'recover' => 'Invite an owner or resend the invitation. If the person is already a user of this tenant, use "Make owner" in the Users list.',
+            ],
+            'actions' => [
+                'resend' => 'Resend owner invitation',
+            ],
         ],
         'invitations' => [
             'title' => 'Invitations',
@@ -85,6 +108,26 @@ return [
             'singular' => 'user',
             'plural' => 'users',
             'empty' => 'No users yet. Invite an owner to give the tenant access.',
+            'fields' => [
+                'promotion_reason' => 'Reason',
+                'promotion_reason_help' => 'At least 10 characters. Recorded in the platform and tenant audit logs; not included in the e-mails.',
+            ],
+            'actions' => [
+                'promote_owner' => 'Make owner',
+                'promote_owner_heading' => 'Make this user an owner',
+                'promote_owner_help' => 'Adds the owner role to this user; their other roles are kept. Owners have full access, including the payment gateway connection. The current owners and the user are notified by e-mail.',
+                'promote_owner_submit' => 'Make owner',
+            ],
+            'notifications' => [
+                'promoted' => 'The user is now an owner',
+            ],
+            'errors' => [
+                'reason_required' => 'Enter a reason of at least 10 characters.',
+                'tenant_closed' => 'The owner role cannot be granted in a closed tenant.',
+                'inactive_user' => 'Only an active user can become an owner.',
+                'already_owner' => 'This user is already an owner.',
+                'reauthentication' => 'Confirm your password or 2FA code to continue.',
+            ],
         ],
     ],
 

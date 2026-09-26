@@ -71,6 +71,7 @@ return [
         'platform_context_entered' => 'Platform context entered',
         'livemode_switched' => 'Test/live mode switched',
         'platform_admin_created' => 'Platform admin created',
+        'owner_promoted' => 'Owner role granted by the platform',
     ],
 
 ];

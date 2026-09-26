@@ -63,6 +63,12 @@ return [
             'line' => 'Se asignó el rol :role a un miembro de su equipo.',
             'review' => 'Si no esperaba este cambio, revise su equipo en el panel.',
         ],
+        'owner_granted' => [
+            'subject' => 'El soporte de la plataforma otorgó el rol de propietario',
+            'line' => 'El soporte de la plataforma otorgó el rol de propietario en :tenant a un miembro de su equipo.',
+            'line_self' => 'El soporte de la plataforma lo nombró propietario de :tenant. Los propietarios tienen acceso completo, incluida la conexión con la pasarela de pagos.',
+            'review' => 'Si no esperaba este cambio, revise su equipo en el panel o contacte a soporte.',
+        ],
     ],
 
 ];

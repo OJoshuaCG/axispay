@@ -71,6 +71,7 @@ return [
         'platform_context_entered' => 'Acceso en contexto de plataforma',
         'livemode_switched' => 'Cambio de modo de prueba/real',
         'platform_admin_created' => 'Administrador de la plataforma creado',
+        'owner_promoted' => 'Rol de propietario otorgado por la plataforma',
     ],
 
 ];

@@ -27,6 +27,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Livewire\Attributes\On;
 
 /**
  * Invitations of the viewed tenant (ADR-0043): list, invite an owner,
@@ -83,6 +84,13 @@ final class InvitationsRelationManager extends RelationManager
             ->recordActions([$this->resendAction(), $this->revokeAction()]);
     }
 
+    /**
+     * Re-renders the list when the view page invites or resends an owner
+     * (ADR-0045); a Livewire listener re-renders by itself.
+     */
+    #[On('tenant-ownership-changed')]
+    public function refreshAfterOwnershipChange(): void {}
+
     private function tenant(): Tenant
     {
         $owner = $this->getOwnerRecord();
@@ -116,6 +124,7 @@ final class InvitationsRelationManager extends RelationManager
                     $action->halt();
                 }
 
+                $this->dispatch('tenant-ownership-changed');
                 Notification::make()->success()->title(__('platform.tenants.invitations.notifications.invited'))->send();
             });
     }
@@ -129,7 +138,7 @@ final class InvitationsRelationManager extends RelationManager
                 && PlatformActor::current()->can('sendInvitations', $this->tenant()))
             ->requiresConfirmation()
             ->modalDescription(__('platform.tenants.invitations.actions.resend_confirm'))
-            ->action(static function (UserInvitation $record, Action $action): void {
+            ->action(function (UserInvitation $record, Action $action): void {
                 try {
                     app(ResendInvitation::class)->handle(PlatformActor::current(), $record);
                 } catch (InvitationNotPendingException|EmailNotAvailableException|InvitationNotAllowedException $e) {
@@ -137,6 +146,7 @@ final class InvitationsRelationManager extends RelationManager
                     $action->halt();
                 }
 
+                $this->dispatch('tenant-ownership-changed');
                 Notification::make()->success()->title(__('platform.tenants.invitations.notifications.resent'))->send();
             });
     }
@@ -151,7 +161,7 @@ final class InvitationsRelationManager extends RelationManager
                 && PlatformActor::current()->can('revokeInvitations', $this->tenant()))
             ->requiresConfirmation()
             ->modalDescription(__('platform.tenants.invitations.actions.revoke_confirm'))
-            ->action(static function (UserInvitation $record, Action $action): void {
+            ->action(function (UserInvitation $record, Action $action): void {
                 try {
                     app(RevokeInvitation::class)->handle(PlatformActor::current(), $record);
                 } catch (InvitationNotPendingException $e) {
@@ -159,6 +169,7 @@ final class InvitationsRelationManager extends RelationManager
                     $action->halt();
                 }
 
+                $this->dispatch('tenant-ownership-changed');
                 Notification::make()->success()->title(__('platform.tenants.invitations.notifications.revoked'))->send();
             });
     }
