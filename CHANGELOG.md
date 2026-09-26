@@ -9,6 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 3 — Payment links API** (ADR-0048, ADR-0049):
+  - `POST /v1/payment_links`, `GET /v1/payment_links/{id}`,
+    `GET /v1/payment_links` (filters and cursor paging) and
+    `POST /v1/payment_links/{id}/cancel` on the API host, with the field and
+    business rules of plan 10.5, amounts as decimal strings, `plink_` IDs and
+    the error codes of plan 10.4. OpenAPI contract in `docs/api/openapi.yaml`.
+  - API keys (`axp_test_…` / `axp_live_…`) owned by the tenant: shown once,
+    scopes, mode taken from the prefix. Owners are e-mailed when a live key
+    is created or revoked.
+  - Idempotency (`Idempotency-Key`, required to create links) with replays
+    for 24 hours; a key that created a link can never create another one.
+  - Rate limit of 100 requests per minute per API key; failed
+    authentications are limited per IP (30 per minute).
+  - A suspended tenant keeps reading and canceling but cannot create links;
+    a closed tenant's API is read-only for 30 days, then its keys answer
+    `401`.
+  - Links expire automatically (checked every minute); disconnecting a
+    gateway cancels the active links of that mode.
+  - Tenant panel: **Payments → Payment links** (list, search, filters,
+    detail, manual create, cancel) and **Settings → API keys** (create with
+    re-authentication, key shown once, revoke). Money reads as number + ISO
+    code (`12,500.00 MXN`, with `,` thousands and `.` decimals in both
+    languages); dates show in the tenant's time zone.
+- Limits decided by the owner (ADR-0048): link expiration 7 days by default,
+  15 minutes to 90 days; minimum amounts per Stripe (USD 0.50, MXN 10.00);
+  maximum USD 10,000.00 and MXN 200,000.00 per link. Tenants may lower the
+  expiration and maximum amount in their settings.
 - **Phase 2 — Stripe connection** (ADR-0047). Settings → Stripe connection in
   the tenant panel (`gateway:manage`, re-authentication for every change):
   - **Create or connect with Stripe (recommended)**: a Standard-equivalent

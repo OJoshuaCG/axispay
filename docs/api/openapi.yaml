@@ -4,8 +4,8 @@ info:
   version: v1
   summary: Public API for creating and tracking payment links.
   description: |
-    Contract of the public API v1 (master plan section 10). Phase 0 skeleton:
-    shared components only; endpoints are added from Phase 3.
+    Contract of the public API v1 (master plan section 10; ADR-0048 for the
+    Phase 3 rules). Phase 3: payment links.
 
     Conventions (plan 10.1):
     - JSON UTF-8; `Content-Type: application/json` is required on requests with a body.
@@ -17,6 +17,36 @@ info:
       also include `amount_minor` (integer minor units).
     - Every response carries a `Request-Id` header, also present in our logs.
     - The API is server-to-server only: never call it from a payer's browser (no CORS).
+
+    Authentication (plan 10.2): `Authorization: Bearer axp_test_...` or `axp_live_...`.
+    The prefix selects the mode; a test key never reaches live resources (another mode's
+    resource answers `404`). A missing, unknown, revoked, expired or wrong-mode key, or a key of
+    an account closed more than 30 days ago, answers `401 invalid_api_key`. Each endpoint needs a scope (`links:create`, `links:read`,
+    `links:cancel`); a key without it gets `403 insufficient_scope`. Keys are created and
+    revoked in the tenant panel only. After 30 failed authentications in a minute from the
+    same IP, every request from it answers `429 rate_limited` for the rest of the minute.
+
+    Account status: a suspended account can read and cancel but not create
+    (`403 tenant_suspended`). A closed account is read-only (POSTs answer
+    `403 tenant_suspended`) for 30 days after closing; then its keys answer `401`.
+
+    Idempotency (plan 10.3): `Idempotency-Key` is required on `POST /payment_links` and
+    honored on the other POSTs. The same key and body within 24 hours replays the stored
+    status and body with `Idempotent-Replayed: true` (4xx answers included; 5xx answers are
+    never stored). The same key with another body answers `422 idempotency_key_reused`;
+    while the first request runs, `409 idempotency_request_in_progress`. Bodies are compared
+    as JSON (key order and whitespace ignored; an empty body, `{}` and `[]` are the same).
+    Keys are scoped per account and mode. A key that created a payment link stays bound to
+    it: after 24 hours the same body returns that link, another body still answers `422`.
+    Stored 4xx answers (for example `409 gateway_not_ready`) are also replayed for 24 hours:
+    retry with a new key once the cause is fixed. A request left unfinished for 5 minutes
+    frees its key.
+
+    Rate limiting (plan 10.1): 100 requests per minute per API key by default. Every
+    response to an authenticated key, errors included, carries `RateLimit-Limit`,
+    `RateLimit-Remaining` and `RateLimit-Reset`; over the limit the answer is
+    `429 rate_limited` with `Retry-After`. Answers to requests that did not authenticate
+    (`401`, and the failed-authentication `429`) carry only `Retry-After` where it applies.
 
     Not part of this contract: the incoming Stripe webhook endpoints served on the same
     host outside `/v1` (`POST /webhooks/stripe/connect/{mode}`,
@@ -33,8 +63,187 @@ servers:
     description: Local development (ADR-0027)
 security:
   - apiKey: []
-tags: []
-paths: {}
+tags:
+  - name: Payment links
+    description: Single-use, reopenable payment links (plan 10.5, ADR-006).
+paths:
+  /payment_links:
+    post:
+      tags: [Payment links]
+      operationId: createPaymentLink
+      summary: Create a payment link
+      description: |
+        Scope `links:create`. `Idempotency-Key` is required. The account must be `active` or
+        `grace` (`403 tenant_suspended` when suspended or closed) and have a gateway connection
+        in this mode that can charge (`409 gateway_not_ready`). Unknown parameters are refused.
+        Currency conversion (`fx`) and pre-payment validation are accepted in the request but
+        refused until their phases (`fx_not_available`, `validation_endpoint_not_configured`).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+        - $ref: '#/components/parameters/RequestIdIn'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentLinkRequest'
+            examples:
+              minimal:
+                value:
+                  amount: '1500.00'
+                  currency: MXN
+                  description: Order A-1029
+              full:
+                value:
+                  amount: '1500.00'
+                  currency: USD
+                  description: 'Pedido #A-1029 — 2 artículos'
+                  metadata: { order_id: A-1029, customer_id: C-77 }
+                  client_reference_id: A-1029
+                  expires_in_hours: 72
+                  payer_fields: { email: required, phone: optional }
+                  return_url: https://tienda.ejemplo.com/gracias?order=A-1029
+                  locale: es
+      responses:
+        '201':
+          description: The link was created (or replayed, with `Idempotent-Replayed`).
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLink'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    get:
+      tags: [Payment links]
+      operationId: listPaymentLinks
+      summary: List payment links
+      description: |
+        Scope `links:read`. Links of the key's account and mode, newest first. `starting_after`
+        pages to older links, `ending_before` to newer ones (not both). Unknown query
+        parameters are ignored.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/StartingAfter'
+        - $ref: '#/components/parameters/EndingBefore'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/PaymentLinkStatus' }
+        - name: currency
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/Currency' }
+        - name: client_reference_id
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: created[gte]
+          in: query
+          required: false
+          description: Created at or after. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - name: created[lte]
+          in: query
+          required: false
+          description: Created at or before. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: One page of links.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLinkList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /payment_links/{id}:
+    get:
+      tags: [Payment links]
+      operationId: retrievePaymentLink
+      summary: Retrieve a payment link
+      description: Scope `links:read`. Another account's or mode's link, or a wrong prefix, answers `404`.
+      parameters:
+        - $ref: '#/components/parameters/PaymentLinkId'
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: The link.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLink'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /payment_links/{id}/cancel:
+    post:
+      tags: [Payment links]
+      operationId: cancelPaymentLink
+      summary: Cancel a payment link
+      description: |
+        Scope `links:cancel`. An active link becomes `canceled`. Canceling a canceled link
+        answers `200` with the link unchanged. A paid or expired link answers
+        `409 link_not_cancelable`; a link with a payment in progress, `409 link_payment_in_progress`.
+        An active link already past its expiry is marked `expired` and answers
+        `409 link_not_cancelable`. Allowed while the account is suspended. There is no endpoint to edit a link: cancel it and create a new one.
+      parameters:
+        - $ref: '#/components/parameters/PaymentLinkId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestIdIn'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelPaymentLinkRequest'
+      responses:
+        '200':
+          description: The canceled link.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentLink'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
 components:
   securitySchemes:
     apiKey:
@@ -58,6 +267,30 @@ components:
         minLength: 1
         maxLength: 255
         pattern: '^[A-Za-z0-9_\-:.]+$'
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Required. A unique value per intended link (for example your order number plus an
+        attempt counter). Missing: `400 idempotency_key_required`. A key that created a link
+        can never create another one: reused with another body, even after 24 hours, it
+        answers `422 idempotency_key_reused`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: '^[A-Za-z0-9_\-:.]+$'
+    PaymentLinkId:
+      name: id
+      in: path
+      required: true
+      description: Payment link ID with its prefix.
+      schema:
+        type: string
+        pattern: '^plink_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        examples:
+          - plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
     RequestIdIn:
       name: X-Request-Id
       in: header
@@ -82,12 +315,14 @@ components:
       name: starting_after
       in: query
       required: false
+      description: A link ID; returns the links created before it.
       schema:
         type: string
     EndingBefore:
       name: ending_before
       in: query
       required: false
+      description: A link ID; returns the links created after it.
       schema:
         type: string
   headers:
@@ -104,6 +339,18 @@ components:
         enum: ['true']
     RetryAfter:
       description: Seconds to wait before retrying (rate limiting).
+      schema:
+        type: integer
+    RateLimitLimit:
+      description: Requests allowed per minute for this API key.
+      schema:
+        type: integer
+    RateLimitRemaining:
+      description: Requests left in the current one-minute window.
+      schema:
+        type: integer
+    RateLimitReset:
+      description: Seconds until the current window resets.
       schema:
         type: integer
   schemas:
@@ -215,6 +462,234 @@ components:
             message: "The currency 'EUR' is not supported. Allowed currencies: USD, MXN."
             param: currency
             request_id: req_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+    PaymentLinkStatus:
+      type: string
+      enum: [active, processing, paid, expired, canceled]
+      description: |
+        `active`: can be opened and paid. `processing`: a payment is in progress (from Phase 4).
+        `paid`: terminal. `expired` / `canceled`: can no longer be paid.
+    PayerFieldRequirement:
+      type: string
+      enum: [hidden, optional, required]
+    PayerFields:
+      type: object
+      description: Payer field catalog (plan 19.1). In a request, overrides per field.
+      additionalProperties: false
+      properties:
+        email: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        full_name: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        phone: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        company_name: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        billing_address: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        tax_id: { $ref: '#/components/schemas/PayerFieldRequirement' }
+        notes: { $ref: '#/components/schemas/PayerFieldRequirement' }
+    Metadata:
+      type: object
+      description: |
+        Private key-value data, never shown to the payer. Up to 20 keys; keys 1-40 characters
+        from `A-Z a-z 0-9 _ -` (digit-only keys such as `"0"` are valid); values strings up to
+        500 characters; nothing nested; a JSON list is refused. Always returned as an object.
+        Do not put personal data or secrets here. Invalid: `metadata_invalid`.
+      maxProperties: 20
+      propertyNames:
+        pattern: '^[A-Za-z0-9_\-]{1,40}$'
+      additionalProperties:
+        type: string
+        maxLength: 500
+    CreatePaymentLinkRequest:
+      type: object
+      additionalProperties: false
+      required: [amount, currency, description]
+      properties:
+        amount:
+          $ref: '#/components/schemas/MoneyAmount'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Shown to the payer as plain text.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        client_reference_id:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Your own reference, for example your order number. Filterable.
+        expires_in_hours:
+          type: integer
+          minimum: 1
+          description: |
+            Not with `expires_at`. Default: the account's default (7 days unless lowered).
+            The expiry must be 15 minutes to the account's maximum (90 days at most) from now,
+            else `expiration_out_of_range`.
+        expires_at:
+          type: string
+          format: date-time
+          description: ISO-8601 with a time zone; impossible dates (e.g. February 31) are refused. Not with `expires_in_hours`.
+        fx:
+          type: object
+          additionalProperties: false
+          required: [mode]
+          description: |
+            Currency conversion for USD links (plan 13). Refused with `fx_not_available` on MXN
+            links, when the account has not enabled conversion, and until conversion is offered
+            by the platform (Phase 6).
+          properties:
+            mode:
+              type: string
+              enum: [none, banxico_fix, fixed]
+            rate:
+              $ref: '#/components/schemas/ExchangeRate'
+        payer_fields:
+          $ref: '#/components/schemas/PayerFields'
+        return_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: |
+            Where the payer returns after paying. HTTPS in live mode; the host must be one of
+            the account's allowed return domains, else `return_url_not_allowed`.
+        locale:
+          type: string
+          enum: [es, en]
+          description: Payment page language. Default the account's.
+        pre_payment_validation:
+          type: boolean
+          description: |
+            Pre-payment validation (plan 15.8). `true` needs a validation URL for the mode
+            (`validation_endpoint_not_configured`; validation URLs arrive in Phase 5).
+    CancelPaymentLinkRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          description: Visible in the API and the panel, never to the payer.
+    PaymentLink:
+      type: object
+      required:
+        - id
+        - object
+        - livemode
+        - status
+        - url
+        - amount
+        - amount_minor
+        - currency
+        - description
+        - metadata
+        - client_reference_id
+        - fx
+        - payer_fields
+        - return_url
+        - locale
+        - pre_payment_validation
+        - expires_at
+        - paid_at
+        - canceled_at
+        - cancel_reason
+        - expired_at
+        - refund_status
+        - dispute_status
+        - open_count
+        - first_opened_at
+        - payment
+        - created_at
+      properties:
+        id:
+          type: string
+          examples: [plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S]
+        object:
+          const: payment_link
+        livemode:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/PaymentLinkStatus'
+        url:
+          type: string
+          format: uri
+          description: Public payment page, `https://pay.<domain>/l/<token>`. Anyone with it can pay; share it only with the payer.
+        amount:
+          type: string
+          examples: ['1500.00']
+        amount_minor:
+          type: integer
+          format: int64
+          examples: [150000]
+        currency:
+          $ref: '#/components/schemas/Currency'
+        description:
+          type: string
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        client_reference_id:
+          type: [string, 'null']
+        fx:
+          type: object
+          required: [mode, rate]
+          properties:
+            mode:
+              type: string
+              enum: [none, banxico_fix, fixed]
+            rate:
+              type: [string, 'null']
+              description: Only with `fixed`.
+        payer_fields:
+          $ref: '#/components/schemas/PayerFields'
+        return_url:
+          type: [string, 'null']
+        locale:
+          type: string
+          enum: [es, en]
+        pre_payment_validation:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: [string, 'null']
+          format: date-time
+        canceled_at:
+          type: [string, 'null']
+          format: date-time
+        cancel_reason:
+          type: [string, 'null']
+        expired_at:
+          type: [string, 'null']
+          format: date-time
+        refund_status:
+          type: string
+          enum: [none, partial, full]
+        dispute_status:
+          type: string
+          enum: [none, open, won, lost]
+        open_count:
+          type: integer
+        first_opened_at:
+          type: [string, 'null']
+          format: date-time
+        payment:
+          type: 'null'
+          description: The summarized payment once the link is paid (from Phase 4).
+        created_at:
+          type: string
+          format: date-time
+    PaymentLinkList:
+      type: object
+      required: [object, data, has_more]
+      properties:
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentLink'
+        has_more:
+          type: boolean
+          description: More links exist in the direction paged.
     ListEnvelope:
       type: object
       description: Cursor-paginated list (plan 10.1).
@@ -238,7 +713,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     Unauthorized:
-      description: Missing, invalid, revoked or expired API key (`invalid_api_key`).
+      description: Missing, invalid, revoked, expired or wrong-mode API key, or a key of an account closed more than 30 days ago (`invalid_api_key`).
       headers:
         Request-Id:
           $ref: '#/components/headers/RequestId'
@@ -274,7 +749,7 @@ components:
           schema:
             $ref: '#/components/schemas/Error'
     UnprocessableEntity:
-      description: Idempotency key reuse or refund above the available balance.
+      description: Idempotency key reuse (`idempotency_key_reused`).
       headers:
         Request-Id:
           $ref: '#/components/headers/RequestId'

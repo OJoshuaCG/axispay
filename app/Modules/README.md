@@ -20,52 +20,24 @@ Rules:
 | Module | Responsibility | Introduced in |
 |---|---|---|
 | `Shared` | Money (brick/money), prefixed IDs and ULID keys, API error format, request IDs, log and error-tracker redaction. **Not a catch-all**: only cross-cutting primitives with no business rules. | Phase 0 (exists) |
-| `Tenancy` | Tenants, `TenantContext`, `BelongsToTenant` / `BelongsToMode`, tenant resolution per surface, tenant states. | Phase 1 (exists) |
+| `Tenancy` | Tenants, `TenantContext`, `BelongsToTenant` / `BelongsToMode`, tenant resolution per surface, tenant states and what each state allows (panel read-only, API access). | Phase 1 (exists) |
 | `Identity` | Tenant users, authentication, 2FA, invitations, re-authentication for sensitive actions. | Phase 1 (exists) |
 | `Access` | Permissions and roles (spatie/laravel-permission with teams), policies. | Phase 1 (exists) |
 | `PlatformAdmin` | Superadmins, audited impersonation, global views. | Phase 1 (exists) |
 | `Audit` | Append-only audit log. | Phase 1 (exists) |
-| `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks. | Phase 2 (exists; OAuth in 4B) |
+| `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks, whether a tenant can charge in a mode. | Phase 2 (exists; OAuth in 4B) |
 | `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch, reconciliation. | Phase 2 (exists; reconciliation in 4) |
-| `ApiKeys` | Issuing, hashing, verifying, scoping and revoking API keys. | Phase 3 |
-| `PaymentLinks` | Link creation, expiration, cancellation and queries; link state machine. | Phase 3 |
+| `ApiKeys` | API keys (issuing, hashing, verifying, scoping, revoking) and the rest of the public API's access layer: key authentication, rate limiting per key, failed-authentication limit, idempotency. The name follows plan 4.3. | Phase 3 (exists) |
+| `PaymentLinks` | Link creation, expiration, cancellation and queries; link state machine; cancelling links when a gateway disconnects. | Phase 3 (exists) |
 | `Checkout` | Public payment page, quotes, attempt start/confirmation, card-testing protection. | Phase 4 |
 | `Payments` | Payment attempts, refunds, disputes; attempt state machine. | Phase 4 / 7 |
 | `Webhooks` | Tenant endpoints, outbox, signed delivery, retries, delivery log, shared SSRF protection, pre-payment validation. | Phase 5 |
-| `Fx` | Exchange rates (Banxico), quotes, conversion policy. | Phase 6 |
+| `Fx` | Exchange rates (Banxico), quotes, conversion policy. | Phase 6 (the `FxMode` enum exists since Phase 3: links and tenant settings store it) |
 | `Branding` | Logo, colors, display name; contrast validation. | Phase 8 |
-| `PayerFields` | Payer field catalog, tenant/link configuration, validation, encrypted storage. | Phase 8 |
+| `PayerFields` | Payer field catalog, tenant/link configuration, validation, encrypted storage. | Phase 8 (the catalog enums `PayerField` / `PayerFieldRequirement` exist since Phase 3) |
 | `Reporting` | Daily rollups, metrics, monthly usage reports. | Phase 8 / 9 |
 | `Billing` | Versioned pricing plans and fee calculation for usage reports (no charging). | Phase 9 |
 | `Notifications` | Operational e-mails. | Phase 9 |
-
-## Shared module contents
-
-| Area | Entry points |
-|---|---|
-| Money | `Money\Money`, `Money\AmountParser`, `Money\ExchangeRate`, `Money\CurrencyCode`, `Money\CurrencyLimits`, `Money\Rounding` |
-| IDs | `Ids\PrefixedId`, `Ids\ResourceType`, `Ids\Ulid`, `Database\HasUlidPrimaryKey`, `Database\HasPrefixedId` |
-| Schema | `Database\SchemaMacros` (`ulidAscii`, `foreignUlidAscii`, `asciiString`, `asciiChar`, `->asciiBin()`) |
-| API errors | `Http\Errors\ApiErrorCode`, `ApiErrorType`, `ApiException`, `ApiErrorRenderer`, `ApiSurface` |
-| Request IDs | `Http\RequestId`, `Http\Middleware\AssignRequestId` |
-| Redaction | `Logging\Redactor`, `Logging\RedactSensitiveDataProcessor`, `Logging\RedactSensitiveLogData`, `Observability\SentryEventScrubber` |
-
-## Phase 1 entry points
-
-| Module | Entry points |
-|---|---|
-| Tenancy | `TenantContext`, `Concerns\BelongsToTenant`, `Concerns\BelongsToMode`, `Contracts\TenantAware`, `Jobs\CapturesTenantContext`, `Actions\{CreateTenant, ChangeTenantStatus, SwitchLivemode}`, `Http\Middleware\ResolveTenantContext` |
-| Identity | `Models\{User, UserInvitation}`, `Actions\{InviteUser, AcceptInvitation, DeactivateUser, ReactivateUser, Reauthenticate}`, `Services\{ReauthenticationWindow, ImpersonationState}`, `Auth\AuditedAppAuthentication` |
-| Access | `Enums\{TenantPermission, SystemRole}`, `Actions\ChangeUserRoles`, `Policies\{UserPolicy, RolePolicy}`, `TenantTeamResolver` |
-| PlatformAdmin | `Models\{PlatformAdmin, ImpersonationSession}`, `Actions\{StartImpersonation, ConsumeImpersonationToken, EndImpersonation, CreatePlatformAdmin}`, `Policies\{TenantPolicy, PlatformAdminPolicy}` |
-| Audit | `Services\AuditLogger` (the only writer), `Enums\AuditAction`, `Models\AuditLog` |
-
-## Phase 2 entry points
-
-| Module | Entry points |
-|---|---|
-| Gateways | `Contracts\PaymentGateway`, `Services\GatewayFactory`, `Stripe\{StripeGateway, StripeClientFactory, StripeCallContext}`, `Stripe\Connection\{PlatformOnboardingFlow, ApiKeyFlow}`, `Actions\{StartPlatformOnboarding, CreateOnboardingLink, SyncGatewayConnection, ConnectWithApiKey, UpdateApiKeyCredentials, DisconnectGatewayConnection, MarkConnectionCredentialsInvalid, CheckApiKeyConnectionHealth}`, `Services\{GatewayCredentialsEncrypter, GatewayConnectionResolver}` (cross-tenant lookups, whitelisted), `Models\GatewayConnection`, `Filament\Pages\StripeConnection` |
-| ProviderEvents | `Http\Controllers\{StripeConnectWebhookController, StripeDirectWebhookController}`, `Actions\{RecordProviderEvent, ProcessProviderEvent}`, `Jobs\ProcessProviderEventJob`, `Models\ProviderEvent` |
 
 Only `StripeClientFactory` builds a `StripeClient`; nothing outside
 `Gateways\Stripe` knows Stripe IDs, statuses or event names (ADR-019).

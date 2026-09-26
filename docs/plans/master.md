@@ -2380,14 +2380,14 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | 2 | País de la cuenta de plataforma en Stripe y países permitidos para cuentas conectadas (cross-border) | `PENDIENTE` | Verificar con la documentación y el soporte de Stripe antes de la fase 2 | Fase 2 |
 | 3 | Controller properties exactas y costos de Connect para la plataforma | `PENDIENTE` | Configuración equivalente a Standard (el comercio paga comisiones y pérdidas) | Fase 2 |
 | 4 | Destinatarios de correos: se interpretó "admin de la plataforma" como superadmins (alertas de plataforma) + usuarios del tenant (operativas) | `SUPUESTO` | Confirmar | Fase 9 |
-| 5 | Valores por defecto de expiración (propuesta: 7 días por defecto, 90 días máximo, 15 minutos mínimo) | `PROPUESTO` | Confirmar | Fase 3 |
-| 6 | Montos mínimos y máximos por moneda | `PENDIENTE` | Mínimos de Stripe vigentes + máximos de riesgo de la plataforma | Fase 3 |
+| 5 | Valores por defecto de expiración (propuesta: 7 días por defecto, 90 días máximo, 15 minutos mínimo) | `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 7 días por defecto, 15 minutos mínimo, 90 días máximo; configurable, el tenant solo puede bajarlos | — | — |
+| 6 | Montos mínimos y máximos por moneda | `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): mínimos de Stripe (USD 0.50, MXN 10.00) y máximos de riesgo USD 10,000.00 / MXN 200,000.00; configurables, el tenant solo puede bajar el máximo | — | — |
 | 7 | Retención de PII del pagador (propuesta: 24 meses) y aviso de privacidad del tenant obligatorio | `PROPUESTO` | Validar con asesoría legal (contrato de encargo de tratamiento de datos) | Fase 8 |
 | 8 | IVA y obligaciones fiscales del operador al cobrar a sus tenants | `PENDIENTE` (fuera del sistema) | Validar con el contador: cobrar IVA en México normalmente implica emitir CFDI | Negocio |
 | 9 | Términos y condiciones: comisiones no reembolsables (ADR-012), suspensión (ADR-013), responsabilidades de disputas | `PENDIENTE` | Redactar con asesoría legal | Salida a producción |
 | 10 | Nombre comercial, dominios y prefijo de llaves definitivos | `PARCIALMENTE RESUELTO` (2026-09-24, ADR-0037): nombre interno `AxisPay` / `axispay`, prefijo de llaves `axp_`, nombre público configurable con `AXISPAY_DISPLAY_NAME`. Dominios: `PENDIENTE` | Definir los dominios antes de la salida a producción | Salida a producción (dominios) |
 | 11 | Tope de markup FX (propuesta: 10%) | `PROPUESTO` | Confirmar | Fase 6 |
-| 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | `PROPUESTO` | Confirmar | Fases 3 y 5 |
+| 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | Rate de la API `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 100 requests/minuto por API key en ambos modos, configurable. Endpoints de webhook: `PROPUESTO` | Confirmar el límite de endpoints | Fase 5 |
 | 13 | Proveedor de correo transaccional y de monitoreo de errores | `PENDIENTE` | Postmark/SES; GlitchTip autoalojado o Sentry | Fase 0 |
 
 ---

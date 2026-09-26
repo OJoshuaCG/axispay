@@ -85,6 +85,10 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 | `AXISPAY_STRIPE_WEBHOOK_BASE_URL` | empty | Base URL of the webhook endpoint created on a merchant account (api_key). Empty: `https://<API host>`. Locally: a public tunnel URL. |
 | `GATEWAY_CREDENTIALS_KEY` | generate | Dedicated key for merchant Stripe credentials, **not** `APP_KEY`: `php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"`. Back it up separately from `APP_KEY` and from database backups. |
 | `GATEWAY_CREDENTIALS_KEY_VERSION` / `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` | `1` / empty | Rotation: see "Rotating GATEWAY_CREDENTIALS_KEY". |
+| `AXISPAY_PAY_BASE_URL` | `http://pay.localhost:8000` | Base of the public link URL (`<base>/l/<token>`). Empty: `https://<pay host>`. |
+| `AXISPAY_MAX_CHARGE_USD_MINOR` / `AXISPAY_MAX_CHARGE_MXN_MINOR` | `1000000` / `20000000` | Platform maximum per link in cents (USD 10,000.00 / MXN 200,000.00, ADR-0048). The minimums follow Stripe and are not variables. |
+| `AXISPAY_API_RATE_LIMIT_LIVE` / `AXISPAY_API_RATE_LIMIT_TEST` | `100` / `100` | API requests per minute per key (ADR-0048). |
+| `AXISPAY_API_FAILED_AUTH_PER_MINUTE` | `30` | Failed API authentications per IP and minute before that IP gets `429` (ADR-0048). Locally, `php artisan cache:clear` lifts a lock. |
 
 The local credentials are defined in `compose.yaml` and the init script. They
 are not secrets and must never be reused outside Docker.
@@ -216,6 +220,44 @@ These are local-only, non-secret credentials. Never create them anywhere else.
   session or CSRF middleware: re-running them on Livewire requests switches
   the session and causes a `419` on the next request
   (`tests/Feature/Panels/LivewireSessionTest.php`).
+
+## Public API (Phase 3, ADR-0048)
+
+The API answers on the API host under `/v1` (locally
+`http://api.localhost:8000/v1`). The contract is `docs/api/openapi.yaml`.
+
+### Getting a key locally
+
+1. Sign in to the tenant panel as the demo owner and pick the mode with the
+   test/live badge (test by default).
+2. **Settings → Stripe connection** must show a connection that can charge in
+   that mode: links cannot be created without one (`gateway_not_ready`).
+3. **Settings → API keys → Create API key**: a name and the permissions
+   (`links:create`, `links:read`, `links:cancel` are preselected). Confirm your
+   password or 2FA code. The key (`axp_test_…`) is shown **once**: copy it
+   before closing the dialog. Revoke it from the same list.
+
+A live key e-mails every owner of the tenant (with `MAIL_MAILER=log`, look in
+`storage/logs/laravel.log`).
+
+### Calling the API
+
+Every request sends the key as a bearer token. Creating a link also needs an
+`Idempotency-Key` (any unique string per intended link; a retry with the same
+key and body returns the first answer). Amounts are decimal **strings**.
+
+```sh
+curl -s http://api.localhost:8000/v1/payment_links \
+  -H "Authorization: Bearer axp_test_..." \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order-A-1029" \
+  -d '{"amount": "1500.00", "currency": "MXN", "description": "Order A-1029"}'
+```
+
+Scopes, filters, paging and error codes are in `docs/api/openapi.yaml`. Every
+response to an authenticated key, errors included, carries `Request-Id` and
+`RateLimit-*` headers. The panel lists the same links under **Payments → Payment
+links**.
 
 ## Stripe (Phase 2, ADR-0047)
 
@@ -351,11 +393,12 @@ to a public tunnel pointing at the API host before connecting with keys.
 
 | Command | What it does |
 |---|---|
-| `composer test` | Pest suite against `axispay_testing` on the Docker MariaDB. |
+| `composer test` | Pest suite against `axispay_testing` on the Docker MariaDB, without the multi-process concurrency tests. |
+| `composer test:concurrency` | Multi-process idempotency race tests; rebuild the `_testing` database. |
 | `composer analyse` | Larastan, PHPStan level max. |
 | `composer format` | Fixes code style with Pint. |
 | `composer format:check` | Checks code style without changing files. |
-| `composer ci` | `format:check`, `analyse` and `test`, as CI runs them. |
+| `composer ci` | `format:check`, `analyse`, `test` and `test:concurrency`, as CI runs them. |
 
 The test suite needs the MariaDB container running. Its connection settings
 live in `phpunit.xml` (`<env>` entries), so they do not depend on `.env`.
@@ -398,6 +441,10 @@ Scheduled tasks live in `routes/console.php`:
 |---|---|---|
 | `axispay:gateways:check-api-keys` | Daily 06:00 | Queues one health check per api_key connection (plan 12.3.3) |
 | `axispay:provider-events:purge` | Daily 03:30 | Deletes ignored/unroutable webhook events older than 7 days; keeps only a reduced payload of processed ones after 30 days (plan 14.4) |
+| `ExpirePaymentLinksJob` (queued) | Every minute | Expires active links whose expiry has passed (plan 9.1, ADR-0048) |
+| `axispay:idempotency:purge` | Hourly | Deletes API idempotency records older than 24 hours (plan 7.8) |
+| `axispay:payment-links:reconcile-gateways` | Every 15 minutes | Queues the cancellation of active links in tenant modes that no longer have a gateway connection (plan 12.3.4) |
+| `axispay:cache:purge-expired` | Hourly (database cache store only) | Deletes expired cache rows, such as per-IP failed-authentication counters that are never read again |
 
 Every task **must** use `withoutOverlapping()` and `onOneServer()`:
 

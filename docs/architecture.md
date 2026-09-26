@@ -37,7 +37,7 @@ Each surface is bound to its host with `Route::domain()`. The hosts come from `c
 
 | Surface | Host | Status | Entry point | Auth |
 |---|---|---|---|---|
-| Public API v1 | `api.` | Group registered; endpoints in Phase 3 | `bootstrap/app.php` (`routes/api.php`, prefix `/v1`) | API key (Phase 3) |
+| Public API v1 | `api.` | Payment links (Phase 3) | `bootstrap/app.php` (`routes/api.php`, prefix `/v1`) | API key (`Authorization: Bearer axp_…`) |
 | Tenant panel | `app.` | Implemented | `app/Providers/Filament/AppPanelProvider.php`, plus `routes/web.php` (invitations, impersonation hand-off, test/live selector) | `web` guard, session, 2FA policy |
 | Platform panel | `admin.` | Implemented | `app/Providers/Filament/AdminPanelProvider.php` | `platform` guard, mandatory 2FA |
 | Checkout | `pay.` | Phase 4 | none yet | public token |
@@ -57,7 +57,7 @@ Host-independent routes:
   - At boot, `SharedServiceProvider` refuses to start when `SESSION_DOMAIN` is set (ADR-0034).
 - **`app.`** Filament panel middleware (`App\Support\Filament\PanelDefaults`) → `Authenticate` → `ResolveTenantContext`, which sets the `TenantContext` from the signed-in user → `RequireTwoFactorForSensitiveUsers` → policies → Actions.
 - **`admin.`** Filament panel middleware → `platform` guard → mandatory 2FA → policies. Cross-tenant reads run inside `TenantContext::runAsPlatform()`, which is audited.
-- **`api.`** The `api` middleware group. The API error envelope (plan 10.4) is rendered by `ApiErrorRenderer` only for requests on this host (`ApiSurface::matches()`).
+- **`api.`** The `api` middleware group → API key (sets the tenant and the mode from the key) → rate limit per key → scope → idempotency on POST → controller → Action (ADR-0048). The API error envelope (plan 10.4) is rendered by `ApiErrorRenderer` only for requests on this host (`ApiSurface::matches()`).
 - **Queued jobs.** A tenant job implements `TenantAware` and uses `CapturesTenantContext`. The `RestoreTenantContext` job middleware re-enters the same tenant and mode. A tenant job without a context fails.
 
 ## Modules
@@ -73,7 +73,7 @@ Code lives in `app/Modules/<Module>/`. The full map and the entry points are in 
 | `PlatformAdmin` | Phase 1 | `PlatformAdmin`, tenant management, audited impersonation |
 | `Audit` | Phase 1 | Append-only `audit_logs`; `AuditLogger` is the only writer |
 | `Gateways`, `ProviderEvents` | Phase 2 | Stripe port/adapter, connections, incoming webhooks |
-| `ApiKeys`, `PaymentLinks` | Phase 3 | API keys, idempotency, links |
+| `ApiKeys`, `PaymentLinks` | Phase 3 | API access (keys, authentication, scopes, rate limit, idempotency); payment links, their state machine and expiration |
 | `Checkout`, `Payments` | Phase 4 / 7 | Hosted checkout, attempts, refunds, disputes |
 | `Webhooks` | Phase 5 | Outgoing webhooks, outbox, SSRF protection, pre-payment validation |
 | `Fx` | Phase 6 | Banxico rates, quotes, conversion policy |
@@ -93,7 +93,7 @@ Business logic lives in single-purpose Actions with DTOs, never in controllers o
 | Tests | `tests/Feature/Isolation/TenantIsolationTest.php` (cross-tenant access → 404, route coverage), `tests/Feature/Tenancy/TenancyInventoryTest.php` (every `tenant_id` table is listed and its model uses the trait) | New endpoints or tables without isolation |
 | Explicit platform context | `TenantContext::runAsPlatform($reason, …)` (audited) and `runAsTenant()` | Silent cross-tenant access |
 
-Business tables (links, payments; Phase 3+) also carry `livemode`, so test and live data never mix (rules.md rule 4).
+Business tables (API keys, idempotency records and links since Phase 3; payments later) also carry `livemode`, so test and live data never mix (rules.md rule 4).
 
 ## Identity, access and 2FA
 

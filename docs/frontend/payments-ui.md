@@ -11,7 +11,7 @@ This page covers how money and payment flows are presented: amounts, amount and 
 5. Payment forms use `data-prevent-double-submit`, **and** the server enforces idempotency.
 6. The Pay button is `variant="primary"`, never `accent`.
 7. Feedback after a full-page POST uses `<x-alert ... focus>`.
-8. **Currency is per transaction, locale is per viewer.** Pass `currency` from the payment; leave `locale` unset so the amount follows the viewer's language.
+8. **Currency is per transaction, locale is per viewer, and money reads as number + ISO code** (ADR-0049): `12,500.00 MXN`, `1,200.00 USD`, never a bare `$` (ambiguous between USD and MXN). Pass `currency` from the payment; leave `locale` unset so the amount follows the viewer, whose language formats numbers with its market region (`es` → `es_MX`, `en` → `en_US`: `,` for thousands and `.` for decimals in both).
 
 ## Amounts
 
@@ -28,14 +28,7 @@ Text is Mukta (`font-sans`); currency amounts and numeric money data are Geist M
 
 ### Filament panels
 
-In the panels, `--font-mono` resolves to the numeric stack (`resources/css/filament/theme.css`), so Filament's native API is the convention for money and numeric columns:
-
-```php
-use Filament\Support\Enums\FontFamily;
-
-TextColumn::make('amount')->money(...)->fontFamily(FontFamily::Mono)->alignEnd();
-TextEntry::make('amount')->money(...)->fontFamily(FontFamily::Mono);
-```
+In the panels, `--font-mono` resolves to the numeric stack (`resources/css/filament/theme.css`), so Filament's `fontFamily(FontFamily::Mono)` is the convention for money and numeric columns. Panel amounts use the same formatter as `<x-amount>` in the numeric font; never Filament's `money()`, which prints symbols.
 
 `fontFamily(FontFamily::Mono)` adds `fi-font-mono`, compiled to `font-family: var(--font-numeric)`. For other components (stats, custom Blade in a panel), render `<x-amount>` or add the `font-numeric` utility class; the panel theme only generates classes found in its `@source` paths.
 
@@ -43,21 +36,22 @@ TextEntry::make('amount')->money(...)->fontFamily(FontFamily::Mono);
 
 | Input | Output | Color |
 |---|---|---|
-| `:value="1250.5" currency="USD"` (viewer `en`) | `+$1,250.50` | `text-amount-positive` (= success) |
-| `:value="1250.5" currency="USD"` (viewer `es`) | `+1.250,50 US$` | `text-amount-positive` |
-| `:value="-42" currency="EUR" locale="de_DE"` | `−42,00 €` | `text-amount-negative` (= error) |
+| `:value="1250.5" currency="USD"` (viewer `en` or `es`) | `+1,250.50 USD` | `text-amount-positive` (= success) |
+| `:value="-42" currency="MXN"` | `−42.00 MXN` | `text-amount-negative` (= error) |
+| `:value="-42" currency="EUR" locale="de_DE"` | `−42,00 EUR` | `text-amount-negative` |
 | `:value="0"` | no sign | neutral |
 | `:signed="false"` | no sign | neutral |
-| `:value="129900" currency="CLP" minor` | value divided by CLP's ICU fraction digits | as signed |
+| `:value="129900" currency="CLP" minor` | `+129,900 CLP` (CLP has no decimals) | as signed |
 | `:value="abc"` (non-numeric) | throws in `local`/`testing`; elsewhere `—` + sr-only "Amount unavailable", warning logged | neutral |
 
 - The minus is U+2212 (`−`), not a hyphen.
 - The formatted value never wraps (`whitespace-nowrap`).
 - `currency` defaults to `Number::defaultCurrency()`: always pass the transaction's currency.
-- `locale` defaults to `app()->getLocale()`, which `SetLocale` sets per request (and `Number::useLocale()` with it). Force `locale` only for a demo or a document that must render in a fixed locale (e.g. an invoice in the merchant's language).
-- ICU decides symbol position, grouping and decimals per locale (ICU 77: `en` `$1,234.56`, `es` `1.234,56 US$`). Do not hand-build these rules.
+- `locale` defaults to the viewer's formatting locale (`es` → `es_MX`, `en` → `en_US`), set per request by `SetLocale`. Force `locale` only for a demo or a document that must render in a fixed locale.
+- The number, a non-breaking space and the ISO code; grouping and decimal marks come from ICU for the formatting locale (ICU 77: `es_MX` and `en_US` both `1,234.56`). The amount never goes through a float. Do not hand-build these rules.
+- The same text appears in the panels (tables, detail headings, dialogs).
 - Dates: use Carbon's locale-aware formats (`$date->isoFormat('LL')`, `translatedFormat('j F Y')`); Carbon follows the app locale. Render machine values in `<time datetime="...">`.
-- `minor` uses ICU's fraction digits for the currency (e.g. 2 for USD, 0 for JPY), so store and pass minor units consistently.
+- `minor` uses the currency's ISO 4217 decimals (2 for USD and MXN, 0 for CLP and JPY), so store and pass minor units consistently.
 - Screen readers may not announce `+`. Where direction matters, add text context ("Refund", "Charge").
 - **Display only.** Never parse, compute with or store the formatted string.
 
