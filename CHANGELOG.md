@@ -43,6 +43,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Platform panel: **View as user** could not be found. A tenant row opened
+  the edit page instead of the view page (Filament's default record URL
+  takes the first visible view/edit *table* action, and only Edit was left
+  after the View row action was removed), and the action lives on the view
+  page. Rows now open the view page explicitly, and the edit page has a
+  View button. The action shows for every tenant whose status allows panel
+  access (including pending onboarding) and is disabled, with a tooltip,
+  while the tenant has no active user.
+- Panels: the 2FA set-up page showed two control bars (the sign-in page's
+  language/theme row and Filament's signed-in header with the test/live
+  selector). Every simple page now shows exactly one right-aligned bar:
+  language and theme (plus the user menu when signed in); the test/live
+  selector is not shown during account set-up.
+- Invitation page: the password could not be revealed.
 - Panels: keyboard focus on sidebar items, tabs and topbar buttons is a
   visible 2px outline (Filament showed only a faint background tint).
 - Panels: the language switcher on the sign-in pages was centred instead of
@@ -61,6 +75,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Password field component** (ADR-0046): `<x-password-input>` on Blade
+  pages and `PasswordField` in Filament, used by the invitation page, the
+  panels' sign-in, profile and re-authentication. Accessible reveal button
+  (44px, `aria-pressed`, "Show password" / "Mostrar contraseña"), and for new
+  passwords a live requirements checklist and a "passwords do not match"
+  hint. Shown on `/design-system`.
+- `PasswordPolicy` (Identity): the single password policy (12 characters,
+  data-leak check when enabled), now also enforced inside `AcceptInvitation`
+  and `CreatePlatformAdmin`; `Password::defaults()` delegates to it.
+- Platform panel: **View as this user** on each active row of a tenant's
+  Users tab (same rules and `StartImpersonation` as the header action).
 - Platform panel: **Owner** column on the tenant list (Active / Pending
   invitation / None) and a **No active owner** filter, computed in the list
   query without N+1 (`PlatformAdmin\Services\TenantOwnership`). The tenant

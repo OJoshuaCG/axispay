@@ -9,6 +9,7 @@ This is the catalogue of Blade components in `resources/views/components/`: purp
 | Layout | `<x-layouts.app>` | Every full page |
 | Button | `<x-button>` | Actions and button-styled links |
 | Input | `<x-input>` | Text-like form fields with label, hint, error, affixes |
+| Password input | `<x-password-input>` | **Every** password field (Filament twin: `PasswordField`) |
 | Card | `<x-card>` | Bordered surface container |
 | Alert | `<x-alert>` | Inline feedback messages |
 | Badge | `<x-badge>` | Short status labels |
@@ -174,6 +175,73 @@ Text-like input with label, hint, error and optional affixes.
 | Pass `:error="$errors->first('field')"` | Put buttons or links in affix slots |
 | Use `class` for input-level utilities like `amount`, `wrapper-class` for layout | Expect `class` to style the wrapper: it lands on the `<input>` |
 | Let validation messages come from `lang/<locale>/validation.php` | Pass a smaller `text-*` to the input (breaks the 16px iOS rule) |
+
+---
+
+## Password input: `<x-password-input>`
+
+The one component for every password entry on a Blade page (ADR-0046). Its Filament twin is `App\Support\Filament\Forms\PasswordField`: same modes, same reveal button, same checklist and mismatch partials (`resources/views/components/password/*`). **Never use `<x-input type="password">` or a bare `TextInput::password()`.**
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `label` | string | required | |
+| `name` | string | `password` | |
+| `id` | string\|null | `name` | |
+| `mode` | string | `current` | `current`: sign-in, re-authentication, "current password"; `new`: setting or changing a password |
+| `confirm` | bool | `false` | `mode="new"` only: adds a confirmation field named `<name>_confirmation` (Laravel's `confirmed` rule) |
+| `confirmName` / `confirmId` / `confirmLabel` / `confirmError` | string\|null | derived | Confirmation field overrides |
+| `hint` / `error` | string\|null | `null` | As `<x-input>` |
+| `wrapperClass` | string\|null | `null` | Classes for the outer wrapper |
+
+Other attributes (`required`, `autofocus`...) go to the main `<input>`; `required` is copied to the confirmation.
+
+| Mode | `autocomplete` | Checklist | Server rule |
+|---|---|---|---|
+| `current` | `current-password` | none | whatever the action checks (credentials) |
+| `new` | `new-password`, plus `passwordrules` | live, from `PasswordPolicy::requirements()` | `PasswordPolicy` inside the action (authoritative) |
+
+Behavior (`resources/js/password-input.js` on Blade pages, Alpine in Filament):
+
+| Topic | Rule |
+|---|---|
+| Reveal button | A real `<button type="button">` inside the field frame, 44x44px at every width. `aria-controls` = input id, `aria-pressed="true"` when the password is visible. The accessible name stays "Show password" (a toggle's name does not change with its state); the tooltip switches to "Hide password". Eye / eye-slash chosen by CSS from `aria-pressed` |
+| Focus and caret | A mouse press keeps focus in the input; the caret position is restored after the type change; the keyboard focus stays on the button |
+| Autofill | Fields are masked again on submit, so browsers and password managers still see a password field. Pages that set a password add a hidden `autocomplete="username"` input with the account e-mail |
+| Checklist | `mode="new"`: "At least 12 characters" turns green with a check as the person types (only the length is kept in memory); a polite live region announces a requirement only when it flips. "Not found in known data leaks" is shown as "checked when you submit" (needs the server). One short tip: use a passphrase |
+| Confirmation | "The passwords do not match." appears (polite live region) once the confirmation is as long as the password and differs |
+| No JavaScript | The button does nothing and the field is a normal password input; the server still validates |
+| Secrets | The value is never copied into an attribute, storage, log or the Livewire snapshot (Filament keeps the reveal state in Alpine) |
+
+```blade
+{{-- Sign-in / re-authentication --}}
+<x-password-input name="password" :label="__('auth.password')" :error="$errors->first('password')" required />
+
+{{-- Setting a password --}}
+<x-password-input
+    name="password"
+    mode="new"
+    :confirm="true"
+    :label="__('identity.invitation.password')"
+    :confirm-label="__('identity.invitation.password_confirmation')"
+    :error="$errors->first('password')"
+    required
+/>
+```
+
+Filament:
+
+```php
+PasswordField::make('password')->forCurrentPassword();             // sign-in, re-auth
+PasswordField::make('password')->forNewPassword()->same('passwordConfirmation');
+PasswordField::make('passwordConfirmation')->confirms('password');
+```
+
+`forNewPassword()` adds `PasswordPolicy::rule()` (read at validation time) and the checklist below the field. Used by: the panels' sign-in (`Identity\Filament\Pages\Login`), profile (`EditProfile`: new, confirmation, current), re-authentication (`Reauthentication::field()`); Blade: invitation acceptance.
+
+| Do | Don't |
+|---|---|
+| Use `mode="new"` / `forNewPassword()` wherever a password is set, and validate with `PasswordPolicy` in the action | Add rules to the checklist that the server does not enforce, or enforce rules the checklist does not show |
+| Keep one policy: change `config/axispay.php` → `passwords` | Build a reveal button by hand |
 
 ---
 

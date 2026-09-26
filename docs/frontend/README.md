@@ -30,6 +30,7 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 10. **Design mobile-first and verify at 320px** in Spanish (the longest strings): no horizontal scroll, no clipped text, 44px targets, 16px inputs. See [responsive.md](responsive.md).
 11. **Check both themes.** Semantic tokens swap automatically; if something only looks right in one theme, the token choice is wrong. See [theming.md](theming.md).
 12. **Invalid component input throws locally and degrades in production** (one policy, `App\Support\ComponentMisuse`). See [components.md](components.md#invalid-input-policy).
+13. **Every password field uses `<x-password-input>` (Blade) or `PasswordField` (Filament)**: `mode="new"` / `forNewPassword()` to set a password, `current` / `forCurrentPassword()` otherwise. Never `<x-input type="password">` or a bare `TextInput::password()`. The policy lives only in `PasswordPolicy`. See [components.md](components.md#password-input-x-password-input) and ADR-0046.
 
 ## Where do I change X?
 
@@ -56,6 +57,9 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Payment status badge variant or icon | `app/Enums/PaymentStatus.php` (labels: `lang/*/payments.php`) |
 | Theme persistence, toggle keyboard behavior, browser `theme-color` | `resources/js/theme.js` (keep the pre-paint script in `components/layouts/app.blade.php` in sync) |
 | Double-submit guard, loading buttons | `resources/js/forms.js` |
+| Password policy (minimum length, data-leak check) and its checklist items | `config/axispay.php` → `passwords`, `app/Modules/Identity/Support/PasswordPolicy.php` |
+| Password field markup and behavior (reveal button, checklist, mismatch hint) | `resources/views/components/password-input.blade.php`, `resources/views/components/password/*`, `resources/js/password-input.js`, `app/Support/Filament/Forms/PasswordField.php` |
+| Control bar of the panels' simple pages (sign-in, 2FA set-up) | `resources/views/filament/partials/guest-controls.blade.php`, `panel-controls.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Autofocus of feedback on page load | `resources/js/focus.js` |
 | Icon package registration | `config/blade-icons.php` |
 

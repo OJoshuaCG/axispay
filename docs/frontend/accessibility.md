@@ -89,6 +89,7 @@ Not measured: `line` hairlines (decorative, not required to meet 3:1). Brand `gr
 | `<x-button size="sm">` | Yes, hit area: looks 36px (`min-h-9`), a transparent `::before` with `-inset-1` makes the tappable area 44px tall. Keep ≥ 8px between adjacent `sm` buttons |
 | Icon-only button | Yes: `md` `size-touch`, `lg` `size-12`, `sm` `size-9` + `::before` (44x44 hit area) |
 | `<x-input>` | Yes (`min-h-touch`) |
+| Password reveal button (`<x-password-input>`, `PasswordField`) | Yes (44x44 at every width) |
 | Theme toggle and language switcher options (`seg-option`) | Yes (44x44). On `desktop:` only (≥ 1024px and a fine pointer) they are 36x30, above the 24px minimum of 2.5.8; touch screens keep 44px |
 | Inline prose links | Exempt (WCAG 2.5.8 inline exception) |
 
@@ -97,6 +98,7 @@ Not measured: `line` hairlines (decorative, not required to meet 3:1). Brand `gr
 | Component | Convention |
 |---|---|
 | `<x-input>` | `<label for>` always rendered (visually hidden with `hideLabel`). `aria-describedby` lists, in order: prefix id, suffix id, caller's own `aria-describedby`, hint id, error id. `aria-invalid="true"` only when `error` is set. Required asterisk is `aria-hidden`; the `required` attribute carries the meaning. |
+| `<x-password-input>` / `PasswordField` | Reveal toggle: `<button type="button">`, `aria-controls` = input id, `aria-pressed` = visible; constant accessible name "Show password" / "Mostrar contraseña", tooltip switches to "Hide password". `aria-describedby` adds the checklist (new mode) or the mismatch hint (confirmation). The checklist's live region (`aria-live="polite"`) speaks only when a requirement flips; the mismatch hint is a polite live region that is always rendered. |
 | `<x-alert>` | Starts with a visually hidden, translated severity prefix (`ui.alert.*`: "Success:" / "Correcto:", "Warning:" / "Advertencia:", "Error:", "Information:" / "Información:"). `role="alert"` for error and warning, `role="status"` for success and info; override with `role="note"` for static notes. `focus` adds `tabindex="-1"` + `data-autofocus` so `focus.js` focuses it on load. |
 | `<x-icon>` | Decorative by default: `aria-hidden="true"`. With `label`: `role="img"` + `aria-label`. Always `focusable="false"`. |
 | `<x-button>` | Loading: keeps focus (no `disabled` attribute), sets `aria-disabled="true"`, `aria-busy="true"`, `data-loading`, and renders an sr-only `role="status"` with `loadingLabel` (default `ui.button.loading`: "Processing" / "Procesando"). Icon-only buttons require `label` (becomes `aria-label`); missing it follows the [invalid input policy](components.md#invalid-input-policy). A disabled link button drops `href` and gets `role="link"` + `aria-disabled="true"`. |

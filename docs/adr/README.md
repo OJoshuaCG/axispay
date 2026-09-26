@@ -49,3 +49,4 @@ One decision per file, format: Context, Options considered, Decision, Rationale,
 | [ADR-0043](0043-tenant-lifecycle-platform-panel.md) | Tenant lifecycle management in the platform panel (edit, invite owner, resend, revoke, no hard delete) | Proposed |
 | [ADR-0044](0044-panel-ux-theme-language-type-surfaces.md) | Panel UX: default light theme, visible theme and language controls, panel type scale for Mukta, surface layering | Proposed |
 | [ADR-0045](0045-minimum-owner-and-superadmin-promotion.md) | Minimum one owner per tenant (required owner e-mail, active-owner state) and superadmin ownership promotion | Accepted (by the project owner, 2026-09-25) |
+| [ADR-0046](0046-password-policy-and-password-field.md) | One password policy (`PasswordPolicy`, enforced inside every action that sets a password) and one password field per stack (`<x-password-input>`, `PasswordField`) with reveal button and live checklist | Proposed |
