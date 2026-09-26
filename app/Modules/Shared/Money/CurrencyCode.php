@@ -32,6 +32,21 @@ enum CurrencyCode: string
     }
 
     /**
+     * @param  list<self>|null  $only  a subset (e.g. the enabled currencies); every case when null
+     * @return array<string, string> code => code (currency codes are not translated)
+     */
+    public static function options(?array $only = null): array
+    {
+        $options = [];
+
+        foreach ($only ?? self::cases() as $currency) {
+            $options[$currency->value] = $currency->value;
+        }
+
+        return $options;
+    }
+
+    /**
      * Number of decimal places of the minor unit (2 for USD and MXN).
      */
     public function exponent(): int

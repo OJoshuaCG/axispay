@@ -1,28 +1,29 @@
 {{--
-    Amount atom: formats a monetary value with tabular figures and an explicit sign.
+    Amount atom: formats a monetary value with tabular figures, an explicit
+    sign and the ISO currency code (ADR-0049).
 
     Usage:
-        <x-amount :value="1250.5" currency="USD" />                 en: +$1,250.50   es: +1.250,50 US$ (green)
-        <x-amount :value="-42" currency="EUR" locale="de_DE" />    −42,00 € (red)
-        <x-amount :value="129900" currency="CLP" minor />         value in minor units
-        <x-amount :value="99.9" currency="USD" :signed="false" />  plain, neutral color
+        <x-amount :value="1250.5" currency="USD" />                 +1,250.50 USD (green), in en and es
+        <x-amount :value="-42" currency="EUR" locale="de_DE" />    −42,00 EUR (red)
+        <x-amount :value="129900" currency="CLP" minor />         value in minor units: +129,900 CLP
+        <x-amount :value="99.9" currency="USD" :signed="false" />  plain, neutral color: 99.90 USD
 
     Props:
         value     int|float|numeric-string
         currency  ISO 4217 code (default: \Illuminate\Support\Number::defaultCurrency())
-        locale    ICU locale (default: the viewer's locale, app()->getLocale(),
-                  set per request by App\Http\Middleware\SetLocale)
+        locale    interface or ICU locale (default: the viewer's formatting
+                  locale: es → es_MX, en → en_US, see App\Support\Locales)
         signed    show +/− and use positive/negative colors (default true)
-        minor     value is in minor units (cents); divided by the currency's
-                  fraction digits as reported by ICU (e.g. 2 for USD, 0 for JPY)
+        minor     value is in minor units (cents); the currency's decimals
+                  come from ISO 4217 (2 for USD and MXN, 0 for CLP)
+
+    Formatting is App\Modules\Shared\Money\MoneyDisplay, the same one the
+    panels use: number with the currency's decimals, a non-breaking space and
+    the code. Never a bare "$", which is ambiguous between USD and MXN.
 
     Color is never the only signal: signed amounts always carry "+" or "−"
     (U+2212 MINUS SIGN). Screen readers do not all announce "+", so where the
     direction matters, give it context in text too (e.g. a "Refund" label).
-
-    Currency is per transaction; locale is per viewer. A USD payment viewed in
-    Spanish renders "1.234,56 US$" (ICU 77 es: dot grouping, comma decimals,
-    symbol after the number); in English "$1,234.56".
 
     Invalid value (non-numeric): ComponentMisuse policy. Throws in local/testing;
     elsewhere logs a warning and renders an em dash "—" with screen-reader text
@@ -40,7 +41,6 @@
 
 @php
     $currency = strtoupper($currency ?? \Illuminate\Support\Number::defaultCurrency());
-    $locale = $locale ?? app()->getLocale();
     $valid = is_numeric($value);
 
     if (! $valid) {
@@ -51,31 +51,24 @@
         ]);
     }
 
-    $number = $valid ? $value + 0 : 0;
-
-    if ($valid && $minor) {
-        $digits = (new \NumberFormatter($locale.'@currency='.$currency, \NumberFormatter::CURRENCY))
-            ->getAttribute(\NumberFormatter::FRACTION_DIGITS);
-        $number = $number / (10 ** $digits);
-    }
-
-    $formatted = \Illuminate\Support\Number::currency(abs($number), in: $currency, locale: $locale);
+    $decimal = $valid ? \Brick\Math\BigDecimal::of(is_float($value) ? var_export($value, true) : (string) $value) : null;
+    $formatted = $valid ? \App\Modules\Shared\Money\MoneyDisplay::amount($value, $currency, minor: (bool) $minor, locale: $locale) : '';
 
     $sign = match (true) {
-        ! $signed || $number == 0 => '',
-        $number > 0 => '+',
+        ! $valid || ! $signed || $decimal->isZero() => '',
+        $decimal->isPositive() => '+',
         default => "\u{2212}",
     };
 
     $color = match (true) {
-        ! $signed || $number == 0 => '',
-        $number > 0 => 'text-amount-positive',
+        ! $valid || ! $signed || $decimal->isZero() => '',
+        $decimal->isPositive() => 'text-amount-positive',
         default => 'text-amount-negative',
     };
 @endphp
 
 @if ($valid)
-    <span {{ $attributes->class(['amount whitespace-nowrap', $color]) }}>{{ $sign }}{{ $formatted }}</span>
+    <span {{ $attributes->class(['amount whitespace-nowrap', $color])->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}>{{ $sign }}{{ $formatted }}</span>
 @else
     <span {{ $attributes->class('amount whitespace-nowrap text-fg-secondary') }}><span aria-hidden="true">&mdash;</span><span class="sr-only">{{ __('ui.amount.unavailable') }}</span></span>
 @endif

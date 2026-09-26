@@ -95,12 +95,37 @@ final class Locales
     /**
      * Apply a locale to the whole request: translator (which also updates
      * Carbon through Carbon's Laravel service provider listening to
-     * LocaleUpdated) and the default locale of Illuminate\Support\Number.
+     * LocaleUpdated) and the default locale of Illuminate\Support\Number,
+     * which uses the market region of the language (ADR-0049).
      */
     public static function apply(string $locale): void
     {
         App::setLocale($locale);
-        Number::useLocale($locale);
+        Number::useLocale(self::formattingLocale($locale));
+    }
+
+    /**
+     * ICU locale for numbers and money of an interface locale (`es` →
+     * `es_MX`, `en` → `en_US`; config app.formatting_locales, ADR-0049). An
+     * ICU locale that is not an interface locale (e.g. `de_DE`) is returned
+     * as is.
+     */
+    /**
+     * BCP 47 tag of the formatting locale, for `lang` attributes on formatted
+     * numbers (`es` → `es-MX`), so screen readers read them in the right
+     * convention. The viewer's when null.
+     */
+    public static function formattingLanguageTag(?string $locale = null): string
+    {
+        return str_replace('_', '-', self::formattingLocale($locale ?? App::getLocale()));
+    }
+
+    public static function formattingLocale(string $locale): string
+    {
+        $map = config('app.formatting_locales');
+        $mapped = is_array($map) ? ($map[$locale] ?? null) : null;
+
+        return is_string($mapped) && $mapped !== '' ? $mapped : $locale;
     }
 
     /**

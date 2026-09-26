@@ -106,6 +106,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Number formatting locales (ADR-0049)
+    |--------------------------------------------------------------------------
+    |
+    | The interface language is per viewer; numbers (and money) are formatted
+    | with the market's region: `,` for thousands and `.` for decimals in both
+    | languages, the same rule as amount inputs. Keyed by interface locale.
+    |
+    */
+
+    'formatting_locales' => [
+        'en' => 'en_US',
+        'es' => 'es_MX',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Encryption Key
     |--------------------------------------------------------------------------
     |
