@@ -13,20 +13,19 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\AccountLock;
 use App\Modules\Identity\Services\LoginThrottle;
 use App\Modules\Identity\Services\SessionRevoker;
+use App\Modules\Identity\Support\PasswordPolicy;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use SensitiveParameter;
 
 /**
  * Operator recovery of a forgotten password (ADR-0041) for a platform admin or
  * tenant user. The new password follows the same policy as account creation
- * (`Password::defaults()`: minimum length and, when enabled, the breach
- * check). The account is signed out everywhere (plan 17.3: other sessions are
- * invalidated on a password change) and its sign-in throttle is cleared. 2FA
- * is not touched. The password never reaches the audit entry.
+ * (PasswordPolicy: minimum length and, when enabled, the breach check). The
+ * account is signed out everywhere (plan 17.3: other sessions are invalidated
+ * on a password change) and its sign-in throttle is cleared. 2FA is not
+ * touched. The password never reaches the audit entry.
  */
 final readonly class ResetPassword
 {
@@ -77,9 +76,6 @@ final readonly class ResetPassword
      */
     public static function validate(#[SensitiveParameter] string $password): void
     {
-        Validator::make(
-            ['password' => $password],
-            ['password' => ['required', 'string', Password::defaults()]],
-        )->validate();
+        PasswordPolicy::validate($password);
     }
 }

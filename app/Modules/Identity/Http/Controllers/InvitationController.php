@@ -13,7 +13,6 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -36,9 +35,12 @@ final class InvitationController
 
     public function store(Request $request, string $token, AcceptInvitation $accept): RedirectResponse|Response
     {
+        // The password policy itself is enforced by AcceptInvitation
+        // (PasswordPolicy, ADR-0046); its ValidationException lands on the
+        // `password` field like any other error.
         $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'password' => ['required', 'string', 'confirmed', Password::defaults()],
+            'password' => ['required', 'string', 'confirmed'],
         ]);
 
         try {

@@ -79,13 +79,29 @@ return [
         'intro' => 'Recibió una invitación en la dirección :email. Indique su nombre y una contraseña para crear su cuenta.',
         'name' => 'Nombre completo',
         'password' => 'Contraseña',
-        'password_hint' => 'Al menos 12 caracteres. Evite contraseñas que use en otros sitios.',
+        'password_hint' => 'Evite contraseñas que use en otros sitios.',
         'password_confirmation' => 'Confirmar contraseña',
         'submit' => 'Crear cuenta',
         'error_title' => 'Revise el formulario',
         'error_body' => 'Algunos campos requieren su atención.',
         'invalid_title' => 'Esta invitación ya no es válida',
         'invalid_body' => 'El enlace venció, ya se utilizó o fue reemplazado por una invitación más reciente. Pida al administrador de su equipo que lo invite de nuevo.',
+    ],
+
+    'password' => [
+        // Compartido por <x-password-input> y PasswordField (ADR-0046).
+        'show' => 'Mostrar contraseña',
+        'hide' => 'Ocultar contraseña',
+        'requirements' => [
+            'title' => 'Requisitos de la contraseña',
+            'min_length' => 'Al menos :count caracteres',
+            'uncompromised' => 'No aparece en filtraciones de datos conocidas',
+            'met' => 'Cumplido',
+            'not_met' => 'Aún no se cumple',
+            'on_submit' => 'Se comprueba al enviar',
+        ],
+        'guidance' => 'Consejo: una frase de varias palabras sin relación entre sí es larga y fácil de recordar.',
+        'mismatch' => 'Las contraseñas no coinciden.',
     ],
 
     'mail' => [

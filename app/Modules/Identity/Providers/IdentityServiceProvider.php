@@ -11,6 +11,7 @@ use App\Modules\Identity\Console\ResetPasswordCommand;
 use App\Modules\Identity\Console\ResetTwoFactorCommand;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ImpersonationState;
+use App\Modules\Identity\Support\PasswordPolicy;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Auth;
@@ -60,12 +61,8 @@ final class IdentityServiceProvider extends ServiceProvider
             return (new ImpersonationState($request->session()))->isActive() ? false : null;
         });
 
-        // Plan 17.3: at least 12 characters and not in known breaches.
-        Password::defaults(static function (): Password {
-            $min = config('axispay.passwords.min_length', 12);
-            $rule = Password::min(is_int($min) ? $min : 12);
-
-            return config('axispay.passwords.check_uncompromised', true) === true ? $rule->uncompromised() : $rule;
-        });
+        // Plan 17.3: one policy (PasswordPolicy, ADR-0046); Password::defaults()
+        // mirrors it for any code (Filament included) that asks Laravel.
+        Password::defaults(static fn (): Password => PasswordPolicy::rule());
     }
 }

@@ -85,6 +85,14 @@ return [
         'fee' => 'Processing fee (read-only)',
     ],
 
+    'passwords' => [
+        'title' => 'Password input',
+        'intro' => 'One component for every password field: a reveal button everywhere, and a live policy checklist when a password is set. Filament forms use PasswordField, its twin.',
+        'current' => 'Current password (sign-in, re-authentication)',
+        'new' => 'New password with confirmation',
+        'error' => 'These credentials do not match our records.',
+    ],
+
     'badges' => [
         'title' => 'Badges',
         'draft' => 'Draft',

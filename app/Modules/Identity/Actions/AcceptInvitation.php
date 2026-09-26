@@ -16,13 +16,17 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserInvitation;
 use App\Modules\Identity\Services\InvitationLookup;
 use App\Modules\Identity\Services\UserDirectory;
+use App\Modules\Identity\Support\PasswordPolicy;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Turns a pending invitation into a tenant user (plan 17.3). The invitation
  * row is locked, so a token can be used exactly once even with concurrent
- * submissions; expired, revoked or used invitations are rejected.
+ * submissions; expired, revoked or used invitations are rejected. The
+ * password is checked against PasswordPolicy before anything else (ADR-0046),
+ * so no caller can create an account with a weaker one.
  */
 final readonly class AcceptInvitation
 {
@@ -34,8 +38,13 @@ final readonly class AcceptInvitation
         private RoleGrantGuard $grants,
     ) {}
 
+    /**
+     * @throws ValidationException when the password breaks the policy
+     */
     public function handle(AcceptInvitationData $data): User
     {
+        PasswordPolicy::validate($data->password);
+
         $found = $this->lookup->findByToken($data->token) ?? throw new InvitationNotPendingException;
 
         $user = $this->context->runAsTenant($found->tenant_id, false, fn (): ?User => DB::transaction(function () use ($found, $data): ?User {

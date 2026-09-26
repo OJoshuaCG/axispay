@@ -7,9 +7,11 @@ namespace App\Modules\Identity\Filament\Pages;
 use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Support\Filament\Forms\PasswordField;
 use Filament\Auth\Http\Responses\Contracts\LoginResponse;
 use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Facades\Filament;
+use Filament\Schemas\Components\Component;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 
@@ -18,7 +20,9 @@ use Illuminate\Validation\ValidationException;
  * attempts are throttled per account (plan 17.3, ADR-0034): the key is the
  * SHA-256 of the normalized e-mail, so spreading attempts over many IPs does
  * not help, and neither the key nor the audit entry contains the e-mail.
- * Failed 2FA codes count as failed attempts too.
+ * Failed 2FA codes count as failed attempts too. The password field is
+ * PasswordField in "current" mode (ADR-0046). There is no password reset in
+ * the panels, so Filament's reset link hint is not carried over.
  */
 final class Login extends BaseLogin
 {
@@ -56,6 +60,14 @@ final class Login extends BaseLogin
         }
 
         return $response;
+    }
+
+    protected function getPasswordFormComponent(): Component
+    {
+        return PasswordField::make('password')
+            ->forCurrentPassword()
+            ->label(__('filament-panels::auth/pages/login.form.password.label'))
+            ->required();
     }
 
     public static function throttleKeyFor(string $panelId, string $email): string

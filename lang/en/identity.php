@@ -79,13 +79,29 @@ return [
         'intro' => 'You were invited with the address :email. Choose your name and a password to create your account.',
         'name' => 'Full name',
         'password' => 'Password',
-        'password_hint' => 'At least 12 characters. Avoid passwords you use elsewhere.',
+        'password_hint' => 'Avoid passwords you use elsewhere.',
         'password_confirmation' => 'Confirm password',
         'submit' => 'Create account',
         'error_title' => 'Please check the form',
         'error_body' => 'Some fields need your attention.',
         'invalid_title' => 'This invitation is no longer valid',
         'invalid_body' => 'The link has expired, was already used or was replaced by a newer invitation. Ask your team administrator to invite you again.',
+    ],
+
+    'password' => [
+        // Shared by <x-password-input> and PasswordField (ADR-0046).
+        'show' => 'Show password',
+        'hide' => 'Hide password',
+        'requirements' => [
+            'title' => 'Password requirements',
+            'min_length' => 'At least :count characters',
+            'uncompromised' => 'Not found in known data leaks',
+            'met' => 'Met',
+            'not_met' => 'Not met yet',
+            'on_submit' => 'Checked when you submit',
+        ],
+        'guidance' => 'Tip: a passphrase of a few unrelated words is long and easy to remember.',
+        'mismatch' => 'The passwords do not match.',
     ],
 
     'mail' => [

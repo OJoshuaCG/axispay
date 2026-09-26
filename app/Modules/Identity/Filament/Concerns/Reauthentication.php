@@ -8,9 +8,9 @@ use App\Modules\Identity\Actions\Reauthenticate;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ReauthenticationWindow;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
+use App\Support\Filament\Forms\PasswordField;
 use Closure;
 use Filament\Facades\Filament;
-use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Utilities\Get;
 use Illuminate\Validation\ValidationException;
 use SensitiveParameter;
@@ -29,14 +29,12 @@ final class Reauthentication
     /**
      * @param  (Closure(Get): bool)|null  $when  extra condition (e.g. only for sensitive roles)
      */
-    public static function field(?Closure $when = null): TextInput
+    public static function field(?Closure $when = null): PasswordField
     {
-        return TextInput::make(self::FIELD)
+        return PasswordField::make(self::FIELD)
+            ->forCurrentPassword()
             ->label(__('identity.reauthentication.field'))
             ->helperText(__('identity.reauthentication.help'))
-            ->password()
-            ->revealable()
-            ->autocomplete('current-password')
             ->required()
             ->visible(static fn (Get $get): bool => ! app(ReauthenticationWindow::class)->isConfirmed() && ($when === null || $when($get)))
             ->dehydrated();

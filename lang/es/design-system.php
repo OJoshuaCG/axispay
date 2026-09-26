@@ -82,6 +82,14 @@ return [
         'fee' => 'Comisión de procesamiento (solo lectura)',
     ],
 
+    'passwords' => [
+        'title' => 'Campo de contraseña',
+        'intro' => 'Un solo componente para cada campo de contraseña: botón para mostrarla en todos, y lista de requisitos en vivo al crear una contraseña. Los formularios de Filament usan PasswordField, su equivalente.',
+        'current' => 'Contraseña actual (inicio de sesión, reautenticación)',
+        'new' => 'Contraseña nueva con confirmación',
+        'error' => 'Estas credenciales no coinciden con nuestros registros.',
+    ],
+
     'badges' => [
         'title' => 'Insignias',
         'draft' => 'Borrador',

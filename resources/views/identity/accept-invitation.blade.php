@@ -23,9 +23,19 @@
 
             <form method="POST" action="{{ request()->fullUrl() }}" class="grid gap-stack-md">
                 @csrf
+                {{-- No name, not submitted: tells password managers which account the new password belongs to. --}}
+                <input type="email" value="{{ $email }}" autocomplete="username" hidden readonly>
                 <x-input name="name" :label="__('identity.invitation.name')" autocomplete="name" :value="old('name')" :error="$errors->first('name')" required />
-                <x-input name="password" type="password" :label="__('identity.invitation.password')" :hint="__('identity.invitation.password_hint')" autocomplete="new-password" :error="$errors->first('password')" required />
-                <x-input name="password_confirmation" type="password" :label="__('identity.invitation.password_confirmation')" autocomplete="new-password" required />
+                <x-password-input
+                    name="password"
+                    mode="new"
+                    :confirm="true"
+                    :label="__('identity.invitation.password')"
+                    :hint="__('identity.invitation.password_hint')"
+                    :confirm-label="__('identity.invitation.password_confirmation')"
+                    :error="$errors->first('password')"
+                    required
+                />
                 <div>
                     <x-button type="submit" variant="primary">{{ __('identity.invitation.submit') }}</x-button>
                 </div>

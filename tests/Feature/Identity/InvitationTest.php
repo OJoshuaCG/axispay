@@ -24,6 +24,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\post;
@@ -225,4 +226,38 @@ it('only offers roles the inviter can grant in the invite form (H1)', function (
 
     expect(array_keys(app(RoleGrantGuard::class)->grantableRoleOptions($admin)))
         ->toBe(['admin', 'finance', 'link_creator', 'viewer']);
+});
+
+it('validates the password in AcceptInvitation itself, through PasswordPolicy (ADR-0046)', function (): void {
+    $owner = tenantUser();
+    $url = inviteAndCaptureUrl($owner, 'policy@example.com');
+
+    expect(fn () => app(AcceptInvitation::class)->handle(new AcceptInvitationData(tokenFromUrl($url), 'Short', 'too-short')))
+        ->toThrow(ValidationException::class);
+
+    expect(User::query()->withoutGlobalScopes()->where('email', 'policy@example.com')->exists())->toBeFalse();
+
+    // The link still works with a password that meets the policy.
+    post($url, ['name' => 'Good', 'password' => 'a-long-password-123', 'password_confirmation' => 'short'])->assertSessionHasErrors('password');
+    post($url, ['name' => 'Good', 'password' => 'a-long-password-123', 'password_confirmation' => 'a-long-password-123'])->assertRedirect();
+});
+
+it('renders the accept form with the shared password component: reveal buttons, checklist and mismatch hint', function (): void {
+    config(['axispay.passwords.check_uncompromised' => true]);
+    $owner = tenantUser();
+    $url = inviteAndCaptureUrl($owner, 'form@example.com');
+
+    $html = get($url)->assertOk()->getContent();
+
+    expect(substr_count((string) $html, 'data-password-toggle'))->toBe(2)
+        ->and($html)->toContain('aria-controls="password"')
+        ->toContain('aria-controls="password_confirmation"')
+        ->toContain('aria-pressed="false"')
+        ->toContain('aria-label="'.__('identity.password.show').'"')
+        ->toContain('autocomplete="new-password"')
+        ->toContain('data-password-requirements')
+        ->toContain(__('identity.password.requirements.min_length', ['count' => 12]))
+        ->toContain(__('identity.password.requirements.on_submit'))
+        ->toContain('data-password-mismatch')
+        ->toContain('aria-live="polite"');
 });

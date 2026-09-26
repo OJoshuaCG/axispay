@@ -284,6 +284,30 @@
             </div>
         </section>
 
+        {{-- Password input (ADR-0046) --}}
+        <section class="flex flex-col gap-stack-lg" aria-labelledby="passwords">
+            <h2 id="passwords" class="text-3xl font-semibold">{{ __('design-system.passwords.title') }}</h2>
+            <p class="max-w-content text-fg-secondary">{{ __('design-system.passwords.intro') }}</p>
+            <div class="grid max-w-content gap-stack-lg md:grid-cols-2">
+                <div class="flex min-w-0 flex-col gap-stack-sm">
+                    <h3 class="text-lg font-semibold">{{ __('design-system.passwords.current') }}</h3>
+                    <x-password-input name="ds-current-password" :label="__('identity.invitation.password')" />
+                    <x-password-input name="ds-current-password-error" :label="__('identity.invitation.password')" :error="__('design-system.passwords.error')" />
+                </div>
+                <div class="flex min-w-0 flex-col gap-stack-sm">
+                    <h3 class="text-lg font-semibold">{{ __('design-system.passwords.new') }}</h3>
+                    <x-password-input
+                        name="ds-new-password"
+                        mode="new"
+                        :confirm="true"
+                        :label="__('identity.invitation.password')"
+                        :hint="__('identity.invitation.password_hint')"
+                        :confirm-label="__('identity.invitation.password_confirmation')"
+                    />
+                </div>
+            </div>
+        </section>
+
         {{-- Badges --}}
         <section class="flex flex-col gap-stack-lg" aria-labelledby="badges">
             <h2 id="badges" class="text-3xl font-semibold">{{ __('design-system.badges.title') }}</h2>
