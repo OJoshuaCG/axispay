@@ -123,9 +123,10 @@ These are local-only, non-secret credentials. Never create them anywhere else.
 - **Invitations:** Users → Invite user. With `MAIL_MAILER=log`, the signed link
   is written to `storage/logs/laravel.log`; open it on the app host.
 - **Tenants in the admin panel** (ADR-0043), superadmin only unless noted:
-  - **Create** with or without an owner e-mail. Without one, invite the owner
-    later from the tenant's view page → **Invitations** → Invite owner (always
-    the owner role; the owner invites everyone else from the tenant panel).
+  - **Create** needs an owner e-mail (ADR-0045): the owner gets an invitation
+    (always the owner role; the owner invites everyone else from the tenant
+    panel). An address that already belongs to a user is refused: e-mails are
+    unique and a user belongs to one tenant, so use another address.
   - **Edit** (list row or view page): legal and display name, time zone,
     default language, support e-mail. Not on a closed tenant. The status is
     changed only with **Change status** (reason; closing asks to retype the
@@ -135,8 +136,21 @@ These are local-only, non-secret credentials. Never create them anywhere else.
     new link valid for 72 hours and kills the old one; **Revoke** (pending)
     kills the link. Both count against the per-tenant invitation limit (resend)
     and are audited.
-  - **Users** tab: read-only (roles, active, 2FA yes/no, last sign-in).
-    `support_readonly` admins see e-mails masked.
+  - **Users** tab: roles, active, 2FA yes/no, last sign-in. `support_readonly`
+    admins see e-mails masked. **Make owner** (superadmin, tenant not closed,
+    active users who are not owners yet): adds the owner role and keeps the
+    other roles; asks for a reason (10+ characters) and your password or 2FA
+    code; audited as `owner.promoted` in the platform and tenant logs; the
+    tenant's owners and the user get an e-mail (queued).
+  - **Owner** column on the list (Active / Pending invitation / None) and a
+    **No active owner** filter. "Active" means a user who is not deactivated
+    holds the owner role. The view page warns while there is no active owner,
+    shows the owner invitation's expiry, and offers **Invite owner** and
+    **Resend owner invitation**.
+  - **Recovering ownership:** if the person has no account, invite (or resend)
+    from the warning. If they already are a user of that tenant, use **Make
+    owner**. If their account is deactivated and no owner is left, reactivate
+    it first with the account recovery CLI (ADR-0041).
   - Tenants are never deleted (the audit log references them): close them.
 - **Mail check:** `php artisan axispay:mail-test you@example.com` sends a test
   message now through the default mailer and prints mailer, host, port, scheme,

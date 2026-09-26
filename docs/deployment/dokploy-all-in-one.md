@@ -270,7 +270,7 @@ php artisan axispay:create-platform-admin
 
 It is interactive and never takes the password as an argument. Sign in at the admin host and set up 2FA (mandatory for platform admins).
 
-Check outgoing mail with `php artisan axispay:mail-test you@example.com` (add `--queue` to go through this container's workers). Then create the first tenant (**Tenants → New tenant**) with an **Owner e-mail**, or leave it empty and use **Invite owner** on the tenant's **Invitations** tab later; resend and revoke are on the same list (ADR-0043).
+Check outgoing mail with `php artisan axispay:mail-test you@example.com` (add `--queue` to go through this container's workers). Then create the first tenant (**Tenants → New tenant**). **Owner e-mail** is required and cannot already have an account (ADR-0045); resend and revoke are on the tenant's **Invitations** tab (ADR-0043). To recover a tenant without an active owner (list filter **No active owner**), see [Recover ownership](dokploy.md#7-first-run-create-the-first-platform-admin) in the main guide: invite or resend from the tenant's warning, or **Users → Make owner** for someone who already is a user of that tenant.
 
 ---
 

@@ -368,7 +368,15 @@ The command is interactive and never takes the password as an argument. Sign in 
 
 Before inviting anyone, check outgoing mail: `php artisan axispay:mail-test you@example.com` ([Outgoing mail](#outgoing-mail)).
 
-Then create the first tenant: **Tenants → New tenant**. Either fill **Owner e-mail** (the owner gets an invitation valid for 72 hours), or leave it empty and invite the owner later from the tenant's page → **Invitations** → **Invite owner**. The same list resends an invitation (new link, the old one stops working) and revokes it (ADR-0043). Tenants are never deleted: retire one with **Change status → Closed**.
+Then create the first tenant: **Tenants → New tenant**. **Owner e-mail** is required (ADR-0045): the owner gets an invitation valid for 72 hours. It cannot be an address that already has an account (e-mails are unique across the platform and a user belongs to one tenant). The tenant's **Invitations** list resends an invitation (new link, the old one stops working) and revokes it (ADR-0043). Tenants are never deleted: retire one with **Change status → Closed**.
+
+**Recover ownership.** The tenant list shows an **Owner** column (Active, Pending invitation, None) and a **No active owner** filter. On a tenant without an active owner, the view page shows a warning:
+
+- The person has no account: **Invite owner**, or **Resend owner invitation** if the link expired.
+- The person is already a user of that tenant: **Users** tab → **Make owner** (superadmin; a reason and your password or 2FA code; audited on both sides; the owners and the user are e-mailed).
+- Their account is deactivated and no owner is left: reactivate it with the [account recovery](#account-recovery) commands first.
+
+Tenants created before the owner e-mail was required keep working; the filter finds them.
 
 Never run `db:seed --class=DevelopmentSeeder` outside local: it refuses unless `APP_ENV=local`.
 

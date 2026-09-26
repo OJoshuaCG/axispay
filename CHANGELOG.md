@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Creating a tenant requires an **owner e-mail** (ADR-0045, plan 17.2), in the
+  admin panel and in the `CreateTenant` action. An address that already
+  belongs to a user is refused before anything is written. Existing tenants
+  without an owner keep working.
+
 - Panels and Blade pages default to the **light** theme (ADR-0044); a saved
   choice is kept, and "System" still follows the OS. The panels have a
   visible light/dark/system control on the sign-in pages and in the topbar
@@ -55,6 +60,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   production image, `web` and `all-in-one` roles, direct and behind a proxy.
 
 ### Added
+
+- Platform panel: **Owner** column on the tenant list (Active / Pending
+  invitation / None) and a **No active owner** filter, computed in the list
+  query without N+1 (`PlatformAdmin\Services\TenantOwnership`). The tenant
+  view warns while there is no active owner, shows the owner invitation's
+  expiry and offers **Invite owner** and **Resend owner invitation**
+  (ADR-0045).
+- **Make owner** on a tenant's Users tab (superadmin, `PromoteToOwner`):
+  adds the owner role to an active user and keeps their other roles; needs a
+  reason and a fresh re-authentication; not on closed tenants; audited as
+  `owner.promoted` in the platform and tenant logs; e-mails the tenant's
+  owners and the user (queued, tenant language). It does not go through the
+  tenant-side `RoleGrantGuard`, which still stops admins from granting owner.
 
 - Tenant lifecycle in the admin panel (ADR-0043). **Edit** a tenant's profile
   (legal and display name, time zone, default language, support e-mail) from
