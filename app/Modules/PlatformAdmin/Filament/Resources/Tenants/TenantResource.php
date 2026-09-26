@@ -134,8 +134,13 @@ final class TenantResource extends Resource
                     ->query(static fn (Builder $query): Builder => app(TenantOwnership::class)->whereHasActiveOwner($query, false)),
             ])
             ->defaultSort('created_at', 'desc')
-            // A row opens the view page (ListRecords' default record URL), so
-            // there is no separate "View" action (ADR-0044).
+            // A row opens the view page, so there is no separate "View"
+            // action (ADR-0044). Explicit on purpose: ListRecords' default
+            // record URL takes the first visible "view" or "edit" TABLE
+            // action, which with only EditAction here sent superadmins to
+            // the edit page, where the status and "View as user" actions
+            // are not offered.
+            ->recordUrl(static fn (Tenant $record): string => self::getUrl('view', ['record' => $record]))
             ->recordActions([EditAction::make()])
             ->emptyStateIcon(Heroicon::OutlinedBuildingOffice2)
             ->emptyStateHeading(__('platform.tenants.empty.heading'))

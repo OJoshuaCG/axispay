@@ -155,6 +155,9 @@ return [
         'reason' => 'Reason',
         'banner' => 'You are viewing the panel as :name (read-only). The session ends at :time.',
         'stop' => 'Stop viewing as user',
+        'row_action' => 'View as this user',
+        'row_heading' => 'View the panel as :name',
+        'no_active_users' => 'This tenant has no active users yet. Invite an owner first.',
         'errors' => [
             'not_allowed' => 'This user cannot be impersonated.',
         ],

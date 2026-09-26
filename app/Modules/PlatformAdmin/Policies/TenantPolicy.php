@@ -59,6 +59,16 @@ final class TenantPolicy
         return $admin->isSuperadmin();
     }
 
+    /**
+     * "View as user" (plan 17.4): superadmins, into any tenant whose status
+     * allows panel access (pending_onboarding included: the owner is setting
+     * it up). StartImpersonation re-checks the target user.
+     */
+    public function impersonateUsers(PlatformAdmin $admin, Tenant $tenant): bool
+    {
+        return $admin->isSuperadmin() && $admin->disabled_at === null && $tenant->status->allowsPanelAccess();
+    }
+
     public function changeStatus(PlatformAdmin $admin, Tenant $tenant): bool
     {
         return $admin->isSuperadmin() && $tenant->status->allowedTransitions() !== [];

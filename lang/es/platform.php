@@ -155,6 +155,9 @@ return [
         'reason' => 'Motivo',
         'banner' => 'Está viendo el panel como :name (solo lectura). La sesión termina a las :time.',
         'stop' => 'Dejar de ver como usuario',
+        'row_action' => 'Ver como este usuario',
+        'row_heading' => 'Ver el panel como :name',
+        'no_active_users' => 'Este cliente todavía no tiene usuarios activos. Invite primero a un propietario.',
         'errors' => [
             'not_allowed' => 'No es posible suplantar a este usuario.',
         ],

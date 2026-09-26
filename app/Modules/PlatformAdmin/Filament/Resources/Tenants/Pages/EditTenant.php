@@ -9,6 +9,7 @@ use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\Tenancy\Actions\UpdateTenantProfile;
 use App\Modules\Tenancy\Data\UpdateTenantProfileData;
 use App\Modules\Tenancy\Models\Tenant;
+use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -20,6 +21,12 @@ use Illuminate\Database\Eloquent\Model;
 final class EditTenant extends EditRecord
 {
     protected static string $resource = TenantResource::class;
+
+    /** Back to the view page, where status changes and "View as user" live. */
+    protected function getHeaderActions(): array
+    {
+        return [ViewAction::make()->color('gray')];
+    }
 
     /**
      * @param  array<string, mixed>  $data

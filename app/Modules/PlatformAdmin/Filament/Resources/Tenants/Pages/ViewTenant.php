@@ -11,10 +11,9 @@ use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
 use App\Modules\Identity\Exceptions\InvitationNotPendingException;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserInvitation;
-use App\Modules\PlatformAdmin\Actions\StartImpersonation;
 use App\Modules\PlatformAdmin\Enums\TenantOwnershipState;
-use App\Modules\PlatformAdmin\Exceptions\ImpersonationNotAllowedException;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\TenantResource;
+use App\Modules\PlatformAdmin\Filament\Support\ImpersonationUi;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\PlatformAdmin\Services\TenantOwnership;
@@ -51,6 +50,13 @@ final class ViewTenant extends ViewRecord
     private UserInvitation|false|null $ownerInvitation = null;
 
     /**
+     * Per-request memo of the users "View as user" can pick.
+     *
+     * @var array<string, string>|null
+     */
+    private ?array $impersonableUsers = null;
+
+    /**
      * The profile, with a warning above it while the tenant has no active
      * owner (plan 17.2, ADR-0045).
      */
@@ -68,6 +74,7 @@ final class ViewTenant extends ViewRecord
     {
         $this->ownershipState = null;
         $this->ownerInvitation = null;
+        $this->impersonableUsers = null;
     }
 
     protected function getHeaderActions(): array
@@ -255,13 +262,21 @@ final class ViewTenant extends ViewRecord
             });
     }
 
+    /**
+     * Plan 17.4: shown to superadmins for every tenant whose status allows
+     * panel access (pending_onboarding included), disabled with the reason
+     * as tooltip while the tenant has no active user. The Users tab offers
+     * the same per user.
+     */
     private function impersonateAction(): Action
     {
         return Action::make('impersonate')
             ->label(__('platform.impersonation.action'))
             ->icon(Heroicon::OutlinedEye)
             ->color('gray')
-            ->visible(fn (): bool => PlatformActor::current()->isSuperadmin() && $this->tenant()->status->allowsPanelAccess())
+            ->visible(fn (): bool => PlatformActor::current()->can('impersonateUsers', $this->tenant()))
+            ->disabled(fn (): bool => $this->impersonableUsers() === [])
+            ->tooltip(fn (): ?string => $this->impersonableUsers() === [] ? $this->noImpersonableUsersMessage() : null)
             ->modalDescription(__('platform.impersonation.description'))
             ->schema([
                 Select::make('user_id')
@@ -269,10 +284,7 @@ final class ViewTenant extends ViewRecord
                     ->options(fn (): array => $this->impersonableUsers())
                     ->searchable()
                     ->required(),
-                Textarea::make('reason')
-                    ->label(__('platform.impersonation.reason'))
-                    ->required()
-                    ->maxLength(500),
+                ImpersonationUi::reasonField(),
             ])
             ->action(function (array $data, Action $action): void {
                 $user = $this->tenantUsers()->find(is_string($data['user_id'] ?? null) ? $data['user_id'] : '');
@@ -283,17 +295,13 @@ final class ViewTenant extends ViewRecord
                     return;
                 }
 
-                try {
-                    $started = app(StartImpersonation::class)->handle(PlatformActor::current(), $user, is_string($data['reason'] ?? null) ? $data['reason'] : '');
-                } catch (ImpersonationNotAllowedException) {
-                    Notification::make()->danger()->title(__('platform.impersonation.errors.not_allowed'))->send();
-                    $action->halt();
-
-                    return;
-                }
-
-                $this->redirect($started->handoffUrl);
+                ImpersonationUi::start($user, $data['reason'] ?? null, $action, $this);
             });
+    }
+
+    private function noImpersonableUsersMessage(): string
+    {
+        return __('platform.impersonation.no_active_users');
     }
 
     /**
@@ -301,13 +309,17 @@ final class ViewTenant extends ViewRecord
      */
     private function impersonableUsers(): array
     {
+        if ($this->impersonableUsers !== null) {
+            return $this->impersonableUsers;
+        }
+
         $options = [];
 
         foreach ($this->tenantUsers()->whereNull('disabled_at')->orderBy('name')->get() as $user) {
             $options[$user->id] = $user->name.' <'.$user->email.'>';
         }
 
-        return $options;
+        return $this->impersonableUsers = $options;
     }
 
     /**

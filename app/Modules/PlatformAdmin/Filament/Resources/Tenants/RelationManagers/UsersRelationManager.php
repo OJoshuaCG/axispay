@@ -10,6 +10,7 @@ use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Models\User;
 use App\Modules\PlatformAdmin\Actions\PromoteToOwner;
 use App\Modules\PlatformAdmin\Exceptions\OwnerPromotionNotAllowedException;
+use App\Modules\PlatformAdmin\Filament\Support\ImpersonationUi;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
@@ -32,8 +33,8 @@ use Livewire\Attributes\On;
 
 /**
  * Users of the viewed tenant (ADR-0043). User management belongs to the
- * tenant's owners and support uses impersonation; the one write action is
- * "Make owner" (ADR-0045): a superadmin grants the owner role to an active
+ * tenant's owners. Row actions: "View as this user" (plan 17.4, same rules
+ * and StartImpersonation as the page header) and "Make owner" (ADR-0045): a superadmin grants the owner role to an active
  * user, with a reason and a fresh re-authentication, through PromoteToOwner.
  * 2FA is shown as enabled or not, never a secret.
  *
@@ -100,7 +101,7 @@ final class UsersRelationManager extends RelationManager
                     ->toggleable(),
             ])
             ->defaultSort('name')
-            ->recordActions([$this->promoteOwnerAction()])
+            ->recordActions([$this->impersonateAction(), $this->promoteOwnerAction()])
             ->emptyStateHeading(__('platform.tenants.users.empty'));
     }
 
@@ -118,6 +119,24 @@ final class UsersRelationManager extends RelationManager
         abort_unless($owner instanceof Tenant, 404);
 
         return $owner;
+    }
+
+    private function impersonateAction(): Action
+    {
+        return Action::make('impersonate')
+            ->label(__('platform.impersonation.row_action'))
+            ->icon(Heroicon::OutlinedEye)
+            ->color('gray')
+            ->visible(fn (?User $record): bool => $record instanceof User
+                && ! $record->isDisabled()
+                && PlatformActor::current()->can('impersonateUsers', $this->tenant()))
+            ->modalHeading(static fn (User $record): string => __('platform.impersonation.row_heading', ['name' => $record->name]))
+            ->modalDescription(__('platform.impersonation.description'))
+            ->modalSubmitActionLabel(__('platform.impersonation.action'))
+            ->schema([ImpersonationUi::reasonField()])
+            ->action(function (array $data, User $record, Action $action): void {
+                ImpersonationUi::start($record, $data['reason'] ?? null, $action, $this);
+            });
     }
 
     private function promoteOwnerAction(): Action
