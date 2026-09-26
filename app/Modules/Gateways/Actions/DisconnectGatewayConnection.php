@@ -10,6 +10,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Enums\ConnectionNotice;
 use App\Modules\Gateways\Enums\ConnectionStatus;
 use App\Modules\Gateways\Enums\DisconnectReason;
+use App\Modules\Gateways\Events\GatewayConnectionDisconnected;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Notifications\GatewayConnectionNotification;
 use App\Modules\Gateways\Services\GatewayNotificationRecipients;
@@ -35,7 +36,8 @@ use Throwable;
  *    (ADR-0047), so the disconnection is local; the merchant keeps their
  *    Stripe account.
  *
- * Active links are canceled here once links exist (Phase 3, plan 12.3.4).
+ * Once committed, GatewayConnectionDisconnected lets the PaymentLinks module
+ * cancel the active links of that tenant and mode (plan 12.3.4).
  */
 final readonly class DisconnectGatewayConnection
 {
@@ -103,7 +105,10 @@ final readonly class DisconnectGatewayConnection
         });
 
         if ($changed) {
+            // Owners are told first: nothing that follows may keep them
+            // from hearing about the disconnection.
             Notification::send($this->recipients->of($updated->tenant_id), new GatewayConnectionNotification(ConnectionNotice::Disconnected, $updated->livemode));
+            event(new GatewayConnectionDisconnected($updated->id, $updated->tenant_id, $updated->livemode));
         }
 
         return $updated;

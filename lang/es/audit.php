@@ -82,6 +82,8 @@ return [
         'gateway_credentials_invalid' => 'Llaves de API de Stripe ya no válidas',
         'api_key_created' => 'Llave de API creada',
         'api_key_revoked' => 'Llave de API revocada',
+        'payment_link_created' => 'Link de pago creado',
+        'payment_link_canceled' => 'Link de pago cancelado',
     ],
 
 ];

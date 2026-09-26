@@ -48,12 +48,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Supported currencies (plan section 8.1)
+    | Supported currencies (plan section 8.1, ADR-0048)
     |--------------------------------------------------------------------------
     |
-    | Limits are in minor units. The minimums are placeholders based on the
-    | historical Stripe references and the maximums are platform risk limits;
-    | both remain to be confirmed (open question #6) before Phase 3.
+    | Limits are in minor units.
+    |
+    |  - min_charge_minor: Stripe's documented minimum charge per currency
+    |    (docs.stripe.com/currencies, "Minimum charge amount by currency",
+    |    checked 2026-09-26): USD 0.50, MXN 10.00.
+    |  - max_charge_minor: platform risk cap (owner decision 2026-09-26):
+    |    USD 10,000.00, MXN 200,000.00. A tenant may lower it
+    |    (`links.max_amount_minor` in tenants.settings), never raise it.
     |
     */
 
@@ -61,12 +66,12 @@ return [
         'USD' => [
             'enabled' => true,
             'min_charge_minor' => 50,
-            'max_charge_minor' => 1_000_000,
+            'max_charge_minor' => (int) env('AXISPAY_MAX_CHARGE_USD_MINOR', 1_000_000),
         ],
         'MXN' => [
             'enabled' => true,
             'min_charge_minor' => 1_000,
-            'max_charge_minor' => 20_000_000,
+            'max_charge_minor' => (int) env('AXISPAY_MAX_CHARGE_MXN_MINOR', 20_000_000),
         ],
     ],
 
@@ -74,12 +79,47 @@ return [
     |--------------------------------------------------------------------------
     | Platform limits (plan section 7.3; not configurable by tenants)
     |--------------------------------------------------------------------------
+    |
+    | Link expiration (owner decision 2026-09-26, ADR-0048): 7 days by default,
+    | 15 minutes minimum, 90 days maximum. A tenant may lower its default and
+    | its maximum (tenants.settings `links`), never above these values.
+    |
     */
 
     'limits' => [
+        'default_expiration_hours' => 168,
         'max_expiration_hours' => 2160,
         'min_expiration_minutes' => 15,
         'max_fx_markup_bps' => 1000,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payment links (plan 7.5, 11.1)
+    |--------------------------------------------------------------------------
+    */
+
+    'links' => [
+        // Base of the public URL `<base>/l/{public_token}`. Empty:
+        // https://<pay host>. Locally, e.g. http://pay.localhost:8000.
+        'public_base_url' => env('AXISPAY_PAY_BASE_URL'),
+
+        // Links expired per batch of the expiration job (every minute), and
+        // the seconds after which a run starts no new batch (below the
+        // 60-second worker timeout).
+        'expire_batch_size' => 500,
+        'expire_time_budget_seconds' => 40,
+
+        // Links read per chunk when a gateway disconnection cancels them.
+        'disconnect_cancel_chunk_size' => 500,
+    ],
+
+    /*
+    | Currency conversion (plan 13) arrives in Phase 6. Until then a link that
+    | asks for conversion is refused with `fx_not_available` (ADR-0048).
+    */
+    'fx' => [
+        'available' => false,
     ],
 
     /*

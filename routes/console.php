@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\PaymentLinks\Jobs\ExpirePaymentLinksJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -24,9 +25,22 @@ Schedule::command('axispay:provider-events:purge')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Plan 9.1: expire active links whose expires_at has passed (ADR-0048).
+Schedule::job(new ExpirePaymentLinksJob)
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Plan 7.8: idempotency records live 24 hours (ADR-0048).
 Schedule::command('axispay:idempotency:purge')
     ->hourly()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Plan 12.3.4: safety net that cancels active links of modes whose gateway
+// connection is gone (ADR-0048).
+Schedule::command('axispay:payment-links:reconcile-gateways')
+    ->everyFifteenMinutes()
     ->withoutOverlapping()
     ->onOneServer();
 

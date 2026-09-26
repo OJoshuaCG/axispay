@@ -7,6 +7,7 @@ use App\Modules\ApiKeys\Providers\ApiKeysServiceProvider;
 use App\Modules\Audit\Providers\AuditServiceProvider;
 use App\Modules\Gateways\Providers\GatewaysServiceProvider;
 use App\Modules\Identity\Providers\IdentityServiceProvider;
+use App\Modules\PaymentLinks\Providers\PaymentLinksServiceProvider;
 use App\Modules\PlatformAdmin\Providers\PlatformAdminServiceProvider;
 use App\Modules\ProviderEvents\Providers\ProviderEventsServiceProvider;
 use App\Modules\Shared\Providers\SharedServiceProvider;
@@ -26,6 +27,7 @@ return [
     GatewaysServiceProvider::class,
     ProviderEventsServiceProvider::class,
     ApiKeysServiceProvider::class,
+    PaymentLinksServiceProvider::class,
     AdminPanelProvider::class,
     AppPanelProvider::class,
 ];

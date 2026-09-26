@@ -82,6 +82,8 @@ return [
         'gateway_credentials_invalid' => 'Stripe API keys no longer valid',
         'api_key_created' => 'API key created',
         'api_key_revoked' => 'API key revoked',
+        'payment_link_created' => 'Payment link created',
+        'payment_link_canceled' => 'Payment link canceled',
     ],
 
 ];

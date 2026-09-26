@@ -98,7 +98,9 @@ final class GatewayConnection extends Model
      */
     public function scopeCurrent(Builder $query, GatewayProvider $provider = GatewayProvider::Stripe): Builder
     {
-        return $query->where('provider', $provider->value)->where('status', '!=', ConnectionStatus::Disconnected->value);
+        // `active_slot` is 1 exactly while the status is not disconnected;
+        // filtering on it uses the unique key (tenant, provider, mode, slot).
+        return $query->where('provider', $provider->value)->where('active_slot', 1);
     }
 
     public function isApiKey(): bool

@@ -30,9 +30,10 @@ return [
         // events (platform rows, AllowsPlatformRows).
         'gateway_connections',
         'provider_events',
-        // Phase 3 (plan 7.2, 7.8).
+        // Phase 3 (plan 7.2, 7.5, 7.8).
         'api_keys',
         'idempotency_records',
+        'payment_links',
     ],
 
     /*
