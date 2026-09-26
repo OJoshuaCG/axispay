@@ -2272,6 +2272,8 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - Endpoint de webhooks de Stripe Connect (verificación, `provider_events`, job, handlers de `account.updated` y `account.application.deauthorized`).
 - **Aceptación:** en modo test, un tenant crea su cuenta conectada, completa el onboarding y queda `active`; un cambio en Stripe se refleja vía webhook; los eventos duplicados no se reprocesan; la fábrica de clientes tiene pruebas para los tres métodos.
 
+> **Nota (2026-09-26, [ADR-0047](../adr/0047-stripe-connection-phase-2-and-api-key-reordering.md)):** por decisión del responsable del proyecto, el método **`api_key` (2C) se adelanta a esta fase**: el equipo de la plataforma será el primer tenant y conectará su propia cuenta con una restricted key y una publishable key. La plataforma de Stripe está en **MX**; las cuentas conectadas son MX por defecto (configurable con `AXISPAY_STRIPE_ALLOWED_COUNTRIES`) y usan controller properties equivalentes a Standard. `platform_onboarding` sigue siendo el método recomendado en la UI y `oauth` queda deshabilitado hasta la fase 4B.
+
 ### Fase 3 — API de links
 
 - `api_keys` (panel para crear y revocar; middleware de autenticación; scopes; prefijos por modo).
@@ -2300,6 +2302,8 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - **2C — API key:** formulario, aviso de riesgo, validaciones de 12.3.3 (prefijos, modo, cuenta, correspondencia de `pk_`/`rk_`, permisos, unicidad), cifrado, creación del webhook endpoint remoto, endpoint `/webhooks/stripe/direct/{connection_id}`, health check diario, estado `invalid_credentials`, actualización de llaves y desconexión con limpieza.
 - Checkout y reembolsos funcionando con los tres métodos (la vista del checkout solo usa `CheckoutClientConfig`).
 - **Aceptación:** casos críticos 18–22; pago exitoso, rechazo y reembolso probados en modo test con cada método; ninguna restricted key en logs (verificado con una prueba que inspecciona los logs generados).
+
+> **Nota (2026-09-26, [ADR-0047](../adr/0047-stripe-connection-phase-2-and-api-key-reordering.md)):** 2C (formulario, validaciones, cifrado, endpoint remoto, endpoint direct, health check, `invalid_credentials`, actualización de llaves y desconexión) se implementó en la fase 2. En esta fase quedan: OAuth (2B), los pagos de punta a punta con los tres métodos (casos 20 y 22) y la confirmación con llaves reales de modo test de los puntos marcados como no verificados en el ADR-0047 (pruebas de contrato `./vendor/bin/pest --group=stripe`).
 
 ### Fase 5 — Webhooks salientes y validación previa al cobro
 

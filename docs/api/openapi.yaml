@@ -17,6 +17,11 @@ info:
       also include `amount_minor` (integer minor units).
     - Every response carries a `Request-Id` header, also present in our logs.
     - The API is server-to-server only: never call it from a payer's browser (no CORS).
+
+    Not part of this contract: the incoming Stripe webhook endpoints served on the same
+    host outside `/v1` (`POST /webhooks/stripe/connect/{mode}`,
+    `POST /webhooks/stripe/direct/{connection_id}`, ADR-0047). They are called by Stripe
+    only, authenticated by Stripe's signature, and answer errors in the same envelope.
 servers:
   - url: https://api.{domain}/v1
     description: Production

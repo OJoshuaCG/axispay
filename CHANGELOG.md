@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Phase 2 — Stripe connection** (ADR-0047). Settings → Stripe connection in
+  the tenant panel (`gateway:manage`, re-authentication for every change):
+  - **Create or connect with Stripe (recommended)**: a Standard-equivalent
+    connected account (MX by default, `AXISPAY_STRIPE_ALLOWED_COUNTRIES`),
+    Stripe-hosted onboarding with return and refresh URLs, status and pending
+    requirements, continue onboarding, refresh status, disconnect.
+  - **Advanced: use my API keys** (`api_key`, brought forward from Phase 4B):
+    restricted key + publishable key with a risk notice; `sk_` keys always
+    refused; mode, account, country, pk ↔ rk and permission checks;
+    excessive permissions need an extra confirmation in live mode; the key
+    is stored encrypted with the dedicated `GATEWAY_CREDENTIALS_KEY` and only
+    shown as `rk_…last4`; a webhook endpoint is created on the merchant
+    account; update keys; disconnect deletes the endpoint and erases the
+    keys; daily health check (`axispay:gateways:check-api-keys`) marks
+    revoked keys `invalid_credentials`.
+- Gateways module: `PaymentGateway` port, `StripeGateway`,
+  `StripeClientFactory` (Connect / direct / platform contexts, pinned API
+  version `2026-08-26.dahlia`, idempotency keys on every create),
+  `GatewayCredentialsEncrypter` with key versions and
+  `axispay:rotate-gateway-credentials-key`, `gateway_connections` table.
+- ProviderEvents module: `POST /webhooks/stripe/connect/{mode}` and
+  `POST /webhooks/stripe/direct/{connection_id}` on the API host (signature
+  on the raw body, one row per event in `provider_events`, 200 at once,
+  `ProcessProviderEventJob` on the `critical` queue re-reads Stripe);
+  handlers for `account.updated` and `account.application.deauthorized`;
+  unroutable events are stored and logged at alert level.
+- A tenant in `pending_onboarding` becomes `active` automatically when a
+  gateway connection can charge (audited, system actor).
+- Platform panel: the tenant view lists its gateway connections (read-only,
+  no secrets).
+- E-mails to owners and `gateway:manage` holders: Stripe connected,
+  disconnected, restricted, invalid API keys, key with excessive permissions.
+- `PasswordField::forSecret()` for pasted secrets (API keys).
+- Stripe contract tests (`./vendor/bin/pest --group=stripe`, run only with
+  test-mode keys exported in the shell).
+- Dependency: `stripe/stripe-php` ^21.3 (21.3.2).
+- Security review fixes (ADR-0047): the Stripe page erases the typed
+  restricted key from its Livewire state on every response (it came back in
+  the snapshot when the form failed validation); direct webhook endpoints
+  subscribe to `account.updated` only, unhandled and unroutable events are
+  stored with a reduced payload, and `axispay:provider-events:purge` (daily)
+  applies the retention of plan 14.4; `axispay:stripe-sync-webhook-endpoints`
+  updates the events of existing endpoints; a revoked old key no longer marks
+  freshly rotated keys invalid; failed connects and key updates leave no row
+  or remote endpoint behind; key updates use a fresh idempotency key per
+  attempt.
+
 ### Changed
 
 - Creating a tenant requires an **owner e-mail** (ADR-0045, plan 17.2), in the

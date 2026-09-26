@@ -162,10 +162,15 @@ Set them in the Application's **Environment** tab. With only one Application the
 | `QUEUE_TIMEOUT` | `60` | Seconds per job. Keep it below the queue's `retry_after` (90) |
 | `QUEUE_TRIES` / `QUEUE_SLEEP` / `QUEUE_MEMORY` | `3` / `3` / `192` | Same meaning as in production |
 | `PHP_FPM_MAX_CHILDREN` | `10` | Minimum `6` (the pool's spare-server settings). Lower it on a small server |
+| `STRIPE_TEST_SECRET` / `STRIPE_TEST_PUBLISHABLE` | **secret** / `pk_test_…` | Platform test keys. Staging uses test mode only; leave the `STRIPE_LIVE_*` variables empty |
+| `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` | **secret** | `whsec_…` of the test Connect endpoint `https://api.<staging domain>/webhooks/stripe/connect/test` ([Stripe](dokploy.md#stripe-phase-2)) |
+| `AXISPAY_STRIPE_ALLOWED_COUNTRIES` | `MX` | Optional (ADR-0047) |
+| `GATEWAY_CREDENTIALS_KEY` | **secret** | `base64:` + 32 random bytes, different from `APP_KEY`, backed up on its own. Required as soon as a tenant connects with API keys |
 
 - **Do not set `SESSION_DOMAIN`.** The application refuses to boot when it is set (ADR-0034).
 - `QUEUE_NAMES` is ignored in this role: the queues are fixed to `critical` and `default,low`.
-- Stripe, Banxico and Turnstile settings arrive in later phases: [Not needed yet](dokploy.md#not-needed-yet).
+- The Stripe webhook endpoints must be reachable by Stripe: a [local deployment without TLS](#local-test-deployment-without-tls) cannot receive them (use a public tunnel for the API host, or test with signed fixtures, see `docs/development.md`).
+- Banxico and Turnstile settings arrive in later phases: [Not needed yet](dokploy.md#not-needed-yet).
 
 ---
 

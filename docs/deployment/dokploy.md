@@ -9,7 +9,7 @@ Why this shape: [ADR-0036](../adr/0036-dokploy-deployment.md). What the image do
 
 > **Staging, demos or a local test server without TLS?** One all-in-one Application is enough: [dokploy-all-in-one.md](dokploy-all-in-one.md) (ADR-0039). Production always uses the four Applications below.
 
-> **Scope.** This guide covers what exists today: Phases 0–1 (tenancy, identity, panels). Stripe, Banxico and Turnstile settings arrive in later phases; they are listed under [Not needed yet](#not-needed-yet).
+> **Scope.** This guide covers what exists today: Phases 0–2 (tenancy, identity, panels, Stripe connection). Banxico and Turnstile settings arrive in later phases; they are listed under [Not needed yet](#not-needed-yet).
 >
 > **Verified against** the Dokploy docs and the Dokploy v0.30.6 source on 2026-09-24. Items marked **(verify)** could not be confirmed in the docs. Check them in your Dokploy version.
 
@@ -147,6 +147,14 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `SENTRY_LARAVEL_DSN` | no | **secret** | Error tracking; disabled while empty (ADR-0029) |
 | `SENTRY_ENVIRONMENT` | no | `production` / `staging` | |
 | `AXISPAY_PASSWORD_CHECK_UNCOMPROMISED` | no | `true` | Breached-password check (needs outbound HTTPS to the HIBP API) |
+| `STRIPE_TEST_SECRET` / `STRIPE_LIVE_SECRET` | yes (Phase 2) | **secret** | Platform secret key per mode (`sk_test_…` / `sk_live_…`). A key of the wrong mode is refused. See [Stripe](#stripe-phase-2) |
+| `STRIPE_TEST_PUBLISHABLE` / `STRIPE_LIVE_PUBLISHABLE` | yes (Phase 2) | `pk_test_…` / `pk_live_…` | Platform publishable key per mode |
+| `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` / `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET` | yes (Phase 2) | **secret** | `whsec_…` of the Connect webhook endpoint of each mode |
+| `AXISPAY_STRIPE_ALLOWED_COUNTRIES` | no | `MX` | Countries a connected account may be in (comma-separated; first = default). ADR-0047 |
+| `AXISPAY_STRIPE_PLATFORM_ONBOARDING` / `AXISPAY_STRIPE_API_KEY_CONNECTIONS` | no | `true` / `true` | Connection methods offered in the tenant panel |
+| `GATEWAY_CREDENTIALS_KEY` | yes (Phase 2) | **secret** | `base64:` + 32 random bytes, generated like `APP_KEY` but **different from it**. Encrypts merchant Stripe keys (api_key method). Back it up separately from `APP_KEY` and from database backups (plan 23.2) |
+| `GATEWAY_CREDENTIALS_KEY_VERSION` | no | `1` | Bump on rotation (see [docs/development.md](../development.md#rotating-gateway_credentials_key)) |
+| `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` | no | **secret** | During a rotation only: `1:base64:…` |
 
 **Do not set `SESSION_DOMAIN`.** Leave it out, or leave it empty. The application refuses to boot when it is set (ADR-0034), because each panel host keeps its own host-only cookie.
 
@@ -218,7 +226,18 @@ MAIL_FROM_ADDRESS=${{environment.MAIL_FROM_ADDRESS}}
 MAIL_FROM_NAME=${{environment.MAIL_FROM_NAME}}
 SENTRY_LARAVEL_DSN=${{environment.SENTRY_LARAVEL_DSN}}
 SENTRY_ENVIRONMENT=${{environment.SENTRY_ENVIRONMENT}}
+STRIPE_TEST_SECRET=${{environment.STRIPE_TEST_SECRET}}
+STRIPE_TEST_PUBLISHABLE=${{environment.STRIPE_TEST_PUBLISHABLE}}
+STRIPE_TEST_CONNECT_WEBHOOK_SECRET=${{environment.STRIPE_TEST_CONNECT_WEBHOOK_SECRET}}
+STRIPE_LIVE_SECRET=${{environment.STRIPE_LIVE_SECRET}}
+STRIPE_LIVE_PUBLISHABLE=${{environment.STRIPE_LIVE_PUBLISHABLE}}
+STRIPE_LIVE_CONNECT_WEBHOOK_SECRET=${{environment.STRIPE_LIVE_CONNECT_WEBHOOK_SECRET}}
+AXISPAY_STRIPE_ALLOWED_COUNTRIES=${{environment.AXISPAY_STRIPE_ALLOWED_COUNTRIES}}
+GATEWAY_CREDENTIALS_KEY=${{environment.GATEWAY_CREDENTIALS_KEY}}
+GATEWAY_CREDENTIALS_KEY_VERSION=${{environment.GATEWAY_CREDENTIALS_KEY_VERSION}}
 ```
+
+The workers and the scheduler need the Stripe and `GATEWAY_CREDENTIALS_*` variables too: they process the incoming webhooks and run the daily api_key health check.
 
 `web`-only settings:
 
@@ -497,7 +516,7 @@ The Dokploy docs recommend this for production ([going to production](https://do
 |---|---|
 | Database (full daily backup, binlogs for point-in-time recovery, monthly restore test; plan 25.2) | On the external MariaDB server. Dokploy's backups do not cover it. |
 | `APP_KEY` | A password manager or vault, **separate** from database backups |
-| `GATEWAY_CREDENTIALS_KEY` (Phase 2+) | Separate from both `APP_KEY` and the database backups (plan 23.2) |
+| `GATEWAY_CREDENTIALS_KEY` | Separate from both `APP_KEY` and the database backups (plan 23.2): whoever holds a database backup must not be able to decrypt the merchants' restricted keys |
 | Dokploy itself | **Web Server → Backups** covers Dokploy's own data, not the application |
 
 ---
@@ -513,6 +532,8 @@ The Dokploy docs recommend this for production ([going to production](https://do
 - [ ] **Admin host allowlist** (plan 4.1, recommended); see below.
 - [ ] Platform admins have 2FA (enforced) and are created only with `axispay:create-platform-admin`.
 - [ ] `APP_KEY` is backed up outside Dokploy.
+- [ ] `GATEWAY_CREDENTIALS_KEY` is set, differs from `APP_KEY`, and is backed up separately from `APP_KEY` and the database backups.
+- [ ] Test and live Stripe keys are in their own variables; the live Connect webhook secret matches the live endpoint.
 
 ### Admin host IP allowlist
 
@@ -591,14 +612,30 @@ Set them on all four Applications, for example as shared variables.
 
 ---
 
+## Stripe (Phase 2)
+
+ADR-0047. The platform Stripe account is in Mexico. For **each mode** (test first, live when going to production):
+
+1. Set `STRIPE_<MODE>_SECRET` and `STRIPE_<MODE>_PUBLISHABLE` from the platform's Stripe Dashboard (Developers → API keys).
+2. In the Stripe Dashboard of that mode, **Developers → Webhooks → Add destination**:
+   - events from **Connected accounts** (a Connect endpoint);
+   - API version `2026-08-26.dahlia` (the version pinned in the application);
+   - URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode;
+   - events `account.updated` and `account.application.deauthorized` (Phase 4 adds the payment events).
+3. Copy the destination's signing secret into `STRIPE_<MODE>_CONNECT_WEBHOOK_SECRET` and redeploy all four Applications.
+4. Generate `GATEWAY_CREDENTIALS_KEY` (same command as `APP_KEY`, a **new** value) and back it up on its own.
+
+Nothing else is registered by hand: for tenants that connect with their own API keys, the application creates a webhook endpoint on the merchant's account pointing at `https://api.<domain>/webhooks/stripe/direct/<connection id>`. The API host must therefore be reachable from Stripe over HTTPS. Webhook routes are rate-limited generously (1,200 requests per minute per IP) and answer in the API error format.
+
+Check: after a deploy, `curl -s -X POST https://api.<domain>/webhooks/stripe/connect/test` answers `400` with `"code": "parameter_invalid"` (no signature), not `404` or `500`.
+
 ## Not needed yet
 
 These settings are defined by later phases of the master plan (section 27). Do not add them before their phase documents them:
 
 | Setting | Phase |
 |---|---|
-| Stripe platform keys, Connect webhook signing secrets (`api.<domain>/webhooks/stripe/connect/{mode}`) | Phase 2 |
-| `GATEWAY_CREDENTIALS_KEY` (separate from `APP_KEY`; its own backup) | Phase 2 (used in 4B) |
+| `STRIPE_<MODE>_CONNECT_CLIENT_ID` (OAuth) | Phase 4B |
 | Cloudflare Turnstile keys; strict CSP on `pay.` | Phase 4 |
 | Banxico SIE token | Phase 6 |
 | `/health/live` and `/health/ready` for external uptime monitoring (plan 24.4) | Later; `/up` covers liveness today |

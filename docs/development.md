@@ -77,6 +77,14 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 | `LOG_STACK` | `single` | The production image logs redacted JSON to stderr instead (ADR-0035). |
 | `TRUSTED_PROXIES` | unset | Production behind Traefik: its network range (`config/trustedproxy.php`). |
 | `SENTRY_LARAVEL_DSN` | empty | Error tracking stays off while empty (ADR-0029). |
+| `STRIPE_TEST_SECRET` / `STRIPE_LIVE_SECRET` | empty | Platform secret key per mode (`sk_test_…` / `sk_live_…`); a key of the wrong mode is refused. Never mix modes (ADR-0047). |
+| `STRIPE_TEST_PUBLISHABLE` / `STRIPE_LIVE_PUBLISHABLE` | empty | Platform publishable key per mode (checkout, Phase 4). |
+| `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` / `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET` | empty | `whsec_…` of the Connect webhook endpoint of each mode (see "Stripe" below). |
+| `AXISPAY_STRIPE_ALLOWED_COUNTRIES` | `MX` | Countries a connected account may be in (comma-separated; the first is the default). |
+| `AXISPAY_STRIPE_PLATFORM_ONBOARDING` / `AXISPAY_STRIPE_API_KEY_CONNECTIONS` | `true` | Connection methods offered in the tenant panel. OAuth stays off until Phase 4B. |
+| `AXISPAY_STRIPE_WEBHOOK_BASE_URL` | empty | Base URL of the webhook endpoint created on a merchant account (api_key). Empty: `https://<API host>`. Locally: a public tunnel URL. |
+| `GATEWAY_CREDENTIALS_KEY` | generate | Dedicated key for merchant Stripe credentials, **not** `APP_KEY`: `php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"`. Back it up separately from `APP_KEY` and from database backups. |
+| `GATEWAY_CREDENTIALS_KEY_VERSION` / `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` | `1` / empty | Rotation: see "Rotating GATEWAY_CREDENTIALS_KEY". |
 
 The local credentials are defined in `compose.yaml` and the init script. They
 are not secrets and must never be reused outside Docker.
@@ -209,6 +217,136 @@ These are local-only, non-secret credentials. Never create them anywhere else.
   the session and causes a `419` on the next request
   (`tests/Feature/Panels/LivewireSessionTest.php`).
 
+## Stripe (Phase 2, ADR-0047)
+
+The tenant panel has **Settings → Stripe connection** (`/settings/stripe`, users
+with `gateway:manage`; every change asks for the password or a 2FA code). Two
+methods are offered, per mode (test and live connections are separate):
+
+- **Create or connect with Stripe (recommended)**, `platform_onboarding`: the
+  platform creates a Standard-equivalent connected account (MX by default) and
+  sends the user to Stripe's hosted onboarding.
+- **Advanced: use my API keys**, `api_key`: the tenant pastes a restricted key
+  and a publishable key of its own Stripe account.
+
+### Testing locally without Stripe
+
+`composer test` never reaches Stripe: the gateway tests replace Stripe's HTTP
+layer (`Tests\Support\FakeStripeHttpClient`), use `FakePaymentGateway` for the
+domain, sign webhook fixtures (`tests/Fixtures/Stripe/<api version>/`) with
+the secrets set in `phpunit.xml`, and set a dummy platform key. To exercise
+the incoming webhooks by hand, sign a fixture with the Connect secret of your
+`.env` and post it to the API host:
+
+```sh
+php -r '
+require "vendor/autoload.php";
+$body = file_get_contents("tests/Fixtures/Stripe/2026-08-26.dahlia/account.updated.json");
+$body = strtr($body, ["{{event}}" => "evt_local_1", "{{account}}" => "acct_…", "\"{{livemode}}\"" => "false"]);
+file_put_contents("/tmp/event.json", $body);
+echo \Stripe\WebhookSignature::generateSignatureHeader($body, getenv("SECRET"));
+' > /tmp/signature
+curl -s -X POST http://api.localhost:8000/webhooks/stripe/connect/test \
+  -H "Stripe-Signature: $(cat /tmp/signature)" -H 'Content-Type: application/json' \
+  --data-binary @/tmp/event.json
+```
+
+(run with `SECRET=<your STRIPE_TEST_CONNECT_WEBHOOK_SECRET>`). The event is
+stored in `provider_events` and processed by `ProcessProviderEventJob` on the
+`critical` queue (`php artisan queue:work --queue=critical,default`), which
+re-reads the account from Stripe, so a real test key is needed for that step.
+With the Stripe CLI instead: `stripe listen --forward-connect-to
+localhost/webhooks/stripe/connect/test` (see `rules.md`).
+
+### Contract tests against Stripe test mode
+
+`./vendor/bin/pest --group=stripe` runs only when the keys are **exported in
+the shell** (they are never read from `.env`; `phpunit.xml` blanks them):
+
+```sh
+STRIPE_TEST_SECRET=sk_test_… \
+STRIPE_CONTRACT_RESTRICTED_KEY=rk_test_… STRIPE_CONTRACT_PUBLISHABLE_KEY=pk_test_… \
+STRIPE_CONTRACT_OTHER_PUBLISHABLE_KEY=pk_test_…   # optional: a pk of ANOTHER account
+./vendor/bin/pest --group=stripe
+```
+
+They create and delete a test connected account and a test webhook endpoint,
+and confirm the points ADR-0047 marks as unverified (PII-token check of pk ↔
+rk, permission probes answered 403/400).
+
+### Setting up the platform account (once per mode)
+
+1. In the platform's Stripe Dashboard (the platform account is in Mexico),
+   complete the Connect platform profile and the branding shown during
+   onboarding.
+2. Copy the secret and publishable keys of the mode into `STRIPE_<MODE>_SECRET`
+   and `STRIPE_<MODE>_PUBLISHABLE`.
+3. **Developers → Webhooks → Add destination**: events from **Connected
+   accounts**, API version `2026-08-26.dahlia`, URL
+   `https://<API host>/webhooks/stripe/connect/test` (test mode) or
+   `…/connect/live` (live mode), events `account.updated` and
+   `account.application.deauthorized` (Phase 4 adds the payment events).
+   Copy its signing secret into `STRIPE_<MODE>_CONNECT_WEBHOOK_SECRET`.
+
+### Connecting the team's own Stripe account with API keys (api_key)
+
+The platform team is the first tenant (ADR-0047). In the Stripe account you
+want to receive payments in, for each mode (start with test mode):
+
+1. **Developers → API keys → Create restricted key** ("Building your own
+   integration"). Name it, for example, `AxisPay`.
+2. Grant exactly these permissions (Stripe names; the Dashboard groups them
+   by resource) and leave everything else as **None**:
+
+   | Resource | Access | Used for |
+   |---|---|---|
+   | PaymentIntents | Write | Charges (Phase 4) |
+   | Charges and Refunds | Write | Refunds (Phase 7); includes reading charges |
+   | Webhook Endpoints | Write | The endpoint the platform creates on your account |
+   | Accounts (Core → Accounts) | Read | Country and charge status; daily health check |
+   | Tokens | Read | Proving the publishable key belongs to the same account |
+   | ConfirmationTokens | Read | Card checkout (deferred intents) |
+   | PaymentMethods | Read | Card country (currency conversion) |
+   | Disputes | Read | Disputes (Phase 7) |
+   | Events | Read | Reconciliation |
+
+   Do **not** grant Payouts, Transfers or Balance: the platform warns about
+   them, and live mode asks for an extra confirmation. Never use a secret key
+   (`sk_`): it is always refused.
+3. Copy the restricted key (`rk_test_…`) and the publishable key (`pk_test_…`)
+   of the **same account and mode**.
+4. In the tenant panel, switch to the matching mode (test/live selector),
+   open **Settings → Stripe connection → Advanced: use my API keys**, paste
+   both keys, accept the risk notice and confirm your password or 2FA code.
+5. The platform validates the keys (format, mode, account, country, pk ↔ rk,
+   permissions), stores the restricted key encrypted with
+   `GATEWAY_CREDENTIALS_KEY` and creates a webhook endpoint on your account
+   (`https://<API host>/webhooks/stripe/direct/<connection id>`, API version
+   pinned). Do not edit or delete that endpoint in Stripe. Only `rk_…last4`
+   is shown afterwards.
+6. To rotate: create a new restricted key in Stripe, use **Update keys**, then
+   delete the old key in Stripe. To move to the recommended method later:
+   **Disconnect** (the webhook endpoint is deleted and the keys erased), then
+   **Create or connect with Stripe**.
+
+The endpoint only receives `account.updated` in Phase 2 (the events the platform
+handles now; no payer data of your other sales). When a later phase adds events
+to `axispay.gateways.stripe.direct_webhook_events`, run
+`php artisan axispay:stripe-sync-webhook-endpoints` once after the deploy: it
+updates the events of every existing endpoint, no reconnection needed.
+
+Locally, Stripe cannot reach `*.localhost`: set `AXISPAY_STRIPE_WEBHOOK_BASE_URL`
+to a public tunnel pointing at the API host before connecting with keys.
+
+### Rotating GATEWAY_CREDENTIALS_KEY
+
+1. Move the current key to `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` as
+   `1:base64:…` (its version and value), set a new `GATEWAY_CREDENTIALS_KEY`
+   and bump `GATEWAY_CREDENTIALS_KEY_VERSION` to `2`.
+2. Deploy, then run `php artisan axispay:rotate-gateway-credentials-key`.
+3. Remove the old key from `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` once the
+   command re-encrypted every connection.
+
 ## Quality checks
 
 | Command | What it does |
@@ -254,8 +392,14 @@ live in `phpunit.xml` (`<env>` entries), so they do not depend on `.env`.
 
 ## Scheduling
 
-There are no scheduled tasks yet (`routes/console.php`). Every task added in
-later phases **must** use `withoutOverlapping()` and `onOneServer()`:
+Scheduled tasks live in `routes/console.php`:
+
+| Task | When | What |
+|---|---|---|
+| `axispay:gateways:check-api-keys` | Daily 06:00 | Queues one health check per api_key connection (plan 12.3.3) |
+| `axispay:provider-events:purge` | Daily 03:30 | Deletes ignored/unroutable webhook events older than 7 days; keeps only a reduced payload of processed ones after 30 days (plan 14.4) |
+
+Every task **must** use `withoutOverlapping()` and `onOneServer()`:
 
 ```php
 Schedule::command('some:command')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
