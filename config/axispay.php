@@ -84,6 +84,41 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Public API (plan 10.1-10.3, ADR-0048)
+    |--------------------------------------------------------------------------
+    */
+
+    'api' => [
+        // Requests per minute per API key (owner decision 2026-09-26).
+        'rate_limit_per_minute' => [
+            'live' => (int) env('AXISPAY_API_RATE_LIMIT_LIVE', 100),
+            'test' => (int) env('AXISPAY_API_RATE_LIMIT_TEST', 100),
+        ],
+
+        // Failed authentications per client IP and minute before every
+        // request from that IP gets 429 for the rest of the minute.
+        'failed_auth_per_minute' => (int) env('AXISPAY_API_FAILED_AUTH_PER_MINUTE', 30),
+
+        // Plan 21.3: days a closed tenant keeps read-only API access.
+        'closed_tenant_read_days' => 30,
+
+        // `last_used_at` / `last_used_ip` are written at most once per key
+        // in this many seconds (plan 10.2).
+        'last_used_interval_seconds' => 60,
+
+        'idempotency' => [
+            // Plan 10.3: a key and its response are kept for 24 hours.
+            'ttl_hours' => 24,
+            // A request that has not finished after this long (a crashed
+            // worker) no longer blocks its key. Well above the longest a
+            // request can run (60 s at the web server), so a slow request is
+            // never taken over while it is still working.
+            'lock_seconds' => 300,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Identity and access (plan 17.3, 17.4)
     |--------------------------------------------------------------------------
     |

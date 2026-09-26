@@ -60,8 +60,6 @@ final class Redactor
         '/\b(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
         // Webhook signing secrets (Stripe and Standard Webhooks).
         '/\bwhsec_[A-Za-z0-9+\/=]+/' => self::MASK,
-        // AxisPay API keys.
-        '/\baxp_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
         // Stripe PaymentIntent / SetupIntent client secrets.
         '/\b(?:pi|seti)_[A-Za-z0-9]+_secret_[A-Za-z0-9]+/' => self::MASK,
         // Bearer tokens in free text.
@@ -72,9 +70,39 @@ final class Redactor
         '/(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)/' => self::MASK,
     ];
 
+    /** @var array<string, string> */
+    private readonly array $patterns;
+
+    /**
+     * The platform's own API key prefix (`axispay.api_key_prefix`,
+     * ADR-0037) comes from the configuration when not given; `axp` when
+     * there is none (the log pipeline can run before the app is booted).
+     */
+    public function __construct(?string $apiKeyPrefix = null)
+    {
+        $prefix = $apiKeyPrefix ?? self::configuredPrefix();
+
+        $this->patterns = [
+            ...self::VALUE_PATTERNS,
+            // The platform's own API keys.
+            '/\b'.preg_quote($prefix, '/').'_(?:test|live)_[A-Za-z0-9]+/' => self::MASK,
+        ];
+    }
+
     public function redactString(string $value): string
     {
-        return (string) preg_replace(array_keys(self::VALUE_PATTERNS), array_values(self::VALUE_PATTERNS), $value);
+        return (string) preg_replace(array_keys($this->patterns), array_values($this->patterns), $value);
+    }
+
+    private static function configuredPrefix(): string
+    {
+        try {
+            $prefix = function_exists('config') && app()->bound('config') ? config('axispay.api_key_prefix') : null;
+        } catch (Throwable) {
+            $prefix = null;
+        }
+
+        return is_string($prefix) && $prefix !== '' ? $prefix : 'axp';
     }
 
     public function isSensitiveKey(int|string $key): bool

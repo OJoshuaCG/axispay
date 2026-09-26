@@ -80,6 +80,8 @@ return [
         'gateway_credentials_updated' => 'Stripe API keys updated',
         'gateway_credentials_rejected' => 'Stripe API keys rejected',
         'gateway_credentials_invalid' => 'Stripe API keys no longer valid',
+        'api_key_created' => 'API key created',
+        'api_key_revoked' => 'API key revoked',
     ],
 
 ];

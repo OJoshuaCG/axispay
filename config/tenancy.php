@@ -30,6 +30,9 @@ return [
         // events (platform rows, AllowsPlatformRows).
         'gateway_connections',
         'provider_events',
+        // Phase 3 (plan 7.2, 7.8).
+        'api_keys',
+        'idempotency_records',
     ],
 
     /*
@@ -62,6 +65,8 @@ return [
         'App\\Modules\\Identity\\Services\\UserDirectory',
         // Phase 2 (ADR-0047): retention purge of provider_events across tenants.
         'App\\Modules\\ProviderEvents\\Services\\ProviderEventRetention',
+        // Phase 3 (ADR-0048): expiry purge of idempotency_records across tenants.
+        'App\\Modules\\ApiKeys\\Services\\IdempotencyRecordRetention',
     ],
 
 ];

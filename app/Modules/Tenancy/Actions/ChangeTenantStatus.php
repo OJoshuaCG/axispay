@@ -14,6 +14,7 @@ use App\Modules\Tenancy\Exceptions\InvalidTenantStatusTransitionException;
 use App\Modules\Tenancy\Exceptions\TenantCloseNotConfirmedException;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Notifications\TenantStatusChangedNotification;
+use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\Services\TenantOwners;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -91,6 +92,7 @@ final readonly class ChangeTenantStatus
                 'status_changed_at' => now(),
                 'closed_at' => $data->status === TenantStatus::Closed ? now() : $locked->closed_at,
             ])->save();
+            app(TenantAccess::class)->forget($locked->id);
 
             $this->audit->record(AuditAction::TenantStatusChanged, $locked, [
                 'before' => ['status' => $from->value],

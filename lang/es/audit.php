@@ -80,6 +80,8 @@ return [
         'gateway_credentials_updated' => 'Llaves de API de Stripe actualizadas',
         'gateway_credentials_rejected' => 'Llaves de API de Stripe rechazadas',
         'gateway_credentials_invalid' => 'Llaves de API de Stripe ya no válidas',
+        'api_key_created' => 'Llave de API creada',
+        'api_key_revoked' => 'Llave de API revocada',
     ],
 
 ];

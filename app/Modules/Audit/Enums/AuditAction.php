@@ -47,6 +47,8 @@ enum AuditAction: string
     case GatewayCredentialsUpdated = 'gateway.credentials_updated';
     case GatewayCredentialsRejected = 'gateway.credentials_rejected';
     case GatewayCredentialsInvalid = 'gateway.credentials_invalid';
+    case ApiKeyCreated = 'api_key.created';
+    case ApiKeyRevoked = 'api_key.revoked';
 
     public function label(): string
     {

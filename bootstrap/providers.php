@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Access\Providers\AccessServiceProvider;
+use App\Modules\ApiKeys\Providers\ApiKeysServiceProvider;
 use App\Modules\Audit\Providers\AuditServiceProvider;
 use App\Modules\Gateways\Providers\GatewaysServiceProvider;
 use App\Modules\Identity\Providers\IdentityServiceProvider;
@@ -24,6 +25,7 @@ return [
     PlatformAdminServiceProvider::class,
     GatewaysServiceProvider::class,
     ProviderEventsServiceProvider::class,
+    ApiKeysServiceProvider::class,
     AdminPanelProvider::class,
     AppPanelProvider::class,
 ];
