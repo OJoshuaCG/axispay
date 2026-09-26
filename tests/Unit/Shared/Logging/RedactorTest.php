@@ -69,3 +69,13 @@ it('redacts nested structures and exceptions', function (): void {
         ->and($redacted['exception'])->toBeArray()
         ->and(json_encode($redacted['exception']))->not->toContain('sk_live_abc123');
 });
+
+it('redacts API keys with the configured prefix', function (): void {
+    config(['axispay.api_key_prefix' => 'zzp']);
+
+    $redactor = new Redactor;
+
+    expect($redactor->redactString('key zzp_live_abcDEF123 leaked'))->toBe('key [REDACTED] leaked')
+        ->and($redactor->redactString('axp_live_abcDEF123'))->toBe('axp_live_abcDEF123')
+        ->and((new Redactor('axp'))->redactString('token axp_test_abc123'))->toBe('token [REDACTED]');
+});

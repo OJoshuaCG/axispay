@@ -6,19 +6,26 @@ use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Access\Enums\TenantPermission;
 use App\Modules\Access\Filament\Resources\Roles\Pages\ListRoles;
 use App\Modules\Access\Models\Role;
+use App\Modules\ApiKeys\Filament\Resources\ApiKeys\Pages\ListApiKeys;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Filament\Resources\AuditLogs\Pages\ListAuditLogs;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Filament\Resources\Users\Pages\ListUsers;
 use App\Modules\Identity\Models\User;
+use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ListPaymentLinks;
+use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
+use Symfony\Component\HttpFoundation\Response;
+use Tests\Support\ApiTestHelpers;
 
 use function Pest\Laravel\get;
+use function Pest\Laravel\withHeaders;
 
 /**
  * Tenant isolation (plan 6.6). For every tenant-panel resource, a user of
@@ -29,13 +36,17 @@ use function Pest\Laravel\get;
  */
 
 /**
- * Resource slug => [list page, record factory for a given tenant].
+ * Resource URL slug => [list page, record factory for a given tenant, has a
+ * record (view) page].
  *
- * @return array<string, array{class-string, Closure(Tenant): Model}>
+ * @return array<string, array{0: class-string, 1: Closure(Tenant): Model, 2?: bool}>
  */
 function isolatedAppResources(): array
 {
     return [
+        'payment-links' => [ListPaymentLinks::class, static fn (Tenant $tenant): Model => ApiTestHelpers::link($tenant)],
+        // List only: keys have no record page.
+        'settings/api-keys' => [ListApiKeys::class, static fn (Tenant $tenant): Model => ApiTestHelpers::key($tenant)[0], false],
         'users' => [ListUsers::class, static fn (Tenant $tenant): Model => tenantUser($tenant, [SystemRole::Viewer])],
         'roles' => [ListRoles::class, static fn (Tenant $tenant): Model => app(TenantContext::class)->runAsTenant(
             $tenant->id,
@@ -80,13 +91,19 @@ const REVIEWED_API_ROUTES = [
  *
  * @param  class-string  $listPage
  */
-function assertTenantIsolation(User $viewer, string $slug, string $listPage, Model $own, Model $foreign): void
+function assertTenantIsolation(User $viewer, string $slug, string $listPage, Model $own, Model $foreign, bool $hasRecordPage = true): void
 {
     actingAsTenantUser($viewer);
 
     Livewire::test($listPage)
         ->assertCanSeeTableRecords([$own])
         ->assertCanNotSeeTableRecords([$foreign]);
+
+    if (! $hasRecordPage) {
+        get(appUrl("/{$slug}/".routeKeyOf($foreign)))->assertNotFound();
+
+        return;
+    }
 
     get(appUrl("/{$slug}/".routeKeyOf($own)))->assertOk();
     get(appUrl("/{$slug}/".routeKeyOf($foreign)))->assertNotFound();
@@ -105,7 +122,7 @@ dataset('isolated_app_resources', fn (): array => array_map(
     array_keys(isolatedAppResources()),
 ));
 
-it('isolates tenant panel resources between tenants', function (string $slug, string $listPage, Closure $factory): void {
+it('isolates tenant panel resources between tenants', function (string $slug, string $listPage, Closure $factory, bool $hasRecordPage = true): void {
     /** @var class-string $listPage */
     [$a, $b] = [activeTenant(), activeTenant()];
     $viewer = tenantUser($a, [SystemRole::Owner]);
@@ -113,7 +130,7 @@ it('isolates tenant panel resources between tenants', function (string $slug, st
     $foreign = $factory($b);
     assert($own instanceof Model && $foreign instanceof Model);
 
-    assertTenantIsolation($viewer, $slug, $listPage, $own, $foreign);
+    assertTenantIsolation($viewer, $slug, $listPage, $own, $foreign, $hasRecordPage);
 })->with('isolated_app_resources');
 
 it('covers every tenant-panel route with an isolation test', function (): void {
@@ -128,8 +145,8 @@ it('covers every tenant-panel route with an isolation test', function (): void {
             continue;
         }
 
-        if (preg_match('/^filament\.app\.resources\.([^.]+)\./', $name, $match) === 1) {
-            if (! in_array($match[1], $covered, true)) {
+        if (preg_match('/^filament\.app\.resources\.(.+)\.[^.]+$/', $name, $match) === 1) {
+            if (! in_array(str_replace('.', '/', $match[1]), $covered, true)) {
                 $uncovered[] = $name;
             }
 
@@ -144,13 +161,63 @@ it('covers every tenant-panel route with an isolation test', function (): void {
     expect($uncovered)->toBe([], 'Add an isolation test (dataset above) for: '.implode(', ', $uncovered));
 });
 
-it('has no API routes without an isolation dataset yet (Phase 3 adds them)', function (): void {
+/**
+ * Public API routes (Phase 3): route name => a request made with tenant A's
+ * key against tenant B's link. Each must answer 404 (never 403) or, for
+ * lists, leave B's link out (plan 6.6).
+ *
+ * @return array<string, Closure(string, PaymentLink): TestResponse<Response>>
+ */
+function isolatedApiRoutes(): array
+{
+    $headers = static fn (string $key): array => ApiTestHelpers::headers($key, 'isolation-'.bin2hex(random_bytes(4)));
+
+    return [
+        'api.v1.payment_links.show' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/payment_links/'.$foreign->prefixedId())),
+        'api.v1.payment_links.cancel' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links/'.$foreign->prefixedId().'/cancel')),
+        'api.v1.payment_links.index' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/payment_links?client_reference_id='.$foreign->client_reference_id)),
+        // Creating never takes another tenant's ID; the new link belongs to the key's tenant.
+        'api.v1.payment_links.store' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links'), ApiTestHelpers::body(['client_reference_id' => $foreign->client_reference_id])),
+    ];
+}
+
+dataset('isolated_api_routes', fn (): array => array_map(
+    static fn (Closure $request, string $name): array => [$name, $request],
+    isolatedApiRoutes(),
+    array_keys(isolatedApiRoutes()),
+));
+
+it('isolates every API route between tenants', function (string $name, Closure $request): void {
+    [$a, $b] = [ApiTestHelpers::readyTenant(), ApiTestHelpers::readyTenant()];
+    [, $keyA] = ApiTestHelpers::key($a);
+    $foreign = ApiTestHelpers::link($b, state: static fn ($f) => $f->state(['client_reference_id' => 'FOREIGN-1']));
+
+    $response = $request($keyA, $foreign);
+    assert($response instanceof TestResponse);
+
+    match ($name) {
+        'api.v1.payment_links.index' => $response->assertOk()->assertJsonCount(0, 'data'),
+        'api.v1.payment_links.store' => $response->assertCreated()->assertJsonMissingPath('error'),
+        default => $response->assertNotFound()->assertJsonPath('error.code', 'resource_not_found'),
+    };
+
+    // Tenant B's link is untouched and still only B's.
+    $fresh = PaymentLink::query()->withoutGlobalScopes()->findOrFail($foreign->id);
+    expect($fresh->tenant_id)->toBe($b->id)->and($fresh->status->value)->toBe('active');
+
+    if ($name === 'api.v1.payment_links.store') {
+        expect(PaymentLink::query()->withoutGlobalScopes()->where('client_reference_id', 'FOREIGN-1')->pluck('tenant_id')->sort()->values()->all())
+            ->toEqualCanonicalizing([$a->id, $b->id]);
+    }
+})->with('isolated_api_routes');
+
+it('covers every API route with an isolation test', function (): void {
     $apiRoutes = collect(Route::getRoutes()->getRoutes())
         ->filter(static fn (RouteDefinition $route): bool => $route->getDomain() === config()->string('axispay.surfaces.api'))
         ->map(static fn (RouteDefinition $route): string => (string) $route->getName())
-        ->reject(static fn (string $name): bool => array_key_exists($name, REVIEWED_API_ROUTES))
+        ->reject(static fn (string $name): bool => array_key_exists($name, REVIEWED_API_ROUTES) || array_key_exists($name, isolatedApiRoutes()))
         ->values()
         ->all();
 
-    expect($apiRoutes)->toBe([]);
+    expect($apiRoutes)->toBe([], 'Add an API isolation case (isolatedApiRoutes) for: '.implode(', ', $apiRoutes));
 });

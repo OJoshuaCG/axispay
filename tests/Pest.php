@@ -46,7 +46,7 @@ pest()->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
         seed(PermissionCatalogSeeder::class);
     })
-    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console', 'Feature/Gateways');
+    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console', 'Feature/Gateways', 'Feature/ApiKeys', 'Feature/PaymentLinks');
 
 /*
 | Gateway tests (Phase 2): the platform test key is a dummy and Stripe's HTTP
