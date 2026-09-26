@@ -58,7 +58,11 @@
         ],
         "test": [
             "@php artisan config:clear --ansi @no_additional_args",
-            "@php artisan test"
+            "@php artisan test --exclude-group=concurrency"
+        ],
+        "test:concurrency": [
+            "@php artisan config:clear --ansi @no_additional_args",
+            "@php artisan test --group=concurrency"
         ],
         "analyse": [
             "@php vendor/bin/phpstan analyse --memory-limit=1G --no-progress"
@@ -72,7 +76,8 @@
         "ci": [
             "@format:check",
             "@analyse",
-            "@test"
+            "@test",
+            "@test:concurrency"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
@@ -111,10 +116,11 @@
     "minimum-stability": "stable",
     "prefer-stable": true,
     "scripts-descriptions": {
-        "test": "Run the Pest suite against the MariaDB configured in phpunit.xml.",
+        "test": "Run the Pest suite against the MariaDB configured in phpunit.xml (without the multi-process concurrency tests).",
+        "test:concurrency": "Run the multi-process concurrency tests (they rebuild the test database).",
         "analyse": "Run Larastan (PHPStan level max).",
         "format": "Fix code style with Pint.",
         "format:check": "Check code style with Pint without changing files.",
-        "ci": "Run format check, static analysis and tests, as CI does."
+        "ci": "Run format check, static analysis, tests and concurrency tests, as CI does."
     }
 }

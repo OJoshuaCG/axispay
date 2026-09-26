@@ -105,3 +105,6 @@ jobs:
 
       - name: Tests (Pest, against MariaDB 11.8)
         run: composer test
+
+      - name: Concurrency tests (separate processes, rebuild the test database)
+        run: composer test:concurrency
