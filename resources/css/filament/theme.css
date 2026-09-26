@@ -43,6 +43,10 @@
  * specificity.
  */
 html.fi {
+    /* Focus not obscured (WCAG 2.4.11): anything scrolled into view clears
+       the sticky topbar. */
+    scroll-padding-top: calc(4rem + var(--spacing-stack-sm));
+
     --text-xs: var(--panel-text-xs);
     --text-xs--line-height: var(--panel-text-xs-lh);
     --text-sm: var(--panel-text-sm);
@@ -320,5 +324,67 @@ html.fi {
         box-shadow:
             var(--shadow-md),
             0 0 0 1px var(--color-line);
+    }
+}
+
+/*
+ * Phase 3 tables (ADR-0049 UI review): row actions are 44px touch targets on
+ * touch screens (compact again with a fine pointer on large screens), and
+ * the filter button does not show a count badge: the active filters are
+ * already listed as removable chips above the table (the count is the only
+ * badge in the table toolbar, whatever the filter layout).
+ */
+@layer components {
+    .fi .fi-ta-actions .fi-link {
+        min-height: var(--spacing-touch);
+
+        @variant desktop {
+            min-height: auto;
+        }
+    }
+
+    .fi .fi-ta-header-toolbar .fi-icon-btn-badge-ctn {
+        display: none;
+    }
+}
+
+/*
+ * Visual and accessibility review (ADR-0049):
+ *  - placeholders ("—", empty inputs) use fg-muted (4.96:1 light, 5.82:1
+ *    dark) instead of Filament's gray-400/500 (under 3.4:1), as tokens.md
+ *    requires for text;
+ *  - a column hidden from md (the mobile summary) must not take the
+ *    first-column padding: the next cell gets it, so desktop tables line up
+ *    with the others;
+ *  - an amount used as a page heading is regular weight, without tracking;
+ *  - badge icons take the badge's text color (the palette's icon shade was
+ *    under 3:1 for success and warning).
+ */
+@layer components {
+    .fi :is(.fi-ta-placeholder, .fi-in-placeholder, .fi-select-input-placeholder) {
+        color: var(--color-fg-muted);
+    }
+
+    .fi :is(input.fi-input, .fi-fo-textarea textarea)::placeholder {
+        color: var(--color-fg-muted);
+    }
+
+    @variant md {
+        .fi .fi-ta-header-cell.md\:fi-hidden + .fi-ta-header-cell {
+            padding-inline-start: calc(var(--spacing) * 6);
+        }
+
+        .fi .fi-ta-cell.md\:fi-hidden + .fi-ta-cell {
+            padding-inline-start: calc(var(--spacing) * 3);
+        }
+    }
+
+    .fi .fi-header-heading .amount {
+        font-weight: var(--font-weight-normal);
+        letter-spacing: 0;
+    }
+
+    .fi .fi-badge.fi-color > .fi-icon {
+        color: inherit;
     }
 }

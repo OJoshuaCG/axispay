@@ -68,6 +68,7 @@ return [
     ],
 
     'reauthentication' => [
+        'required' => 'Escriba su contraseña o un código de 2FA para confirmar que es usted.',
         'field' => 'Su contraseña o código 2FA',
         'help' => 'Confirme su identidad para continuar. No se le volverá a pedir durante 10 minutos.',
         'failed' => 'La contraseña o el código no son correctos.',

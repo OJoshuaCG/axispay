@@ -9,6 +9,7 @@ use App\Modules\Identity\Auth\AuditedAppAuthentication;
 use App\Modules\Identity\Filament\Pages\EditProfile;
 use App\Modules\Identity\Filament\Pages\Login;
 use App\Modules\Shared\Support\Brand;
+use Filament\Actions\Action;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -16,6 +17,8 @@ use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Livewire\SimpleUserMenu;
 use Filament\Pages\SimplePage;
 use Filament\Panel;
+use Filament\Schemas\Schema;
+use Filament\Tables\Table;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
@@ -92,6 +95,25 @@ final class PanelDefaults
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls', [
                 'show' => ! self::simplePageHasUserHeader(),
             ]));
+    }
+
+    /** Display format of dates with time in every panel table and schema (ADR-0049). */
+    public const string DATE_TIME_FORMAT = 'j M Y, H:i';
+
+    /**
+     * Defaults of Filament components in both panels, applied once at boot:
+     *
+     *  - action forms skip the browser's native validation bubbles (always in
+     *    the browser's language); the server validates and answers in the
+     *    viewer's language (ADR-0049);
+     *  - dates with time read `26 sep 2026, 14:30` (month in the viewer's
+     *    language, time zone set per panel).
+     */
+    public static function configureComponents(): void
+    {
+        Action::configureUsing(static fn (Action $action): Action => $action->extraModalWindowAttributes(['novalidate' => true], merge: true));
+        Table::configureUsing(static fn (Table $table): Table => $table->defaultDateTimeDisplayFormat(self::DATE_TIME_FORMAT));
+        Schema::configureUsing(static fn (Schema $schema): Schema => $schema->defaultDateTimeDisplayFormat(self::DATE_TIME_FORMAT));
     }
 
     /**

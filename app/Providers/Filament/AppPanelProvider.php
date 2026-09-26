@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Modules\Access\Filament\Resources\Roles\RoleResource;
+use App\Modules\ApiKeys\Filament\Resources\ApiKeys\ApiKeyResource;
 use App\Modules\Audit\Filament\Resources\AuditLogs\AuditLogResource;
 use App\Modules\Gateways\Filament\Pages\StripeConnection;
 use App\Modules\Identity\Filament\Resources\Users\UserResource;
 use App\Modules\Identity\Http\Middleware\RequireTwoFactorForSensitiveUsers;
+use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\PaymentLinkResource;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
+use App\Modules\Tenancy\Http\Middleware\ApplyTenantTimezone;
 use App\Modules\Tenancy\Http\Middleware\ResolveTenantContext;
 use App\Support\Filament\PanelDefaults;
 use Filament\Http\Middleware\Authenticate;
@@ -39,15 +42,18 @@ final class AppPanelProvider extends PanelProvider
             // Only users holding a sensitive permission are forced to set up 2FA.
             ->multiFactorAuthenticationRequiredMiddlewareName(RequireTwoFactorForSensitiveUsers::class)
             ->resources([
+                PaymentLinkResource::class,
                 UserResource::class,
                 RoleResource::class,
                 AuditLogResource::class,
+                ApiKeyResource::class,
             ])
             ->pages([Dashboard::class, StripeConnection::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([
                 Authenticate::class,
                 ResolveTenantContext::class,
+                ApplyTenantTimezone::class,
                 EnforceImpersonationWindow::class,
             ], isPersistent: true)
             ->renderHook(PanelsRenderHook::BODY_START, static fn (): View => view('filament.app.banners'));

@@ -98,7 +98,9 @@ final class UserResource extends Resource
                     ->label(__('identity.users.fields.status'))
                     ->badge()
                     ->state(static fn (User $record): string => $record->isDisabled() ? __('identity.users.status.disabled') : __('identity.users.status.active'))
-                    ->color(static fn (User $record): string => $record->isDisabled() ? 'gray' : 'success'),
+                    ->color(static fn (User $record): string => $record->isDisabled() ? 'gray' : 'success')
+                    // Same status icons as the other panel badges: color is never the only signal.
+                    ->icon(static fn (User $record): Heroicon => $record->isDisabled() ? Heroicon::OutlinedNoSymbol : Heroicon::OutlinedCheckCircle),
                 TextColumn::make('last_login_at')->label(__('identity.users.fields.last_login_at'))->since()->sortable()->toggleable(),
             ])
             ->defaultSort('name')

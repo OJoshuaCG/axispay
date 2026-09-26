@@ -72,6 +72,7 @@ return [
         'help' => 'Confirm your identity to continue. You will not be asked again for 10 minutes.',
         'failed' => 'The password or code is not correct.',
         'throttled' => 'Too many attempts. Try again in :seconds seconds.',
+        'required' => 'Enter your password or a 2FA code to confirm it is you.',
     ],
 
     'invitation' => [

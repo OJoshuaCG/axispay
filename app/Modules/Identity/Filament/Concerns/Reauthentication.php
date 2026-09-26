@@ -36,6 +36,7 @@ final class Reauthentication
             ->label(__('identity.reauthentication.field'))
             ->helperText(__('identity.reauthentication.help'))
             ->required()
+            ->validationMessages(['required' => __('identity.reauthentication.required')])
             ->visible(static fn (Get $get): bool => ! app(ReauthenticationWindow::class)->isConfirmed() && ($when === null || $when($get)))
             ->dehydrated();
     }
