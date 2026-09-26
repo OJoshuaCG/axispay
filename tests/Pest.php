@@ -5,15 +5,24 @@ declare(strict_types=1);
 use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Identity\Models\User;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
+use App\Modules\Shared\Logging\RedactSensitiveLogData;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
 use Database\Seeders\PermissionCatalogSeeder;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Log\Logger;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Testing\PendingCommand;
+use Livewire\Features\SupportTesting\Testable;
+use Monolog\Handler\TestHandler;
+use Monolog\Logger as Monolog;
+use Tests\Support\FakeStripeHttpClient;
 use Tests\TestCase;
 
 use function Pest\Laravel\actingAs;
+use function Pest\Laravel\artisan;
 use function Pest\Laravel\seed;
 
 /*
@@ -31,13 +40,127 @@ use function Pest\Laravel\seed;
 |
 */
 
-pest()->extend(TestCase::class)->in('Unit', 'Feature');
+pest()->extend(TestCase::class)->in('Unit', 'Feature', 'Contract');
 
 pest()->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
         seed(PermissionCatalogSeeder::class);
     })
-    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console');
+    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console', 'Feature/Gateways');
+
+/*
+| Gateway tests (Phase 2): the platform test key is a dummy and Stripe's HTTP
+| layer is faked for every test, so no test can reach the real Stripe API.
+| The `stripe` group (tests/Contract) is the only exception, and runs only
+| when STRIPE_TEST_SECRET is exported in the shell.
+*/
+pest()->beforeEach(function (): void {
+    config(['services.stripe.test.secret' => 'sk_test_platformdummy']);
+    FakeStripeHttpClient::install();
+})->afterEach(function (): void {
+    FakeStripeHttpClient::uninstall();
+})->in('Feature/Gateways');
+
+function stripeHttp(): FakeStripeHttpClient
+{
+    return FakeStripeHttpClient::current();
+}
+
+/**
+ * The exception `$call` throws, which must be a `$class`.
+ *
+ * @template T of Throwable
+ *
+ * @param  class-string<T>  $class
+ * @return T
+ */
+function thrownBy(string $class, Closure $call): Throwable
+{
+    try {
+        $call();
+    } catch (Throwable $e) {
+        if ($e instanceof $class) {
+            return $e;
+        }
+
+        throw $e;
+    }
+
+    throw new LogicException("Expected [{$class}] to be thrown.");
+}
+
+/**
+ * A JSON object decoded as an array (empty when it is not an object).
+ *
+ * @return array<mixed>
+ */
+function jsonArray(string $json): array
+{
+    $decoded = json_decode($json, true);
+
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * Submits a Filament action form the way a browser does: the deferred
+ * `wire:model` values travel in the SAME request as `callMountedAction`
+ * (Filament's callAction() sends them in a separate `set` request first).
+ * Needed wherever a page erases secrets from its state after each request.
+ *
+ * @template TComponent of \Livewire\Component
+ *
+ * @param  Testable<TComponent>  $component
+ * @param  array<mixed>  $data  field => value
+ * @return Testable<TComponent>
+ */
+function submitAction(Testable $component, string $name, array $data, bool $mount = true): Testable
+{
+    if ($mount) {
+        $component->call('mountAction', $name);
+    }
+
+    $updates = [];
+
+    foreach ($data as $field => $value) {
+        $updates["mountedActions.0.data.{$field}"] = $value;
+    }
+
+    return $component->update(
+        calls: [['method' => 'callMountedAction', 'params' => [[]], 'path' => '']],
+        updates: $updates,
+    );
+}
+
+/** An artisan command with output mocking (assertions available). */
+function artisanCommand(string $command): PendingCommand
+{
+    $pending = artisan($command);
+
+    return $pending instanceof PendingCommand ? $pending : throw new LogicException('Console output mocking must be enabled.');
+}
+
+function tenantOf(User $user): Tenant
+{
+    return Tenant::query()->findOrFail($user->tenant_id);
+}
+
+/**
+ * Routes the default log channel to an in-memory handler with the same
+ * redaction tap as the real channels.
+ */
+function captureDefaultLog(): TestHandler
+{
+    config([
+        'logging.channels.test_capture' => ['driver' => 'monolog', 'handler' => TestHandler::class, 'tap' => [RedactSensitiveLogData::class]],
+        'logging.default' => 'test_capture',
+    ]);
+
+    $logger = Log::channel('test_capture');
+    $monolog = $logger instanceof Logger ? $logger->getLogger() : null;
+    $handler = $monolog instanceof Monolog ? ($monolog->getHandlers()[0] ?? null) : null;
+
+    return $handler instanceof TestHandler ? $handler : throw new LogicException('The capture channel must use a TestHandler.');
+}
 
 /**
  * Absolute URL on the public API host (ADR-027).

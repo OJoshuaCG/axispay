@@ -39,6 +39,14 @@ enum AuditAction: string
     case LivemodeSwitched = 'livemode.switched';
     case PlatformAdminCreated = 'platform_admin.created';
     case OwnerPromoted = 'owner.promoted';
+    case GatewayOnboardingStarted = 'gateway.onboarding_started';
+    case GatewayConnected = 'gateway.connected';
+    case GatewayStatusChanged = 'gateway.status_changed';
+    case GatewayDisconnected = 'gateway.disconnected';
+    case GatewayRiskAcknowledged = 'gateway.risk_acknowledged';
+    case GatewayCredentialsUpdated = 'gateway.credentials_updated';
+    case GatewayCredentialsRejected = 'gateway.credentials_rejected';
+    case GatewayCredentialsInvalid = 'gateway.credentials_invalid';
 
     public function label(): string
     {

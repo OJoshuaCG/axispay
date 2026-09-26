@@ -11,6 +11,10 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
         </testsuite>
+        <!-- Real Stripe test mode (group "stripe"): skipped unless STRIPE_TEST_SECRET is exported. -->
+        <testsuite name="Contract">
+            <directory>tests/Contract</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
@@ -43,6 +47,19 @@
         <!-- No network in tests: the breached-password check (HIBP) is off by
              default and enabled with Http::fake() where it is tested. -->
         <env name="AXISPAY_PASSWORD_CHECK_UNCOMPROMISED" value="false"/>
+        <!-- Gateways (Phase 2): fixed dummy values; real Stripe keys never come from .env here. -->
+        <env name="GATEWAY_CREDENTIALS_KEY" value="base64:exZjgPJOTGLGSZ4Sur4kxQZRO/RDy/sL2OHu7T7G2Wo="/>
+        <env name="GATEWAY_CREDENTIALS_KEY_VERSION" value="1"/>
+        <env name="GATEWAY_CREDENTIALS_PREVIOUS_KEYS" value=""/>
+        <env name="STRIPE_TEST_SECRET" value=""/>
+        <env name="STRIPE_TEST_PUBLISHABLE" value="pk_test_platform"/>
+        <env name="STRIPE_LIVE_PUBLISHABLE" value="pk_live_platform"/>
+        <env name="STRIPE_TEST_CONNECT_WEBHOOK_SECRET" value="whsec_testconnectsecret"/>
+        <env name="STRIPE_LIVE_CONNECT_WEBHOOK_SECRET" value="whsec_liveconnectsecret"/>
+        <env name="STRIPE_LIVE_SECRET" value="sk_live_platformdummy"/>
+        <env name="AXISPAY_STRIPE_ALLOWED_COUNTRIES" value="MX"/>
+        <!-- Contract tests (group "stripe") run only when STRIPE_TEST_SECRET is exported in the
+             shell (an exported variable wins over these empty defaults; .env never does). -->
         <env name="LOG_CHANNEL" value="stack"/>
         <env name="LOG_STACK" value="single"/>
         <env name="SENTRY_LARAVEL_DSN" value=""/>

@@ -1,0 +1,34 @@
+{
+  "id": "{{event}}",
+  "object": "event",
+  "account": "{{account}}",
+  "api_version": "2026-08-26.dahlia",
+  "created": 1790000100,
+  "data": {
+    "object": {
+      "id": "{{account}}",
+      "object": "account",
+      "charges_enabled": true,
+      "country": "MX",
+      "default_currency": "mxn",
+      "details_submitted": true,
+      "payouts_enabled": true,
+      "requirements": {
+        "alternatives": [],
+        "current_deadline": null,
+        "currently_due": [],
+        "disabled_reason": null,
+        "errors": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": []
+      },
+      "type": "standard"
+    },
+    "previous_attributes": { "charges_enabled": false }
+  },
+  "livemode": "{{livemode}}",
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "account.updated"
+}

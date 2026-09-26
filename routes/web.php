@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\LocaleController;
+use App\Modules\Gateways\Http\Controllers\OnboardingRefreshController;
+use App\Modules\Gateways\Http\Controllers\OnboardingReturnController;
 use App\Modules\Identity\Http\Controllers\InvitationController;
 use App\Modules\PlatformAdmin\Http\Controllers\ImpersonationController;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
@@ -40,6 +42,16 @@ Route::domain(is_string($appHost) ? $appHost : 'app.localhost')->group(function 
         Route::post('/mode', LivemodeController::class)
             ->middleware([ResolveTenantContext::class, EnforceImpersonationWindow::class])
             ->name('app.livemode.update');
+
+        // Stripe hosted onboarding comes back here (plan 12.3.1). The
+        // connection is resolved through the tenant scope: 404 across tenants.
+        Route::middleware([ResolveTenantContext::class, EnforceImpersonationWindow::class, 'throttle:30,1'])
+            ->prefix('/gateways/stripe/onboarding/{connection}')
+            ->where(['connection' => '[0-9A-Za-z]{26}'])
+            ->group(function (): void {
+                Route::get('/return', OnboardingReturnController::class)->name('gateways.stripe.onboarding.return');
+                Route::get('/refresh', OnboardingRefreshController::class)->name('gateways.stripe.onboarding.refresh');
+            });
     });
 });
 

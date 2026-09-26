@@ -23,6 +23,7 @@ use Illuminate\Validation\Rules\Password;
  *     PasswordField::make('password')->forCurrentPassword()  // sign-in, re-auth, current password
  *     PasswordField::make('password')->forNewPassword()      // PasswordPolicy rule + live checklist
  *     PasswordField::make('passwordConfirmation')->confirms('password')
+ *     PasswordField::make('restricted_key')->forSecret($show, $hide)  // pasted secrets (API keys)
  *
  * The reveal button replaces Filament's show/hide pair with ONE toggle
  * button (aria-pressed, aria-controls, constant accessible name, tooltip
@@ -37,7 +38,13 @@ final class PasswordField extends TextInput
 
     public const string MODE_NEW = 'new';
 
+    public const string MODE_SECRET = 'secret';
+
     private string $passwordMode = self::MODE_CURRENT;
+
+    private ?string $revealShowLabel = null;
+
+    private ?string $revealHideLabel = null;
 
     protected function setUp(): void
     {
@@ -117,6 +124,27 @@ final class PasswordField extends TextInput
         return $this;
     }
 
+    /**
+     * A pasted secret that is not the user's password (for example a Stripe
+     * restricted key): masked with the same reveal button, its own labels,
+     * no autocomplete and no offer to save it in a password manager. Never
+     * fill it back from stored data.
+     */
+    public function forSecret(string $showLabel, string $hideLabel): static
+    {
+        $this->passwordMode = self::MODE_SECRET;
+        $this->revealShowLabel = $showLabel;
+        $this->revealHideLabel = $hideLabel;
+        $this->autocomplete('off');
+        $this->extraInputAttributes([
+            'data-1p-ignore' => 'true',
+            'data-lpignore' => 'true',
+            'data-bwignore' => 'true',
+        ], merge: true);
+
+        return $this;
+    }
+
     public function getPasswordMode(): string
     {
         return $this->passwordMode;
@@ -133,8 +161,8 @@ final class PasswordField extends TextInput
 
     private function revealAction(): Action
     {
-        $show = __('identity.password.show');
-        $hide = __('identity.password.hide');
+        $show = $this->revealShowLabel ?? __('identity.password.show');
+        $hide = $this->revealHideLabel ?? __('identity.password.hide');
 
         return Action::make('togglePasswordVisibility')
             ->label($show)

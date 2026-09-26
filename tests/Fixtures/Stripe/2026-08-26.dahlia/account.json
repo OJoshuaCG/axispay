@@ -1,0 +1,31 @@
+{
+  "id": "{{account}}",
+  "object": "account",
+  "business_type": "company",
+  "charges_enabled": "{{charges_enabled}}",
+  "controller": {
+    "fees": { "payer": "account" },
+    "is_controller": true,
+    "losses": { "payments": "stripe" },
+    "requirement_collection": "stripe",
+    "stripe_dashboard": { "type": "full" },
+    "type": "application"
+  },
+  "country": "{{country}}",
+  "created": 1790000000,
+  "default_currency": "mxn",
+  "details_submitted": "{{details_submitted}}",
+  "metadata": {},
+  "payouts_enabled": "{{payouts_enabled}}",
+  "requirements": {
+    "alternatives": [],
+    "current_deadline": null,
+    "currently_due": [],
+    "disabled_reason": null,
+    "errors": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": []
+  },
+  "type": "standard"
+}

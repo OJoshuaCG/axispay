@@ -72,6 +72,14 @@ return [
         'livemode_switched' => 'Cambio de modo de prueba/real',
         'platform_admin_created' => 'Administrador de la plataforma creado',
         'owner_promoted' => 'Rol de propietario otorgado por la plataforma',
+        'gateway_onboarding_started' => 'Registro en Stripe iniciado',
+        'gateway_connected' => 'Stripe conectado',
+        'gateway_status_changed' => 'Estado de la conexión con Stripe cambiado',
+        'gateway_disconnected' => 'Stripe desconectado',
+        'gateway_risk_acknowledged' => 'Aviso de riesgo de llaves de API aceptado',
+        'gateway_credentials_updated' => 'Llaves de API de Stripe actualizadas',
+        'gateway_credentials_rejected' => 'Llaves de API de Stripe rechazadas',
+        'gateway_credentials_invalid' => 'Llaves de API de Stripe ya no válidas',
     ],
 
 ];

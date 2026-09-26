@@ -1,0 +1,20 @@
+{
+  "id": "{{event}}",
+  "object": "event",
+  "api_version": "2026-08-26.dahlia",
+  "created": 1790000300,
+  "data": {
+    "object": {
+      "id": "pi_FakePaymentIntent",
+      "object": "payment_intent",
+      "amount": 15050,
+      "currency": "mxn",
+      "metadata": {},
+      "status": "succeeded"
+    }
+  },
+  "livemode": "{{livemode}}",
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "payment_intent.succeeded"
+}

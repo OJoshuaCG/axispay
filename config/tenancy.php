@@ -26,6 +26,10 @@ return [
         'user_invitations',
         'audit_logs',
         'impersonation_sessions',
+        // Phase 2 (plan 7.4, 7.6). provider_events keeps NULL for unroutable
+        // events (platform rows, AllowsPlatformRows).
+        'gateway_connections',
+        'provider_events',
     ],
 
     /*
@@ -56,6 +60,8 @@ return [
         'App\\Modules\\Identity\\Auth\\TenantUserProvider',
         'App\\Modules\\Identity\\Services\\InvitationLookup',
         'App\\Modules\\Identity\\Services\\UserDirectory',
+        // Phase 2 (ADR-0047): retention purge of provider_events across tenants.
+        'App\\Modules\\ProviderEvents\\Services\\ProviderEventRetention',
     ],
 
 ];

@@ -25,8 +25,8 @@ Rules:
 | `Access` | Permissions and roles (spatie/laravel-permission with teams), policies. | Phase 1 (exists) |
 | `PlatformAdmin` | Superadmins, audited impersonation, global views. | Phase 1 (exists) |
 | `Audit` | Append-only audit log. | Phase 1 (exists) |
-| `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks. | Phase 2 / 4B |
-| `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch, reconciliation. | Phase 2 |
+| `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks. | Phase 2 (exists; OAuth in 4B) |
+| `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch, reconciliation. | Phase 2 (exists; reconciliation in 4) |
 | `ApiKeys` | Issuing, hashing, verifying, scoping and revoking API keys. | Phase 3 |
 | `PaymentLinks` | Link creation, expiration, cancellation and queries; link state machine. | Phase 3 |
 | `Checkout` | Public payment page, quotes, attempt start/confirmation, card-testing protection. | Phase 4 |
@@ -59,6 +59,17 @@ Rules:
 | Access | `Enums\{TenantPermission, SystemRole}`, `Actions\ChangeUserRoles`, `Policies\{UserPolicy, RolePolicy}`, `TenantTeamResolver` |
 | PlatformAdmin | `Models\{PlatformAdmin, ImpersonationSession}`, `Actions\{StartImpersonation, ConsumeImpersonationToken, EndImpersonation, CreatePlatformAdmin}`, `Policies\{TenantPolicy, PlatformAdminPolicy}` |
 | Audit | `Services\AuditLogger` (the only writer), `Enums\AuditAction`, `Models\AuditLog` |
+
+## Phase 2 entry points
+
+| Module | Entry points |
+|---|---|
+| Gateways | `Contracts\PaymentGateway`, `Services\GatewayFactory`, `Stripe\{StripeGateway, StripeClientFactory, StripeCallContext}`, `Stripe\Connection\{PlatformOnboardingFlow, ApiKeyFlow}`, `Actions\{StartPlatformOnboarding, CreateOnboardingLink, SyncGatewayConnection, ConnectWithApiKey, UpdateApiKeyCredentials, DisconnectGatewayConnection, MarkConnectionCredentialsInvalid, CheckApiKeyConnectionHealth}`, `Services\{GatewayCredentialsEncrypter, GatewayConnectionResolver}` (cross-tenant lookups, whitelisted), `Models\GatewayConnection`, `Filament\Pages\StripeConnection` |
+| ProviderEvents | `Http\Controllers\{StripeConnectWebhookController, StripeDirectWebhookController}`, `Actions\{RecordProviderEvent, ProcessProviderEvent}`, `Jobs\ProcessProviderEventJob`, `Models\ProviderEvent` |
+
+Only `StripeClientFactory` builds a `StripeClient`; nothing outside
+`Gateways\Stripe` knows Stripe IDs, statuses or event names (ADR-019).
+`FakePaymentGateway` (tests/Support) implements the whole port for tests.
 
 Filament resources live inside their module (`<Module>/Filament/...`) and are
 registered explicitly in `app/Providers/Filament/{Admin,App}PanelProvider.php`.

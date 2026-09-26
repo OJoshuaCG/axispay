@@ -24,6 +24,10 @@ use InvalidArgumentException;
  * The only way to change a tenant's status (plan 21.3): superadmin only,
  * reason required, allowed transitions only, closing double-confirmed,
  * audited, owners notified. Runs under a row lock (rules.md rule 8).
+ *
+ * handleAsSystem() is the same path for the automatic transitions of plan
+ * 21.3 ("automático al completar onboarding"): no authorization (there is no
+ * user), audited with the system actor. Closing is never automatic.
  */
 final readonly class ChangeTenantStatus
 {
@@ -36,15 +40,42 @@ final readonly class ChangeTenantStatus
     {
         Gate::forUser($actor)->authorize('changeStatus', $tenant);
 
+        return $this->transition($tenant, $data, Actor::platformAdmin($actor->id));
+    }
+
+    /**
+     * Automatic transition decided by the platform itself (for example
+     * pending_onboarding -> active once a gateway connection can charge).
+     * `$expectedFrom` guards against racing a superadmin: nothing happens
+     * when the tenant is no longer in that status.
+     */
+    public function handleAsSystem(Tenant $tenant, ChangeTenantStatusData $data, TenantStatus $expectedFrom): ?Tenant
+    {
+        if ($data->status->requiresDoubleConfirmation()) {
+            throw new InvalidArgumentException('Closing a tenant is never automatic.');
+        }
+
+        return $this->transition($tenant, $data, Actor::system(), $expectedFrom);
+    }
+
+    /**
+     * @return ($expectedFrom is null ? Tenant : Tenant|null)
+     */
+    private function transition(Tenant $tenant, ChangeTenantStatusData $data, Actor $actor, ?TenantStatus $expectedFrom = null): ?Tenant
+    {
         $reason = trim($data->reason);
 
         if ($reason === '') {
             throw new InvalidArgumentException('A reason is required to change the tenant status.');
         }
 
-        $updated = DB::transaction(function () use ($actor, $tenant, $data, $reason): Tenant {
+        $updated = DB::transaction(function () use ($actor, $tenant, $data, $reason, $expectedFrom): ?Tenant {
             $locked = Tenant::query()->lockForUpdate()->findOrFail($tenant->id);
             $from = $locked->status;
+
+            if ($expectedFrom !== null && $from !== $expectedFrom) {
+                return null;
+            }
 
             if (! $from->canTransitionTo($data->status)) {
                 throw new InvalidTenantStatusTransitionException($from, $data->status);
@@ -65,10 +96,14 @@ final readonly class ChangeTenantStatus
                 'before' => ['status' => $from->value],
                 'after' => ['status' => $data->status->value],
                 'reason' => $reason,
-            ], tenantId: $locked->id, actor: Actor::platformAdmin($actor->id));
+            ], tenantId: $locked->id, actor: $actor);
 
             return $locked;
         });
+
+        if ($updated === null) {
+            return null;
+        }
 
         if (in_array($updated->status, [TenantStatus::Grace, TenantStatus::Suspended, TenantStatus::Closed], true)) {
             Notification::send($this->owners->of($updated), new TenantStatusChangedNotification($updated->status));

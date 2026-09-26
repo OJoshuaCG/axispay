@@ -59,6 +59,19 @@ const REVIEWED_APP_ROUTES = [
     'impersonation.stop' => 'Acts on the session only.',
     'app.livemode.update' => 'Acts on the session only; tenant from the user.',
     'app.session.ping' => 'Keep-alive (ADR-0040): no parameters, reads nothing, returns an empty 204.',
+    'gateways.stripe.onboarding.return' => 'Connection resolved through the tenant scope; cross-tenant 404 covered by Gateways/GatewayIsolationTest.',
+    'gateways.stripe.onboarding.refresh' => 'Connection resolved through the tenant scope; cross-tenant 404 covered by Gateways/GatewayIsolationTest.',
+];
+
+/**
+ * API-host routes that are not tenant API resources: platform-level
+ * endpoints authenticated by a signature, not by a tenant API key.
+ *
+ * @var array<string, string>
+ */
+const REVIEWED_API_ROUTES = [
+    'webhooks.stripe.connect' => 'Stripe Connect webhooks (plan 14.1): tenant derived from event.account; covered by Gateways/IncomingWebhooksTest.',
+    'webhooks.stripe.direct' => 'Stripe direct webhooks (plan 14.1): per-connection secret, unknown/disconnected -> 404; covered by Gateways/IncomingWebhooksTest.',
 ];
 
 /**
@@ -135,6 +148,7 @@ it('has no API routes without an isolation dataset yet (Phase 3 adds them)', fun
     $apiRoutes = collect(Route::getRoutes()->getRoutes())
         ->filter(static fn (RouteDefinition $route): bool => $route->getDomain() === config()->string('axispay.surfaces.api'))
         ->map(static fn (RouteDefinition $route): string => (string) $route->getName())
+        ->reject(static fn (string $name): bool => array_key_exists($name, REVIEWED_API_ROUTES))
         ->values()
         ->all();
 

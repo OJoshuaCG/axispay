@@ -27,6 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('v1')
                 ->name('api.v1.')
                 ->group(base_path('routes/api.php'));
+
+            // Incoming gateway webhooks (plan 14.1): API host, outside /v1.
+            Route::middleware('api')
+                ->domain(ApiSurface::host())
+                ->group(base_path('routes/webhooks.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {

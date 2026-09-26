@@ -6,6 +6,7 @@ namespace App\Providers\Filament;
 
 use App\Modules\Access\Filament\Resources\Roles\RoleResource;
 use App\Modules\Audit\Filament\Resources\AuditLogs\AuditLogResource;
+use App\Modules\Gateways\Filament\Pages\StripeConnection;
 use App\Modules\Identity\Filament\Resources\Users\UserResource;
 use App\Modules\Identity\Http\Middleware\RequireTwoFactorForSensitiveUsers;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
@@ -42,7 +43,7 @@ final class AppPanelProvider extends PanelProvider
                 RoleResource::class,
                 AuditLogResource::class,
             ])
-            ->pages([Dashboard::class])
+            ->pages([Dashboard::class, StripeConnection::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([
                 Authenticate::class,

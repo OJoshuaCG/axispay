@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages;
 
+use App\Modules\Gateways\Enums\ConnectionMethod;
+use App\Modules\Gateways\Enums\ConnectionStatus;
+use App\Modules\Gateways\Services\GatewayConnectionResolver;
 use App\Modules\Identity\Actions\ResendInvitation;
 use App\Modules\Identity\Enums\InvitationStatus;
 use App\Modules\Identity\Exceptions\EmailNotAvailableException;
@@ -30,11 +33,16 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Infolists\Components\IconEntry;
+use Filament\Infolists\Components\RepeatableEntry;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Callout;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\On;
@@ -65,7 +73,45 @@ final class ViewTenant extends ViewRecord
         return $schema->components([
             $this->ownershipCallout(),
             TenantResource::profileSection(),
+            $this->gatewaySection(),
         ]);
+    }
+
+    /**
+     * Read-only view of the tenant's gateway connections, both modes (Phase
+     * 2). Never secrets: the model hides the credential columns and only
+     * status fields are listed. Read through the whitelisted resolver.
+     */
+    private function gatewaySection(): Section
+    {
+        return Section::make(__('gateways.admin.heading'))
+            ->key('gateway')
+            ->schema([
+                RepeatableEntry::make('gateway_connections')
+                    ->hiddenLabel()
+                    ->state(fn (): array => app(GatewayConnectionResolver::class)->ofTenant($this->tenant()->id)->all())
+                    ->placeholder(__('gateways.admin.empty'))
+                    ->columns(['default' => 1, 'sm' => 2, 'lg' => 4])
+                    ->schema([
+                        TextEntry::make('livemode')
+                            ->label(__('gateways.admin.mode'))
+                            ->formatStateUsing(static fn (mixed $state): string => __('gateways.mode.'.($state === true ? 'live' : 'test'))),
+                        TextEntry::make('connection_method')
+                            ->label(__('gateways.fields.method'))
+                            ->formatStateUsing(static fn (mixed $state): string => $state instanceof ConnectionMethod ? $state->label() : '—'),
+                        TextEntry::make('status')
+                            ->label(__('gateways.fields.status'))
+                            ->badge()
+                            ->formatStateUsing(static fn (mixed $state): string => $state instanceof ConnectionStatus ? $state->label() : '—')
+                            ->color(static fn (mixed $state): string => $state instanceof ConnectionStatus ? $state->color() : 'gray'),
+                        TextEntry::make('country')->label(__('gateways.fields.country'))->placeholder('—'),
+                        TextEntry::make('provider_account_id')->label(__('gateways.fields.account'))->fontFamily(FontFamily::Mono)->placeholder('—')->copyable(),
+                        IconEntry::make('charges_enabled')->label(__('gateways.fields.charges_enabled'))->boolean(),
+                        TextEntry::make('last_synced_at')->label(__('gateways.fields.last_synced_at'))->dateTime()->placeholder('—'),
+                        TextEntry::make('disconnected_at')->label(__('gateways.admin.disconnected_at'))->dateTime()->placeholder('—'),
+                    ]),
+            ])
+            ->columnSpanFull();
     }
 
     /** Owner invited, resent or granted on this page or its relation managers. */

@@ -1,0 +1,18 @@
+{
+  "id": "{{event}}",
+  "object": "event",
+  "account": "{{account}}",
+  "api_version": "2026-08-26.dahlia",
+  "created": 1790000200,
+  "data": {
+    "object": {
+      "id": "ca_FakePlatformApplication",
+      "object": "application",
+      "name": "AxisPay"
+    }
+  },
+  "livemode": "{{livemode}}",
+  "pending_webhooks": 1,
+  "request": { "id": null, "idempotency_key": null },
+  "type": "account.application.deauthorized"
+}

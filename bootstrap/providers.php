@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use App\Modules\Access\Providers\AccessServiceProvider;
 use App\Modules\Audit\Providers\AuditServiceProvider;
+use App\Modules\Gateways\Providers\GatewaysServiceProvider;
 use App\Modules\Identity\Providers\IdentityServiceProvider;
 use App\Modules\PlatformAdmin\Providers\PlatformAdminServiceProvider;
+use App\Modules\ProviderEvents\Providers\ProviderEventsServiceProvider;
 use App\Modules\Shared\Providers\SharedServiceProvider;
 use App\Modules\Tenancy\Providers\TenancyServiceProvider;
 use App\Providers\AppServiceProvider;
@@ -20,6 +22,8 @@ return [
     IdentityServiceProvider::class,
     AccessServiceProvider::class,
     PlatformAdminServiceProvider::class,
+    GatewaysServiceProvider::class,
+    ProviderEventsServiceProvider::class,
     AdminPanelProvider::class,
     AppPanelProvider::class,
 ];

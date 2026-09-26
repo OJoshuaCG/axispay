@@ -72,6 +72,14 @@ return [
         'livemode_switched' => 'Test/live mode switched',
         'platform_admin_created' => 'Platform admin created',
         'owner_promoted' => 'Owner role granted by the platform',
+        'gateway_onboarding_started' => 'Stripe onboarding started',
+        'gateway_connected' => 'Stripe connected',
+        'gateway_status_changed' => 'Stripe connection status changed',
+        'gateway_disconnected' => 'Stripe disconnected',
+        'gateway_risk_acknowledged' => 'API key risk notice accepted',
+        'gateway_credentials_updated' => 'Stripe API keys updated',
+        'gateway_credentials_rejected' => 'Stripe API keys rejected',
+        'gateway_credentials_invalid' => 'Stripe API keys no longer valid',
     ],
 
 ];
