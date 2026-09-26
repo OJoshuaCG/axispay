@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Access\Enums\SystemRole;
+use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Identity\Enums\InvitationStatus;
 use App\Modules\Identity\Models\UserInvitation;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\EditTenant;
@@ -12,6 +13,8 @@ use App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers\UsersR
 use App\Modules\Tenancy\Actions\InviteTenantOwner;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\Scopes\TenantScope;
+use Filament\Actions\Exceptions\ActionNotResolvableException;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Features\SupportTesting\Testable;
@@ -163,14 +166,26 @@ it('cannot act on another tenant invitation through a tenant page', function ():
     Notification::fake();
     actingAsPlatformAdmin(platformAdmin());
     [$a, $b] = [activeTenant(), activeTenant()];
-    platformInvitation($a, 'own@act.test');
+    $own = platformInvitation($a, 'own@act.test');
     $foreign = platformInvitation($b, 'foreign@act.test');
+    Notification::fake(); // Forget the two invitation e-mails above.
+    $audits = AuditLog::query()->withoutGlobalScope(TenantScope::class)->count();
 
+    // The table query is the viewed tenant's `invitations` relationship, so
+    // the own record resolves and the foreign one never does.
     invitationsManager($a)
-        ->assertActionHidden(TestAction::make('revoke')->table($foreign))
-        ->assertActionHidden(TestAction::make('resend')->table($foreign));
+        ->assertCanSeeTableRecords([$own])
+        ->assertCanNotSeeTableRecords([$foreign])
+        ->assertActionVisible(TestAction::make('revoke')->table($own));
 
-    expect($foreign->refresh()->status())->toBe(InvitationStatus::Pending);
+    foreach (['revoke', 'resend'] as $action) {
+        expect(fn () => invitationsManager($a)->callAction(TestAction::make($action)->table($foreign)))
+            ->toThrow(ActionNotResolvableException::class, "Record [{$foreign->id}] no longer exists.");
+    }
+
+    expect($foreign->refresh()->status())->toBe(InvitationStatus::Pending)
+        ->and(AuditLog::query()->withoutGlobalScope(TenantScope::class)->count())->toBe($audits);
+    Notification::assertNothingSent();
 });
 
 it('lists only the viewed tenant users with roles, status and 2FA', function (): void {

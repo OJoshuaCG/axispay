@@ -58,6 +58,7 @@ const REVIEWED_APP_ROUTES = [
     'impersonation.consume' => 'Token lookup only; covered by ImpersonationTest.',
     'impersonation.stop' => 'Acts on the session only.',
     'app.livemode.update' => 'Acts on the session only; tenant from the user.',
+    'app.session.ping' => 'Keep-alive (ADR-0040): no parameters, reads nothing, returns an empty 204.',
 ];
 
 /**

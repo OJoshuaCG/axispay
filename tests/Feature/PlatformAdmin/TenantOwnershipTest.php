@@ -26,6 +26,7 @@ use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Scopes\TenantScope;
 use App\Modules\Tenancy\TenantContext;
+use Filament\Actions\Exceptions\ActionNotResolvableException;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -364,13 +365,25 @@ it('makes a user owner from the Users list with a reason and the admin password'
 
 it('cannot reach another tenant user through a tenant Users list', function (): void {
     actingAsPlatformAdmin(platformAdmin());
+    Notification::fake();
     $a = activeTenant();
-    tenantUser($a, [SystemRole::Admin]);
+    $own = tenantUser($a, [SystemRole::Admin]);
     $foreign = tenantUser(activeTenant(), [SystemRole::Admin]);
+    $audits = AuditLog::query()->withoutGlobalScope(TenantScope::class)->count();
 
+    // The table query is the viewed tenant's `users` relationship, so the own
+    // user resolves and the foreign one never does.
     ownershipUsersManager($a)
+        ->assertCanSeeTableRecords([$own])
         ->assertCanNotSeeTableRecords([$foreign])
-        ->assertActionHidden(TestAction::make('promoteOwner')->table($foreign));
+        ->assertActionVisible(TestAction::make('promoteOwner')->table($own));
 
-    expect(hasOwnerRole($foreign))->toBeFalse();
+    expect(fn () => ownershipUsersManager($a)->callAction(
+        TestAction::make('promoteOwner')->table($foreign),
+        ['reason' => 'Owner left the company', 'current_password' => 'password-for-tests'],
+    ))->toThrow(ActionNotResolvableException::class, "Record [{$foreign->id}] no longer exists.");
+
+    expect(hasOwnerRole($foreign))->toBeFalse()
+        ->and(AuditLog::query()->withoutGlobalScope(TenantScope::class)->count())->toBe($audits);
+    Notification::assertNothingSent();
 });

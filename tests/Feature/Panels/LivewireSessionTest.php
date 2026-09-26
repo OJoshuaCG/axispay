@@ -12,6 +12,7 @@ use Livewire\Livewire;
 use function Pest\Laravel\get;
 use function Pest\Laravel\postJson;
 use function Pest\Laravel\withCookie;
+use function Pest\Laravel\withCredentials;
 
 /*
  * Regression: the shared panel middleware was registered as Livewire
@@ -49,6 +50,11 @@ it('keeps the same session across consecutive Livewire updates on the sign-in pa
     expect($uri)->toHaveKey(1)->and($snapshot)->toHaveKey(1);
     $updateUri = html_entity_decode($uri[1] ?? '', ENT_QUOTES | ENT_HTML5);
     $snapshot = html_entity_decode($snapshot[1] ?? '', ENT_QUOTES | ENT_HTML5);
+
+    // JSON test requests carry no cookies unless credentials are enabled;
+    // without the session cookie every request would start a new session and
+    // the assertion below would prove nothing.
+    withCredentials();
 
     // Two requests: the bug only showed from the second one on.
     foreach ([1, 2] as $request) {
