@@ -13,6 +13,8 @@ use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Livewire\SimpleUserMenu;
+use Filament\Pages\SimplePage;
 use Filament\Panel;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
@@ -24,12 +26,14 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Livewire\LivewireManager;
 
 /**
  * Configuration shared by the `admin` and `app` panels (ADR-0025, ADR-0030):
  * design-token palettes, self-hosted Mukta and Geist Mono, the token-based
  * theme, the dark-mode bridge, the language switcher and theme control, the
- * brand mark, audited TOTP 2FA and the profile page. Each panel provider adds its host, guard, resources and rules.
+ * brand mark, audited TOTP 2FA and the profile page. Each panel provider
+ * adds its host, guard, resources and rules.
  */
 final class PanelDefaults
 {
@@ -79,7 +83,29 @@ final class PanelDefaults
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.theme-bridge'))
             // 419 auto-reload and session keep-alive (ADR-0040).
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.session-resilience'))
-            ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, static fn (): View => view('filament.partials.panel-controls'))
-            ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls'));
+            // One control bar per page. Topbar: panel-controls. Simple
+            // pages: panel-controls inside Filament's signed-in header
+            // (SimpleUserMenu), or guest-controls when there is no header.
+            ->renderHook(PanelsRenderHook::USER_MENU_BEFORE, static fn (): View => view('filament.partials.panel-controls', [
+                'simple' => app(LivewireManager::class)->current() instanceof SimpleUserMenu,
+            ]))
+            ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls', [
+                'show' => ! self::simplePageHasUserHeader(),
+            ]));
+    }
+
+    /**
+     * Mirrors the condition of Filament's simple layout
+     * (filament-panels::components.layout.simple) for rendering the header
+     * with the user menu. SIMPLE_LAYOUT_START renders inside the page's own
+     * Livewire render, so the current component is the page.
+     */
+    private static function simplePageHasUserHeader(): bool
+    {
+        $page = app(LivewireManager::class)->current();
+
+        return filament()->auth()->check()
+            && filament()->hasUserMenu()
+            && (! $page instanceof SimplePage || $page->hasTopbar());
     }
 }

@@ -24,6 +24,10 @@
 @source '../../../app/Providers/Filament/**/*.php';
 @source '../../views/filament/**/*.blade.php';
 @source '../../views/components/language-switcher.blade.php';
+/* Shared with the Blade pages: password field partials (ADR-0046) and the icon atom they use. */
+@source '../../views/components/password/**/*.blade.php';
+@source '../../views/components/icon.blade.php';
+@source '../../../app/Support/Filament/**/*.php';
 
 /*
  * Panel type scale (ADR-0044). Filament's sizes were tuned for Inter; Mukta's
@@ -114,6 +118,24 @@ html.fi {
 
     .pl-banner-action:hover {
         @apply bg-surface-alt;
+    }
+
+    /*
+     * Simple pages (sign-in, 2FA set-up / challenge) show ONE control bar:
+     * guest-controls without a session, Filament's signed-in header (user
+     * menu + panel-controls) with one. Both get the same place: a
+     * right-aligned row above the card, instead of Filament's absolutely
+     * positioned header that could overlap the card on phones.
+     */
+    .pl-simple-controls,
+    .fi .fi-simple-layout-header {
+        @apply static flex h-auto w-full flex-wrap items-center justify-end gap-2 px-gutter pt-4;
+    }
+
+    /* Reveal button of PasswordField (ADR-0046): a 44px target like the Blade twin. */
+    .fi .pl-password-toggle {
+        min-width: var(--spacing-touch);
+        min-height: var(--spacing-touch);
     }
 }
 
@@ -243,6 +265,11 @@ html.fi {
         @variant md {
             display: none;
         }
+    }
+
+    /* Simple pages show the theme control in their bar at every width. */
+    html.fi:has(.fi-simple-layout) .fi-dropdown-list:has(> .fi-theme-switcher) {
+        display: none;
     }
 
     /* Tables: sunken header row, secondary header text, no zebra. The empty
