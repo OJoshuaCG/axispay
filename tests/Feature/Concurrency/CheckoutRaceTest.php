@@ -34,7 +34,7 @@ afterEach(function (): void {
 /**
  * @return list<string>
  */
-function checkoutRace(string $token, int $processes = 8): array
+function checkoutRace(string $token, int $processes = 8, int $cancellers = 0): array
 {
     $barrier = sys_get_temp_dir().'/axispay-checkout-race-'.bin2hex(random_bytes(6));
     mkdir($barrier);
@@ -43,7 +43,7 @@ function checkoutRace(string $token, int $processes = 8): array
     try {
         foreach (range(1, $processes) as $i) {
             $process = new Process(
-                [PHP_BINARY, base_path('tests/Fixtures/checkout-race.php'), $token, $barrier],
+                [PHP_BINARY, base_path('tests/Fixtures/checkout-race.php'), $token, $barrier, $i <= $cancellers ? 'cancel' : 'pay'],
                 base_path(),
                 ['APP_ENV' => 'testing', 'AXISPAY_CHECKOUT_SANDBOX' => 'true', 'CACHE_STORE' => 'array', 'QUEUE_CONNECTION' => 'sync'],
                 timeout: 60,
@@ -97,4 +97,26 @@ it('lets only one of eight simultaneous sessions pay a link (case 1)', function 
         ->and($attempts)->toHaveCount(1)
         ->and($attempts->first()?->status)->toBe(PaymentAttemptStatus::Succeeded)
         ->and($fresh->status)->toBe(PaymentLinkStatus::Paid);
+})->group('concurrency');
+
+it('never pays a link that a simultaneous cancellation canceled, and vice versa (plan 9.1)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
+
+    $outcomes = checkoutRace($link->public_token, 8, cancellers: 4);
+    $counts = array_count_values($outcomes);
+    $fresh = PaymentLink::query()->withoutGlobalScopes()->findOrFail($link->id);
+    $succeeded = PaymentAttempt::query()->withoutGlobalScopes()->where('payment_link_id', $link->id)->where('status', PaymentAttemptStatus::Succeeded->value)->count();
+
+    expect(array_diff(array_keys($counts), ['paid', 'in_progress', 'already_paid', 'canceled', 'not_cancelable']))->toBe([], implode(',', $outcomes));
+
+    if ($fresh->status === PaymentLinkStatus::Paid) {
+        expect($counts['canceled'] ?? 0)->toBe(0, implode(',', $outcomes))->and($succeeded)->toBe(1)->and($counts['paid'] ?? 0)->toBe(1);
+    } else {
+        expect($fresh->status)->toBe(PaymentLinkStatus::Canceled)
+            ->and($counts['paid'] ?? 0)->toBe(0, implode(',', $outcomes))
+            ->and($succeeded)->toBe(0)
+            // Canceling a canceled link answers it again (idempotent, plan 10.5).
+            ->and($counts['canceled'] ?? 0)->toBeGreaterThanOrEqual(1);
+    }
 })->group('concurrency');

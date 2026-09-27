@@ -195,5 +195,8 @@ it('ignores an event whose metadata names no attempt of the tenant', function ()
 
     expect($stored->status)->toBe(ProviderEventStatus::Ignored)
         ->and($stored->last_error)->toBe(ProviderEventStatus::FOREIGN_OBJECT)
+        // Plan 14.4: only the reduced payload is kept.
+        ->and($stored->payload)->not->toContain('payer@example.com')
+        ->and(jsonArray($stored->payload)['axispay_reduced'] ?? null)->toBeTrue()
         ->and(stripeHttp()->requests)->toBe([]);
 });

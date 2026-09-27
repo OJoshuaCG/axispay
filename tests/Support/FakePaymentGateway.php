@@ -20,9 +20,11 @@ use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
+use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
+use Closure;
 use LogicException;
 use Throwable;
 
@@ -53,6 +55,15 @@ final class FakePaymentGateway implements PaymentGateway
 
     /** @var array<string, Throwable> */
     private array $nextFailures = [];
+
+    /** @var list<string|null> receipt e-mail of each confirmation */
+    public array $receiptEmails = [];
+
+    /** @var array<string, string> idempotency key => fingerprint of its parameters */
+    private array $keyParameters = [];
+
+    /** @var array<string, true> methods whose next answer is lost after doing the work */
+    private array $loseResponse = [];
 
     private ProviderPaymentStatus $captureResult = ProviderPaymentStatus::Succeeded;
 
@@ -128,6 +139,15 @@ final class FakePaymentGateway implements PaymentGateway
         $this->calls[] = 'createOrUpdatePayment:'.$request->idempotencyKey;
         $this->throwIfFailing('createOrUpdatePayment');
 
+        // Like Stripe: a key reused with other parameters is refused.
+        $fingerprint = hash('sha256', (string) json_encode([$request->amountMinor, $request->currency, $request->description, $request->metadata, $request->providerPaymentId]));
+
+        if (isset($this->keyParameters[$request->idempotencyKey]) && $this->keyParameters[$request->idempotencyKey] !== $fingerprint) {
+            throw new GatewayRequestException('Keys for idempotent requests can only be used with the same parameters.', 'idempotency_key_in_use', null, 400);
+        }
+
+        $this->keyParameters[$request->idempotencyKey] = $fingerprint;
+
         if (isset($this->idempotent[$request->idempotencyKey])) {
             return $this->toPayment($this->payments[$this->idempotent[$request->idempotencyKey]]);
         }
@@ -142,13 +162,15 @@ final class FakePaymentGateway implements PaymentGateway
             'connection' => $connection->id,
         ];
         $this->idempotent[$request->idempotencyKey] = $id;
+        $this->throwIfLost('createOrUpdatePayment');
 
         return $this->toPayment($this->payments[$id]);
     }
 
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment
     {
         $this->calls[] = 'confirmPayment:'.$providerPaymentId;
+        $this->receiptEmails[] = $receiptEmail;
         $this->throwIfFailing('confirmPayment');
 
         if (isset($this->idempotent[$idempotencyKey])) {
@@ -234,6 +256,23 @@ final class FakePaymentGateway implements PaymentGateway
         return $this;
     }
 
+    /** Test seam: the next call of `$method` does its work, then its answer is lost (network). */
+    public function loseNextResponse(string $method): self
+    {
+        $this->loseResponse[$method] = true;
+
+        return $this;
+    }
+
+    private function throwIfLost(string $method): void
+    {
+        if (isset($this->loseResponse[$method])) {
+            unset($this->loseResponse[$method]);
+
+            throw new GatewayUnavailableException('Fake: the answer was lost.');
+        }
+    }
+
     /** Test seam: the next call of `$method` throws. */
     public function failNext(string $method, Throwable $exception): self
     {
@@ -263,8 +302,25 @@ final class FakePaymentGateway implements PaymentGateway
         return array_values(array_filter($this->calls, static fn (string $call): bool => str_starts_with($call, $method.':')));
     }
 
+    /** @var array<string, Closure(): void> */
+    private array $before = [];
+
+    /** Test seam: run `$callback` right before the next call of `$method` does its work. */
+    public function beforeNext(string $method, Closure $callback): self
+    {
+        $this->before[$method] = $callback;
+
+        return $this;
+    }
+
     private function throwIfFailing(string $method): void
     {
+        if (isset($this->before[$method])) {
+            $callback = $this->before[$method];
+            unset($this->before[$method]);
+            $callback();
+        }
+
         if (isset($this->nextFailures[$method])) {
             $exception = $this->nextFailures[$method];
             unset($this->nextFailures[$method]);
