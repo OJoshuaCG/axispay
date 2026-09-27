@@ -150,4 +150,10 @@ return [
         'body' => 'Brand protagonist color. Decorative only: never for buttons or links.',
     ],
 
+    'checkout' => [
+        'title' => 'Checkout',
+        'description' => 'Payer-facing pieces of the payment page (DESIGN.md, ADR-0051): header, order summary, payer fields, card form placeholder, feedback and the state panels. The page itself follows the operating system theme and has no theme toggle.',
+        'sample_description' => 'Order #A-1029 — 2 items',
+    ],
+
 ];

@@ -45,6 +45,19 @@ final readonly class PaymentLinkPolicy
             && $this->access->panelWritable($actor->tenant_id);
     }
 
+    /**
+     * Lifting the card-testing block of a link (plan 11.7 rule 4). The same
+     * permission that decides whether a link may keep taking payments:
+     * `links:cancel` (ADR-0051).
+     */
+    public function unblockCheckout(User $actor, PaymentLink $link): bool
+    {
+        return $actor->tenant_id === $link->tenant_id
+            && $link->isCheckoutBlocked()
+            && $actor->checkPermissionTo(TenantPermission::LinksCancel->value)
+            && $this->access->panelWritable($actor->tenant_id);
+    }
+
     public function update(User $actor, PaymentLink $link): bool
     {
         return false;

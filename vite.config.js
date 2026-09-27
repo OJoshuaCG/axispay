@@ -24,7 +24,15 @@ export default defineConfig({
     plugins: [
         laravel({
             // The panel theme is a separate entry: Filament loads it with ->viteTheme().
-            input: ['resources/css/app.css', 'resources/js/app.js', 'resources/css/filament/theme.css'],
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                'resources/css/filament/theme.css',
+                // Payer-facing checkout (ADR-0051); the sandbox stub is only
+                // loaded when AXISPAY_CHECKOUT_SANDBOX is on (local/testing).
+                'resources/js/checkout/checkout.js',
+                'resources/js/checkout/sandbox-stripe.js',
+            ],
             refresh: true,
             // Mukta (text) and Geist Mono (currency and numeric data, ADR-0042) are
             // self-hosted: font files are read from the pinned @fontsource/* packages

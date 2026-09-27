@@ -28,6 +28,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->name('api.v1.')
                 ->group(base_path('routes/api.php'));
 
+            // Public checkout (plan 11.5): pay host, web group (anonymous
+            // session + CSRF), ADR-0051.
+            Route::middleware('web')
+                ->domain(config()->string('axispay.surfaces.pay'))
+                ->group(base_path('routes/checkout.php'));
+
             // Incoming gateway webhooks (plan 14.1): API host, outside /v1.
             Route::middleware('api')
                 ->domain(ApiSurface::host())

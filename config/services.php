@@ -55,6 +55,18 @@ return [
         'max_network_retries' => 2,
     ],
 
+    /*
+    | Cloudflare Turnstile (plan 11.7 rule 3): the checkout's bot check after a
+    | decline, verified on the server before calling the gateway. Cloudflare's
+    | documented test keys work in local and testing (docs/development.md).
+    */
+    'turnstile' => [
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+        'verify_url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        'timeout_seconds' => 5,
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

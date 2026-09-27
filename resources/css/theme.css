@@ -155,6 +155,8 @@
     --spacing-touch: 2.75rem;
 
     --container-narrow: 40rem;
+    /* Payment page from 1024px: summary + form side by side (DESIGN, ADR-0051). */
+    --container-checkout: 60rem;
     --container-content: 72rem;
     --container-wide: 90rem;
 

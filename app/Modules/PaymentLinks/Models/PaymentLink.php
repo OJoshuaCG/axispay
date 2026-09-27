@@ -10,6 +10,7 @@ use App\Modules\PaymentLinks\Enums\CreatedVia;
 use App\Modules\PaymentLinks\Enums\DisputeStatus;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Enums\RefundStatus;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Shared\Database\AsJsonObject;
 use App\Modules\Shared\Database\HasPrefixedId;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
@@ -23,6 +24,7 @@ use Carbon\CarbonImmutable;
 use Database\Factories\PaymentLinkFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A single-use, reopenable payment link (plan 7.5, ADR-006). Created by
@@ -53,6 +55,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property CarbonImmutable|null $first_opened_at
  * @property CarbonImmutable|null $last_opened_at
  * @property int $open_count
+ * @property CarbonImmutable|null $checkout_blocked_until
+ * @property string|null $checkout_block_reason
+ * @property CarbonImmutable|null $checkout_unblocked_at
+ * @property CarbonImmutable|null $opened_event_at
  * @property RefundStatus $refund_status
  * @property DisputeStatus $dispute_status
  * @property CreatedVia $created_via
@@ -91,9 +97,26 @@ final class PaymentLink extends Model
         return ResourceType::PaymentLink;
     }
 
+    /**
+     * Payment attempts of the link (plan 7.5), newest first. Read-only here:
+     * attempts change only through the payments module.
+     *
+     * @return HasMany<PaymentAttempt, $this>
+     */
+    public function attempts(): HasMany
+    {
+        return $this->hasMany(PaymentAttempt::class, 'payment_link_id')->orderByDesc('id');
+    }
+
     public function money(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
+    }
+
+    /** The long card-testing block (plan 11.7 rule 4) is in force. */
+    public function isCheckoutBlocked(): bool
+    {
+        return $this->checkout_blocked_until !== null && $this->checkout_blocked_until->isFuture();
     }
 
     /** Still `active` but past its expiry: the job (or checkout) expires it. */
@@ -125,6 +148,9 @@ final class PaymentLink extends Model
             'first_opened_at' => 'immutable_datetime',
             'last_opened_at' => 'immutable_datetime',
             'open_count' => 'integer',
+            'checkout_blocked_until' => 'immutable_datetime',
+            'checkout_unblocked_at' => 'immutable_datetime',
+            'opened_event_at' => 'immutable_datetime',
             'refund_status' => RefundStatus::class,
             'dispute_status' => DisputeStatus::class,
             'created_via' => CreatedVia::class,

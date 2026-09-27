@@ -147,4 +147,10 @@ return [
         'body' => 'Color protagonista de la marca. Solo decorativo: nunca para botones ni enlaces.',
     ],
 
+    'checkout' => [
+        'title' => 'Checkout',
+        'description' => 'Piezas de la página de pago para el pagador (DESIGN.md, ADR-0051): encabezado, resumen del cobro, campos del pagador, espacio del formulario de tarjeta, mensajes y paneles de estado. La página sigue el tema del sistema operativo y no tiene selector de tema.',
+        'sample_description' => 'Pedido #A-1029 — 2 artículos',
+    ],
+
 ];
