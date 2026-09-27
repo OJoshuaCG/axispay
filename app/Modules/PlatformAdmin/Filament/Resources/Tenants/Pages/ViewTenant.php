@@ -6,6 +6,7 @@ namespace App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages;
 
 use App\Modules\Gateways\Enums\ConnectionMethod;
 use App\Modules\Gateways\Enums\ConnectionStatus;
+use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayConnectionResolver;
 use App\Modules\Identity\Actions\ResendInvitation;
 use App\Modules\Identity\Enums\InvitationStatus;
@@ -20,6 +21,7 @@ use App\Modules\PlatformAdmin\Filament\Support\ImpersonationUi;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\PlatformAdmin\Services\TenantOwnership;
+use App\Modules\ProviderEvents\Services\ProviderEventActivity;
 use App\Modules\Tenancy\Actions\ChangeTenantStatus;
 use App\Modules\Tenancy\Actions\InviteTenantOwner;
 use App\Modules\Tenancy\Data\ChangeTenantStatusData;
@@ -28,6 +30,7 @@ use App\Modules\Tenancy\Exceptions\InvalidTenantStatusTransitionException;
 use App\Modules\Tenancy\Exceptions\TenantCloseNotConfirmedException;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Scopes\TenantScope;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
@@ -53,6 +56,20 @@ final class ViewTenant extends ViewRecord
 
     /** Per-request memo of the ownership state (several closures read it). */
     private ?TenantOwnershipState $ownershipState = null;
+
+    /**
+     * Per-request memo of the tenant's connections, both modes.
+     *
+     * @var list<GatewayConnection>|null
+     */
+    private ?array $gatewayConnections = null;
+
+    /**
+     * Per-request memo: latest provider event per connection ID.
+     *
+     * @var array<string, CarbonImmutable>|null
+     */
+    private ?array $lastEvents = null;
 
     /** Per-request memo; false = looked up, none found. */
     private UserInvitation|false|null $ownerInvitation = null;
@@ -81,6 +98,9 @@ final class ViewTenant extends ViewRecord
      * Read-only view of the tenant's gateway connections, both modes (Phase
      * 2). Never secrets: the model hides the credential columns and only
      * status fields are listed. Read through the whitelisted resolver.
+     * "Last Stripe event" shows when the connection last received a webhook
+     * (UTC, like the rest of the platform panel), with a warning badge when
+     * a connection that can charge has gone silent (ADR-0050).
      */
     private function gatewaySection(): Section
     {
@@ -89,7 +109,7 @@ final class ViewTenant extends ViewRecord
             ->schema([
                 RepeatableEntry::make('gateway_connections')
                     ->hiddenLabel()
-                    ->state(fn (): array => app(GatewayConnectionResolver::class)->ofTenant($this->tenant()->id)->all())
+                    ->state(fn (): array => $this->gatewayConnections())
                     ->placeholder(__('gateways.admin.empty'))
                     ->columns(['default' => 1, 'sm' => 2, 'lg' => 4])
                     ->schema([
@@ -109,9 +129,45 @@ final class ViewTenant extends ViewRecord
                         IconEntry::make('charges_enabled')->label(__('gateways.fields.charges_enabled'))->boolean(),
                         TextEntry::make('last_synced_at')->label(__('gateways.fields.last_synced_at'))->dateTime()->placeholder('—'),
                         TextEntry::make('disconnected_at')->label(__('gateways.admin.disconnected_at'))->dateTime()->placeholder('—'),
+                        TextEntry::make('last_provider_event_at')
+                            ->label(__('gateways.admin.last_event'))
+                            ->state(fn (GatewayConnection $record): ?CarbonImmutable => $this->lastEvents()[$record->id] ?? null)
+                            ->formatStateUsing(static fn (mixed $state): string => $state instanceof CarbonImmutable
+                                ? __('gateways.admin.last_event_value', ['relative' => $state->diffForHumans(), 'date' => $state->utc()->isoFormat('lll')])
+                                : '—')
+                            ->placeholder(__('gateways.admin.no_events')),
+                        TextEntry::make('provider_events_silent')
+                            ->label(__('gateways.admin.events_health'))
+                            ->state(static fn (): string => __('gateways.admin.silent', ['days' => ProviderEventActivity::silenceDays()]))
+                            ->badge()
+                            ->color('warning')
+                            ->icon(Heroicon::OutlinedExclamationTriangle)
+                            ->tooltip(__('gateways.admin.silent_help'))
+                            ->visible(fn (GatewayConnection $record): bool => app(ProviderEventActivity::class)->isSilent($record, $this->lastEvents()[$record->id] ?? null)),
                     ]),
             ])
             ->columnSpanFull();
+    }
+
+    /**
+     * @return list<GatewayConnection>
+     */
+    private function gatewayConnections(): array
+    {
+        return $this->gatewayConnections ??= array_values(app(GatewayConnectionResolver::class)->ofTenant($this->tenant()->id)->all());
+    }
+
+    /**
+     * One grouped query for every connection of the tenant.
+     *
+     * @return array<string, CarbonImmutable>
+     */
+    private function lastEvents(): array
+    {
+        return $this->lastEvents ??= app(ProviderEventActivity::class)->lastReceivedAtByConnection(
+            $this->tenant()->id,
+            array_map(static fn (GatewayConnection $connection): string => $connection->id, $this->gatewayConnections()),
+        );
     }
 
     /** Owner invited, resent or granted on this page or its relation managers. */

@@ -235,6 +235,17 @@ return [
                 'account.updated',
             ],
 
+            // Events the platform's Connect webhook destination of each mode
+            // must send (ADR-0050: incoming webhooks stay mandatory). That
+            // destination is created by hand in the Stripe Dashboard, once
+            // per mode, with this list and `services.stripe.api_version`;
+            // `axispay:doctor` prints both. Phase 4 adds the payment events
+            // here and to the destinations.
+            'connect_webhook_events' => [
+                'account.updated',
+                'account.application.deauthorized',
+            ],
+
             // Incoming events (plan 14.4): rows that were ignored (events we do
             // not handle, foreign objects) or unroutable are deleted after
             // this many days; processed and failed rows keep only a reduced
@@ -242,6 +253,10 @@ return [
             'provider_events' => [
                 'ignored_retention_days' => 7,
                 'processed_payload_days' => 30,
+                // `axispay:doctor` warns, and the platform panel flags the
+                // connection, when a connection that can charge has received
+                // no event for this many days (ADR-0050).
+                'silence_warning_days' => 7,
             ],
 
             // Version of the risk notice the tenant accepts before storing API

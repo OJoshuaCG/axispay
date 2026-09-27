@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Console;
 
+use App\Modules\Gateways\Enums\ConnectionMethod;
+use App\Modules\Gateways\Services\GatewayWebhookUrls;
+use App\Modules\ProviderEvents\Services\ProviderEventActivity;
 use App\Modules\Shared\Http\Middleware\UseSurfaceSessionCookie;
 use Illuminate\Console\Command;
 use Illuminate\Database\Migrations\Migrator;
@@ -16,6 +19,7 @@ use Throwable;
  * migrations). Safe in production: it writes nothing and prints no secret.
  * The APP_KEY is shown only as a non-reversible fingerprint (the first 12 hex
  * characters of its SHA-256), so the value can be compared across containers.
+ * Stripe webhook secrets are only reported as set, empty or malformed.
  * Exits non-zero when a check fails.
  */
 final class DoctorCommand extends Command
@@ -30,12 +34,12 @@ final class DoctorCommand extends Command
 
     protected $signature = 'axispay:doctor';
 
-    protected $description = 'Read-only diagnostics of the deployment configuration (sessions, cookies, proxies, cache, migrations)';
+    protected $description = 'Read-only diagnostics of the deployment configuration (sessions, cookies, proxies, cache, migrations, Stripe webhooks)';
 
     /** @var list<array{string, string, string}> */
     private array $rows = [];
 
-    public function handle(Migrator $migrator): int
+    public function handle(Migrator $migrator, ProviderEventActivity $activity, GatewayWebhookUrls $urls): int
     {
         $this->checkEnvironment();
         $this->checkAppKey();
@@ -46,6 +50,7 @@ final class DoctorCommand extends Command
         $this->checkProxies();
         $this->checkQueue();
         $this->checkMigrations($migrator);
+        $this->checkStripeWebhooks($activity, $urls);
         $this->checkContainer();
 
         $this->table(['Check', 'Status', 'Detail'], array_map(
@@ -236,6 +241,82 @@ final class DoctorCommand extends Command
         }
     }
 
+    /**
+     * ADR-0050: incoming Stripe webhooks are mandatory. Per mode: the Connect
+     * signing secret is set while the mode is in use, when the last event
+     * arrived, and whether connections that can charge have gone silent.
+     */
+    private function checkStripeWebhooks(ProviderEventActivity $activity, GatewayWebhookUrls $urls): void
+    {
+        $events = config('axispay.gateways.stripe.connect_webhook_events');
+        $events = is_array($events) ? implode(', ', array_map(self::string(...), $events)) : '';
+
+        $this->row('Stripe Connect destination', self::INFO, 'API version '.self::string(config('services.stripe.api_version')).", connected-accounts events: {$events}");
+
+        foreach ([false, true] as $livemode) {
+            try {
+                $this->checkStripeMode($activity, $urls, $livemode);
+            } catch (Throwable $e) {
+                $this->row('Stripe webhooks ('.self::mode($livemode).')', self::ERROR, 'database not reachable ('.$e::class.')');
+            }
+        }
+    }
+
+    private function checkStripeMode(ProviderEventActivity $activity, GatewayWebhookUrls $urls, bool $livemode): void
+    {
+        $mode = self::mode($livemode);
+        $variable = 'STRIPE_'.strtoupper($mode).'_CONNECT_WEBHOOK_SECRET';
+        $url = $urls->connect($livemode);
+
+        $connectEnabled = ConnectionMethod::PlatformOnboarding->isEnabled() || ConnectionMethod::OAuth->isEnabled();
+        $platformKey = self::string(config("services.stripe.{$mode}.secret")) !== '';
+        $hasConnections = $activity->hasConnectConnections($livemode);
+        // Only its shape is read: the value is never printed.
+        $secret = self::string(config("services.stripe.{$mode}.connect_webhook_secret"));
+
+        [$status, $detail] = match (true) {
+            ! $hasConnections && ! ($connectEnabled && $platformKey) => [self::INFO, 'mode not in use (no Connect method with a platform secret key, no Connect connection)'],
+            $secret === '' => [self::ERROR, "{$variable} is empty but the mode is in use (".($hasConnections ? 'Connect connections exist' : 'a Connect method is enabled with a platform secret key')."): every Connect event is rejected. Create the webhook destination for {$url} and set the variable"],
+            ! str_starts_with($secret, 'whsec_') => [self::ERROR, "{$variable} is not a webhook signing secret (whsec_...)"],
+            default => [self::OK, "signing secret set; destination {$url}"],
+        };
+
+        $this->row("Stripe Connect webhook ({$mode})", $status, $detail);
+
+        $last = $activity->lastReceivedAt($livemode);
+        $this->row(
+            "Last Stripe event ({$mode})",
+            self::INFO,
+            $last === null ? 'none received yet' : $last->utc()->format('Y-m-d H:i:s').' UTC ('.$last->diffForHumans().')',
+        );
+
+        $days = ProviderEventActivity::silenceDays();
+        $since = $activity->silenceThreshold();
+        $chargeable = $activity->chargeableConnectConnections($livemode);
+
+        if ($chargeable > 0) {
+            $silent = ! $activity->connectEventSince($livemode, $since);
+
+            $this->row(
+                "Stripe Connect events ({$mode})",
+                $silent ? self::WARN : self::OK,
+                $silent
+                    ? "{$chargeable} Connect connection(s) can charge but no event reached {$url} in the last {$days} days: check the {$mode} webhook destination in the Stripe Dashboard (URL, connected-accounts events, event list, not disabled)"
+                    : "received in the last {$days} days",
+            );
+        }
+
+        $silentApiKey = $activity->silentApiKeyConnections($livemode, $since);
+
+        if ($silentApiKey > 0) {
+            $this->row(
+                "Stripe api_key events ({$mode})",
+                self::WARN,
+                "{$silentApiKey} api_key connection(s) can charge but received no event in the last {$days} days: their endpoint on the merchant account may be missing or disabled, or AXISPAY_STRIPE_WEBHOOK_BASE_URL is wrong (a quiet account also shows here)",
+            );
+        }
+    }
+
     private function checkContainer(): void
     {
         $role = getenv('CONTAINER_ROLE');
@@ -253,6 +334,11 @@ final class DoctorCommand extends Command
     private function row(string $check, string $status, string $detail): void
     {
         $this->rows[] = [$check, $status, $detail];
+    }
+
+    private static function mode(bool $livemode): string
+    {
+        return $livemode ? 'live' : 'test';
     }
 
     private static function string(mixed $value): string

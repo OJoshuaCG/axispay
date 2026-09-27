@@ -216,6 +216,12 @@ return [
         'mode' => 'Mode',
         'connected_at' => 'Connected',
         'disconnected_at' => 'Disconnected',
+        'last_event' => 'Last Stripe event',
+        'last_event_value' => ':relative (:date UTC)',
+        'no_events' => 'None received yet',
+        'events_health' => 'Stripe events',
+        'silent' => 'No events in :days days',
+        'silent_help' => 'This connection can charge but Stripe has sent it no event. Check the platform\'s Connect webhook destination for this mode, or, for API keys, the endpoint on the merchant\'s Stripe account. A quiet account can also show this.',
     ],
 
 ];

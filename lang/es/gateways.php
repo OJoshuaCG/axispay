@@ -216,6 +216,12 @@ return [
         'mode' => 'Modo',
         'connected_at' => 'Conectada',
         'disconnected_at' => 'Desconectada',
+        'last_event' => 'Último evento de Stripe',
+        'last_event_value' => ':relative (:date UTC)',
+        'no_events' => 'Aún no se ha recibido ninguno',
+        'events_health' => 'Eventos de Stripe',
+        'silent' => 'Sin eventos en :days días',
+        'silent_help' => 'Esta conexión puede cobrar, pero Stripe no le ha enviado ningún evento. Revise el destino de webhooks de Connect de la plataforma para este modo o, con llaves de API, el endpoint en la cuenta de Stripe del comercio. Una cuenta con poca actividad también puede mostrar este aviso.',
     ],
 
 ];

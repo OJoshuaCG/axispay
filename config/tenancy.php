@@ -66,6 +66,9 @@ return [
         'App\\Modules\\Identity\\Services\\UserDirectory',
         // Phase 2 (ADR-0047): retention purge of provider_events across tenants.
         'App\\Modules\\ProviderEvents\\Services\\ProviderEventRetention',
+        // ADR-0050: read-only webhook activity (last event per mode and per
+        // connection) for axispay:doctor and the platform panel.
+        'App\\Modules\\ProviderEvents\\Services\\ProviderEventActivity',
         // Phase 3 (ADR-0048): expiry purge of idempotency_records across tenants.
         'App\\Modules\\ApiKeys\\Services\\IdempotencyRecordRetention',
     ],
