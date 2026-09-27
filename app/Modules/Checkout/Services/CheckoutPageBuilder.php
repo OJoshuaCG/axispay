@@ -33,6 +33,7 @@ final readonly class CheckoutPageBuilder
         private CardTestingGuard $guard,
         private CheckoutUrls $urls,
         private CheckoutFonts $fonts,
+        private EffectivePayerFields $effectiveFields,
     ) {}
 
     public function build(PaymentLink $link, ?string $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
@@ -40,6 +41,7 @@ final readonly class CheckoutPageBuilder
         $tenant = Tenant::query()->findOrFail($link->tenant_id);
         $timezone = $this->access->timezone($tenant->id);
         $state = ReadCheckoutStatus::state($link);
+        $fields = $this->effectiveFields->for($link);
         $noticeHours = config()->integer('axispay.checkout.expiry_notice_hours');
 
         $expiresSoon = $link->status->isShareable() && $link->expires_at->lessThan(CarbonImmutable::now()->addHours($noticeHours))
@@ -58,22 +60,23 @@ final readonly class CheckoutPageBuilder
             paidAt: $link->paid_at?->setTimezone($timezone),
             returnUrl: $link->return_url,
             paidInThisSession: $paidInThisSession,
-            payerFields: self::payerFields($link),
-            client: $state === CheckoutState::Active ? $this->client($link, $sessionDeclines) : null,
+            payerFields: self::payerFields($fields),
+            client: $state === CheckoutState::Active ? $this->client($link, $fields, $sessionDeclines) : null,
             sandbox: SandboxMode::enabled(),
             phase: $phase,
         );
     }
 
     /**
+     * @param  array<string, string>  $config
      * @return list<array{field: string, required: bool}>
      */
-    private static function payerFields(PaymentLink $link): array
+    private static function payerFields(array $config): array
     {
         $fields = [];
 
         foreach (PayerField::cases() as $field) {
-            $requirement = PayerFieldRequirement::tryFrom($link->payer_fields_config[$field->value] ?? '') ?? $field->platformDefault();
+            $requirement = PayerFieldRequirement::tryFrom($config[$field->value] ?? '') ?? $field->platformDefault();
 
             if ($requirement !== PayerFieldRequirement::Hidden) {
                 $fields[] = ['field' => $field->value, 'required' => $requirement === PayerFieldRequirement::Required];
@@ -84,9 +87,10 @@ final readonly class CheckoutPageBuilder
     }
 
     /**
+     * @param  array<string, string>  $fields
      * @return array<string, mixed>|null
      */
-    private function client(PaymentLink $link, int $sessionDeclines): ?array
+    private function client(PaymentLink $link, array $fields, int $sessionDeclines): ?array
     {
         $connection = GatewayConnection::query()->current()->first();
 
@@ -120,7 +124,7 @@ final readonly class CheckoutPageBuilder
                 'intervalMs' => max(1, config()->integer('axispay.checkout.poll_interval_seconds')) * 1000,
                 'maxMs' => max(1, config()->integer('axispay.checkout.poll_max_seconds')) * 1000,
             ],
-            'billingDetailsNever' => self::collectedBillingDetails($link),
+            'billingDetailsNever' => self::collectedBillingDetails($fields),
         ];
     }
 
@@ -129,15 +133,16 @@ final readonly class CheckoutPageBuilder
      * Payment Element does not ask for them again, and the page passes them
      * with the confirmation token (DESIGN.md, Stripe Appearance).
      *
+     * @param  array<string, string>  $fields
      * @return list<string>
      */
-    private static function collectedBillingDetails(PaymentLink $link): array
+    private static function collectedBillingDetails(array $fields): array
     {
         $map = ['email' => 'email', 'full_name' => 'name', 'phone' => 'phone', 'billing_address' => 'address'];
         $never = [];
 
         foreach ($map as $field => $stripeName) {
-            if (($link->payer_fields_config[$field] ?? null) === PayerFieldRequirement::Required->value) {
+            if (($fields[$field] ?? null) === PayerFieldRequirement::Required->value) {
                 $never[] = $stripeName;
             }
         }

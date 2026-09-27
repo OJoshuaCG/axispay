@@ -37,6 +37,13 @@ final readonly class CheckoutPage
         public ?string $phase,
     ) {}
 
+    /** Plan 11.2: informative pages show the description and date, not the amount. */
+    public function showsAmount(): bool
+    {
+        return in_array($this->state, [CheckoutState::Active, CheckoutState::Processing], true)
+            || ($this->state === CheckoutState::Paid && $this->paidInThisSession);
+    }
+
     public function collectsPayerData(): bool
     {
         return $this->payerFields !== [];

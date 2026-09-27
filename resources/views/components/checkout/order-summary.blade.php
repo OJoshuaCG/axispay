@@ -10,8 +10,11 @@
         description link description
         money       App\Modules\Shared\Money\Money
         expiresAt   CarbonImmutable|null, already in the tenant's time zone
+        showAmount  bool: the total is shown only while the link can be paid,
+                    during a payment, or to the session that paid (plan 11.2:
+                    informative pages show the description and date only)
 --}}
-@props(['merchant', 'description', 'money', 'expiresAt' => null])
+@props(['merchant', 'description', 'money', 'expiresAt' => null, 'showAmount' => true])
 
 <section {{ $attributes->class('flex flex-col gap-stack-sm') }} aria-label="{{ __('checkout.summary.pay_to', ['merchant' => $merchant]) }}">
     <p class="text-fg-secondary break-words">{{ __('checkout.summary.pay_to', ['merchant' => $merchant]) }}</p>
@@ -19,10 +22,12 @@
         <dt class="sr-only">{{ __('checkout.summary.description') }}</dt>
         <dd class="whitespace-pre-line break-words text-fg">{{ $description }}</dd>
 
-        <dt class="sr-only">{{ __('checkout.summary.total') }}</dt>
-        <dd>
-            <x-amount :value="$money->minorAmount" :currency="$money->currency->value" minor :signed="false" class="text-3xl font-semibold" />
-        </dd>
+        @if ($showAmount)
+            <dt class="sr-only">{{ __('checkout.summary.total') }}</dt>
+            <dd>
+                <x-amount :value="$money->minorAmount" :currency="$money->currency->value" minor :signed="false" class="text-3xl font-semibold" />
+            </dd>
+        @endif
 
         {{-- Phase 6: FX legend slot. --}}
 

@@ -59,4 +59,9 @@ return [
         'unblocked' => 'Pagos desbloqueados.',
     ],
 
+    'privacy_notice_missing' => [
+        'heading' => 'La página de pago no pedirá los datos del pagador',
+        'help' => 'Su cuenta no tiene la URL de su aviso de privacidad, así que la página de pago no recaba datos del pagador para este link. Solicite al administrador de la plataforma que agregue la URL de su aviso de privacidad para recabarlos.',
+    ],
+
 ];

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\PaymentLinks\Filament\Resources\PaymentLinks;
 
 use App\Modules\Checkout\Actions\UnblockCheckout;
+use App\Modules\Checkout\Services\EffectivePayerFields;
 use App\Modules\Identity\Filament\Concerns\TenantPanel;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
@@ -170,6 +171,12 @@ final class PaymentLinkResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
+            Callout::make(__('payments.privacy_notice_missing.heading'))
+                ->description(__('payments.privacy_notice_missing.help'))
+                ->icon(Heroicon::OutlinedExclamationTriangle)
+                ->color('warning')
+                ->visible(static fn (PaymentLink $record): bool => $record->status->isShareable() && app(EffectivePayerFields::class)->missingPrivacyNotice($record))
+                ->columnSpanFull(),
             Callout::make(static fn (PaymentLink $record): string => __('payments.checkout_block.callout', ['date' => $record->checkout_blocked_until !== null ? self::panelDate($record->checkout_blocked_until) : '']))
                 ->description(__('payments.checkout_block.callout_help'))
                 ->icon(Heroicon::OutlinedShieldExclamation)

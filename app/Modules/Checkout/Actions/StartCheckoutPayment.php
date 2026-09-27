@@ -10,6 +10,7 @@ use App\Modules\Checkout\Enums\CheckoutOutcome;
 use App\Modules\Checkout\Services\CardTestingGuard;
 use App\Modules\Checkout\Services\ChargeAmount;
 use App\Modules\Checkout\Services\CheckoutUrls;
+use App\Modules\Checkout\Services\EffectivePayerFields;
 use App\Modules\Checkout\Services\TurnstileVerifier;
 use App\Modules\Gateways\Data\PaymentRequest;
 use App\Modules\Gateways\Exceptions\GatewayException;
@@ -21,8 +22,10 @@ use App\Modules\PayerFields\Services\PayerFieldsValidator;
 use App\Modules\PaymentLinks\Actions\ExpirePaymentLink;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Actions\ApplyProviderPayment;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
+use App\Modules\Payments\Actions\ReleaseLinkAfterAttempt;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PayerDetails;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -73,6 +76,9 @@ final readonly class StartCheckoutPayment
         private ExpirePaymentLink $expire,
         private TenantAccess $access,
         private CheckoutUrls $urls,
+        private ReleaseLinkAfterAttempt $release,
+        private PaymentLinkStateMachine $links,
+        private EffectivePayerFields $effectiveFields,
     ) {}
 
     /**
@@ -88,7 +94,7 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of($closed);
         }
 
-        $payer = $this->payerFields->validate($link->payer_fields_config, $input->payer);
+        $payer = $this->payerFields->validate($this->effectiveFields->for($link), $input->payer);
 
         if (preg_match(self::TOKEN_PATTERN, $input->confirmationToken) !== 1) {
             return CheckoutResult::of(CheckoutOutcome::Error);
@@ -129,10 +135,14 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of($claimed);
         }
 
+        [$attempt, $leaseToken] = $claimed;
+
         try {
-            return $this->confirm($link, $claimed, $amount, $payer, $input, $turnstileRequired);
+            return $this->confirm($link, $attempt, $leaseToken, $amount, $payer, $input, $turnstileRequired);
         } finally {
-            $this->lease->release($claimed->id);
+            // No payment under way (failure, refusal, never reached the
+            // gateway): the reserved link is payable again; the lease is freed.
+            $this->release->handle($attempt->id, $leaseToken);
         }
     }
 
@@ -147,6 +157,8 @@ final readonly class StartCheckoutPayment
 
         return match (true) {
             $link->status === PaymentLinkStatus::Paid => CheckoutOutcome::AlreadyPaid,
+            // Plan 21.3: a closed tenant no longer collects (a suspended one does, ADR-013).
+            ! $this->access->collects($link->tenant_id) => CheckoutOutcome::Canceled,
             $link->status === PaymentLinkStatus::Expired => CheckoutOutcome::Expired,
             $link->status === PaymentLinkStatus::Canceled => CheckoutOutcome::Canceled,
             $link->status === PaymentLinkStatus::Processing => CheckoutOutcome::InProgress,
@@ -157,13 +169,17 @@ final readonly class StartCheckoutPayment
 
     /**
      * Step 6: under the link's lock, the link's single active attempt is
-     * reused (still waiting for a payment method) or created, and its lease
-     * taken. Anything already under way answers `in_progress`.
+     * reused (still waiting for a payment method) or created, its lease
+     * taken, and the link reserved (`processing`), so it can neither expire
+     * nor be canceled while the payment is confirmed (plan 9.1, ADR-0051).
+     * Anything already under way answers `in_progress`.
+     *
+     * @return array{0: PaymentAttempt, 1: string}|CheckoutOutcome the attempt and the lease token
      */
-    private function claimAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, PayerData $payer, CheckoutPaymentInput $input): PaymentAttempt|CheckoutOutcome
+    private function claimAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, PayerData $payer, CheckoutPaymentInput $input): array|CheckoutOutcome
     {
         try {
-            return DB::transaction(function () use ($link, $connection, $amount, $payer, $input): PaymentAttempt|CheckoutOutcome {
+            return DB::transaction(function () use ($link, $connection, $amount, $payer, $input): array|CheckoutOutcome {
                 $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
 
                 if ($locked->status !== PaymentLinkStatus::Active || $locked->isPastExpiry() || $locked->isCheckoutBlocked()) {
@@ -176,14 +192,20 @@ final readonly class StartCheckoutPayment
                     ->lockForUpdate()
                     ->first();
 
-                if ($attempt !== null && ($attempt->status->isInFlight() || ! $this->lease->acquireLocked($attempt))) {
+                $token = $attempt !== null && ! $attempt->status->isInFlight() ? $this->lease->acquireLocked($attempt) : null;
+
+                if ($attempt !== null && $token === null) {
                     return CheckoutOutcome::InProgress;
                 }
 
-                $attempt ??= $this->newAttempt($locked, $connection, $amount, $input);
-                $this->storePayer($attempt, $payer);
+                if ($attempt === null) {
+                    [$attempt, $token] = $this->newAttempt($locked, $connection, $amount, $input);
+                }
 
-                return $attempt;
+                $this->storePayer($attempt, $payer);
+                $this->links->enterProcessing($locked);
+
+                return [$attempt, (string) $token];
             });
         } catch (UniqueConstraintViolationException) {
             // Another session created the link's active attempt at the same time (rule 9).
@@ -191,7 +213,10 @@ final readonly class StartCheckoutPayment
         }
     }
 
-    private function newAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, CheckoutPaymentInput $input): PaymentAttempt
+    /**
+     * @return array{0: PaymentAttempt, 1: string|null}
+     */
+    private function newAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, CheckoutPaymentInput $input): array
     {
         $attempt = new PaymentAttempt;
         $attempt->forceFill([
@@ -207,9 +232,9 @@ final readonly class StartCheckoutPayment
             'client_ip' => $input->clientIp,
             'user_agent' => $input->userAgent !== null ? mb_substr($input->userAgent, 0, 512) : null,
         ]);
-        $this->lease->acquireLocked($attempt); // saves the new row with its lease
+        $token = $this->lease->acquireLocked($attempt); // saves the new row with its lease
 
-        return $attempt;
+        return [$attempt, $token];
     }
 
     private function storePayer(PaymentAttempt $attempt, PayerData $payer): void
@@ -226,28 +251,42 @@ final readonly class StartCheckoutPayment
         ])->save();
     }
 
-    /** Steps 7 and 8, holding the attempt's lease. */
-    private function confirm(PaymentLink $link, PaymentAttempt $attempt, Money $amount, PayerData $payer, CheckoutPaymentInput $input, bool $turnstileRequired): CheckoutResult
+    /**
+     * Steps 7 and 8, holding the attempt's lease.
+     *
+     * The payment is created only with what the link fixes (amount,
+     * currency, description, our identifiers), under a key fixed per
+     * attempt: a retry after a lost answer repeats the very same request, so
+     * the gateway replays it instead of refusing the key. What depends on the
+     * payer (the receipt e-mail) travels with the confirmation, whose key
+     * includes the confirmation token. An amount that changed (Phase 6
+     * conversion) is an update whose key includes the new amount.
+     */
+    private function confirm(PaymentLink $link, PaymentAttempt $attempt, string $leaseToken, Money $amount, PayerData $payer, CheckoutPaymentInput $input, bool $turnstileRequired): CheckoutResult
     {
         $connection = GatewayConnection::query()->findOrFail($attempt->gateway_connection_id);
         $gateway = $this->gateways->for($attempt->provider);
+        $request = static fn (string $key, ?string $providerPaymentId = null): PaymentRequest => new PaymentRequest(
+            amountMinor: $amount->minorAmount,
+            currency: $amount->currency->value,
+            description: $link->description,
+            metadata: [
+                'axispay_tenant_id' => $link->tenant_id,
+                'axispay_link_id' => $link->id,
+                'axispay_attempt_id' => $attempt->id,
+                'axispay_livemode' => $link->livemode ? 'true' : 'false',
+            ],
+            idempotencyKey: $key,
+            providerPaymentId: $providerPaymentId,
+        );
 
         try {
             if ($attempt->provider_payment_id === null) {
-                $created = $gateway->createOrUpdatePayment($connection, new PaymentRequest(
-                    amountMinor: $amount->minorAmount,
-                    currency: $amount->currency->value,
-                    description: $link->description,
-                    metadata: [
-                        'axispay_tenant_id' => $link->tenant_id,
-                        'axispay_link_id' => $link->id,
-                        'axispay_attempt_id' => $attempt->id,
-                        'axispay_livemode' => $link->livemode ? 'true' : 'false',
-                    ],
-                    idempotencyKey: IdempotencyKeys::create($attempt->id),
-                    receiptEmail: $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null,
-                ));
-                $attempt = $this->apply->handle($attempt->id, $created)->attempt;
+                $attempt = $this->apply->handle($attempt->id, $gateway->createOrUpdatePayment($connection, $request(IdempotencyKeys::create($attempt->id))), leaseToken: $leaseToken)->attempt;
+            } elseif ($attempt->amount_minor !== $amount->minorAmount || $attempt->currency !== $amount->currency) {
+                $updated = $gateway->createOrUpdatePayment($connection, $request(IdempotencyKeys::update($attempt->id, $amount), $attempt->provider_payment_id));
+                PaymentAttempt::query()->whereKey($attempt->id)->update(['amount_minor' => $amount->minorAmount, 'currency' => $amount->currency->value]);
+                $attempt = $this->apply->handle($attempt->id, $updated, leaseToken: $leaseToken)->attempt;
             }
 
             $payment = $gateway->confirmPayment(
@@ -256,6 +295,7 @@ final readonly class StartCheckoutPayment
                 $input->confirmationToken,
                 IdempotencyKeys::confirm($attempt->id, $input->confirmationToken),
                 $this->urls->complete($link),
+                $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null,
             );
         } catch (GatewayException $e) {
             // Unknown or refused: the payer may try again (same keys); the
@@ -265,7 +305,7 @@ final readonly class StartCheckoutPayment
             return new CheckoutResult(CheckoutOutcome::Error, turnstileRequired: $turnstileRequired);
         }
 
-        $applied = $this->apply->handle($attempt->id, $payment, $input->clientIp);
+        $applied = $this->apply->handle($attempt->id, $payment, $input->clientIp, $leaseToken);
         $status = $applied->attempt->status;
 
         if ($status === PaymentAttemptStatus::RequiresPaymentMethod) {
@@ -285,7 +325,7 @@ final readonly class StartCheckoutPayment
         }
 
         if ($status === PaymentAttemptStatus::RequiresCapture) {
-            return CompleteCheckoutAuthorization::toResult($this->capture->handle($attempt->id, callerHoldsLease: true));
+            return CompleteCheckoutAuthorization::complete($this->capture, $attempt->id, $leaseToken);
         }
 
         return CheckoutResult::of(match ($status) {

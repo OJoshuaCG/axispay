@@ -40,6 +40,7 @@
             :description="$page->description"
             :money="$page->money"
             :expires-at="$page->expiresSoonAt"
+            :show-amount="$page->showsAmount()"
             class="pb-stack-lg lg:sticky lg:top-stack-xl lg:col-span-2 lg:self-start"
         />
 

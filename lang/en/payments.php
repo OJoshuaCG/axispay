@@ -61,4 +61,9 @@ return [
         'unblocked' => 'Payments unblocked.',
     ],
 
+    'privacy_notice_missing' => [
+        'heading' => 'The payment page will not ask for the payer fields',
+        'help' => 'Your account has no privacy notice URL, so the payment page collects no payer data for this link. Ask the platform administrator to add your privacy notice URL to collect it.',
+    ],
+
 ];

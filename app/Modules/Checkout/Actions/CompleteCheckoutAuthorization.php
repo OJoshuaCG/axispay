@@ -6,6 +6,7 @@ namespace App\Modules\Checkout\Actions;
 
 use App\Modules\Checkout\Data\CheckoutResult;
 use App\Modules\Checkout\Enums\CheckoutOutcome;
+use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
@@ -15,6 +16,7 @@ use App\Modules\Payments\Data\CaptureResult;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
+use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PaymentAttempt;
 use Illuminate\Support\Facades\Log;
 
@@ -49,7 +51,7 @@ final readonly class CompleteCheckoutAuthorization
         }
 
         if ($attempt->status === PaymentAttemptStatus::RequiresCapture) {
-            return self::toResult($this->capture->handle($attempt->id));
+            return self::complete($this->capture, $attempt->id);
         }
 
         return CheckoutResult::of(match ($attempt->status) {
@@ -60,6 +62,22 @@ final readonly class CompleteCheckoutAuthorization
                 : CheckoutOutcome::Declined,
             default => $link->refresh()->status === PaymentLinkStatus::Paid ? CheckoutOutcome::Paid : CheckoutOutcome::Error,
         });
+    }
+
+    /**
+     * Completes an authorization for the page. Never an error page: anything
+     * unexpected answers "processing", and the webhook or the reconciliation
+     * finishes the payment with the merchant's kept decision.
+     */
+    public static function complete(CaptureAuthorizedPayment $capture, string $attemptId, ?string $leaseToken = null): CheckoutResult
+    {
+        try {
+            return self::toResult($capture->handle($attemptId, $leaseToken));
+        } catch (GatewayException|GatewayConfigurationException|AttemptBusyException $e) {
+            Log::warning('An authorization could not be completed now; left to the webhook and the reconciliation.', ['payment_attempt_id' => $attemptId, 'exception' => $e::class]);
+
+            return CheckoutResult::of(CheckoutOutcome::Processing);
+        }
     }
 
     /** What the page shows for the completion of an authorization. */

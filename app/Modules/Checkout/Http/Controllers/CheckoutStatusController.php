@@ -12,7 +12,8 @@ use Illuminate\Http\Response;
 
 /**
  * GET /l/{token}/status (plan 11.5): the minimal JSON the page polls
- * (`state`, `phase`). Never payment or payer details.
+ * (`state`, `phase`, and `return_url` once paid). Never payment or payer
+ * details.
  */
 final readonly class CheckoutStatusController
 {
@@ -26,6 +27,6 @@ final readonly class CheckoutStatusController
 
         $current = $status->handle($link);
 
-        return new JsonResponse(array_filter(['state' => $current->state->value, 'phase' => $current->phase]));
+        return new JsonResponse(array_filter(['state' => $current->state->value, 'phase' => $current->phase, 'return_url' => $current->returnUrl]));
     }
 }

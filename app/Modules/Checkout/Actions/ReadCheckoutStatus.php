@@ -13,6 +13,7 @@ use App\Modules\Payments\Actions\SyncPaymentAttempt;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -50,7 +51,9 @@ final readonly class ReadCheckoutStatus
             $link->refresh();
         }
 
-        return new CheckoutStatus(self::state($link), $link->status === PaymentLinkStatus::Processing ? self::phase($attempt) : null);
+        $state = self::state($link);
+
+        return new CheckoutStatus($state, $link->status === PaymentLinkStatus::Processing ? self::phase($attempt) : null, $state === CheckoutState::Paid ? $link->return_url : null);
     }
 
     public static function state(PaymentLink $link): CheckoutState
@@ -60,7 +63,13 @@ final readonly class ReadCheckoutStatus
             PaymentLinkStatus::Expired => CheckoutState::Expired,
             PaymentLinkStatus::Canceled => CheckoutState::Canceled,
             PaymentLinkStatus::Processing => CheckoutState::Processing,
-            PaymentLinkStatus::Active => $link->isCheckoutBlocked() || ! self::canCharge() ? CheckoutState::Unavailable : CheckoutState::Active,
+            // Plan 21.3: a closed tenant's links no longer take payments
+            // (ADR-013: a suspended tenant keeps collecting).
+            PaymentLinkStatus::Active => match (true) {
+                ! app(TenantAccess::class)->collects($link->tenant_id) => CheckoutState::Canceled,
+                $link->isCheckoutBlocked() || ! self::canCharge() => CheckoutState::Unavailable,
+                default => CheckoutState::Active,
+            },
         };
     }
 
