@@ -32,6 +32,7 @@ The all-in-one container gives all of that up in exchange for one Application to
 5. [Advanced tab](#5-advanced-tab-health-update-order-stop-grace-period): health check, **update order `stop-first`**, stop grace period 150 s.
 6. [Deploy and verify](#6-deploy-and-verify).
 7. [Create the first platform admin](#7-create-the-first-platform-admin).
+8. [Create the Stripe Connect webhook destination](#8-stripe-connect-webhook-destination-required) of test mode (**required**).
 
 No TLS on a local test server? Read [Local test deployment without TLS](#local-test-deployment-without-tls) before step 3.
 
@@ -279,6 +280,28 @@ Check outgoing mail with `php artisan axispay:mail-test you@example.com` (add `-
 
 ---
 
+## 8. Stripe Connect webhook destination (required)
+
+Incoming Stripe webhooks are mandatory, also on staging ([ADR-0050](../adr/0050-linear-payment-flow-authorize-validate-capture.md#incoming-stripe-webhooks-stay-mandatory)): without them, tenants that use **Create or connect with Stripe** never finish onboarding, and disputes, Dashboard refunds or account changes never reach the platform. Tenants configure nothing; the platform needs one destination per mode it uses. Staging uses test mode only.
+
+In the Stripe Dashboard, test mode, **Developers → Webhooks → Add destination**, then check:
+
+- [ ] Events from **Connected accounts**, not "Your account".
+- [ ] URL `https://api.<domain>/webhooks/stripe/connect/test`. It must be reachable by Stripe: a [local deployment without TLS](#local-test-deployment-without-tls) is not (use a public tunnel, see `docs/development.md`).
+- [ ] API version `2026-08-26.dahlia`, the version pinned in `config/services.php` (`stripe.api_version`).
+- [ ] Events `account.updated` and `account.application.deauthorized`, the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`).
+- [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET`; redeploy after setting it.
+
+Tenants that connect with their own API keys need nothing by hand: the application creates the endpoint on the merchant's account.
+
+Confirm that it works:
+
+1. `php artisan axispay:doctor` in the container terminal: no `ERROR` on `Stripe Connect webhook (test)`. `Last Stripe event (test)` shows when the last event arrived (UTC). A `WARN` on `Stripe Connect events` or `Stripe api_key events` means connections that can charge got no event for 7 days.
+2. Send a test event from the destination in the Stripe Dashboard (its delivery log must show `200`), or start an onboarding as a tenant.
+3. In the platform panel, the tenant page shows the **Last Stripe event** of each connection and a **No events in 7 days** badge when a connection that can charge has gone silent.
+
+Details and the production checklist: [Connect webhook destination](dokploy.md#connect-webhook-destination-required).
+
 ## Operating it
 
 ### Logs: one stream for every program
@@ -442,3 +465,4 @@ Production never runs this role. To promote the setup:
 | Every 2FA code is rejected | Clock skew on the server or the phone | Enable NTP on the server (`timedatectl`) and automatic time on the phone |
 | 2FA and encrypted data fail after changing `APP_KEY` | The old key is gone, so 2FA secrets cannot be decrypted | Never rotate `APP_KEY` without `APP_PREVIOUS_KEYS`. Restore the old key; if it is lost, reset every account's 2FA with `axispay:reset-2fa` |
 | `404` for every page on a host | The host differs from its `AXISPAY_*_HOST` value | Make them identical |
+| No Stripe events received (onboarding never finishes, `Last Stripe event` is "none received yet", doctor warns about silent connections) | The Connect webhook destination is missing, uses the wrong URL or mode, listens to "Your account", lacks events or is disabled; the signing secret is another destination's; or the API host is not reachable from Stripe (local server without a tunnel) | Go through [section 8](#8-stripe-connect-webhook-destination-required); check the destination's delivery log in the Stripe Dashboard; run `axispay:doctor` |

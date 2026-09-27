@@ -534,6 +534,7 @@ The Dokploy docs recommend this for production ([going to production](https://do
 - [ ] `APP_KEY` is backed up outside Dokploy.
 - [ ] `GATEWAY_CREDENTIALS_KEY` is set, differs from `APP_KEY`, and is backed up separately from `APP_KEY` and the database backups.
 - [ ] Test and live Stripe keys are in their own variables; the live Connect webhook secret matches the live endpoint.
+- [ ] The Connect webhook destination of each mode in use exists and `axispay:doctor` reports no Stripe error ([required](#connect-webhook-destination-required)).
 
 ### Admin host IP allowlist
 
@@ -584,6 +585,7 @@ Dokploy regenerates a domain's routers when you edit that domain, which drops th
 | Every 2FA code is rejected although the app shows it | The server clock (or the phone's) is off; codes are accepted only within about ±4 minutes (Filament's window of 8 periods of 30 s) | Enable NTP on the Dokploy server (`timedatectl` should show `System clock synchronized: yes`) and automatic time on the phone |
 | 2FA codes and encrypted data fail after a change of `APP_KEY` (`The MAC is invalid`, sign-in errors) | `APP_KEY` was rotated or lost: 2FA secrets and other encrypted columns can no longer be decrypted | **Never rotate `APP_KEY` without keeping the old key in `APP_PREVIOUS_KEYS`.** Restore the previous key, or put it in `APP_PREVIOUS_KEYS`. If it is lost for good, reset the 2FA of every account with `axispay:reset-2fa` (it does not need to decrypt the old secret) |
 | `404` for every page on a host | The host is not equal to the `AXISPAY_*_HOST` value (routes are bound with `Route::domain()`) | Make the domain and the variable identical |
+| No Stripe events received (tenants stuck in onboarding, `Last Stripe event` is "none received yet", doctor warns about silent connections) | The Connect webhook destination is missing, points at the wrong host or mode, listens to "Your account" instead of connected accounts, lacks events, or is disabled; or the signing secret belongs to another destination or mode (Stripe then shows `400` in the delivery log) | Go through the [destination checklist](#connect-webhook-destination-required); check the destination's delivery log in the Stripe Dashboard; run `axispay:doctor`. For api_key connections, check the endpoint on the merchant's Stripe account and `AXISPAY_STRIPE_WEBHOOK_BASE_URL` (empty in production) |
 | Let's Encrypt certificate is not issued | DNS is not pointing to the server yet, or port 80 is blocked | Fix DNS or the firewall; Traefik retries |
 
 ### Trusted proxies
@@ -617,17 +619,35 @@ Set them on all four Applications, for example as shared variables.
 ADR-0047. The platform Stripe account is in Mexico. For **each mode** (test first, live when going to production):
 
 1. Set `STRIPE_<MODE>_SECRET` and `STRIPE_<MODE>_PUBLISHABLE` from the platform's Stripe Dashboard (Developers → API keys).
-2. In the Stripe Dashboard of that mode, **Developers → Webhooks → Add destination**:
-   - events from **Connected accounts** (a Connect endpoint);
-   - API version `2026-08-26.dahlia` (the version pinned in the application);
-   - URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode;
-   - events `account.updated` and `account.application.deauthorized` (Phase 4 adds the payment events).
+2. Create the Connect webhook destination of that mode. **This step is required** (see below).
 3. Copy the destination's signing secret into `STRIPE_<MODE>_CONNECT_WEBHOOK_SECRET` and redeploy all four Applications.
 4. Generate `GATEWAY_CREDENTIALS_KEY` (same command as `APP_KEY`, a **new** value) and back it up on its own.
 
+### Connect webhook destination (required)
+
+Incoming Stripe webhooks are mandatory ([ADR-0050](../adr/0050-linear-payment-flow-authorize-validate-capture.md#incoming-stripe-webhooks-stay-mandatory)). Disputes, refunds made in the Stripe Dashboard, payers who close the tab after 3D Secure, a network cut during capture and changes to a connected account only reach the platform as Stripe events. Reconciliation is only a safety net and runs minutes or hours later. Without the destination, tenants that use **Create or connect with Stripe** never finish onboarding and the platform misses those changes.
+
+Tenants configure nothing. The platform needs **one destination per mode**. In the Stripe Dashboard of that mode, **Developers → Webhooks → Add destination**, then check:
+
+- [ ] Events from **Connected accounts** (a Connect destination), not "Your account".
+- [ ] URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode. The mode in the URL must match the Dashboard mode.
+- [ ] API version `2026-08-26.dahlia`, the version pinned in the application (`config/services.php`, `stripe.api_version`).
+- [ ] Events `account.updated` and `account.application.deauthorized`, the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`). Phase 4 adds the payment events there and here.
+- [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` or `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET`, never the other mode's variable.
+
+`php artisan axispay:doctor` prints the pinned API version and the event list, so you can compare them with the Dashboard.
+
 Nothing else is registered by hand: for tenants that connect with their own API keys, the application creates a webhook endpoint on the merchant's account pointing at `https://api.<domain>/webhooks/stripe/direct/<connection id>`. The API host must therefore be reachable from Stripe over HTTPS. Webhook routes are rate-limited generously (1,200 requests per minute per IP) and answer in the API error format.
 
-Check: after a deploy, `curl -s -X POST https://api.<domain>/webhooks/stripe/connect/test` answers `400` with `"code": "parameter_invalid"` (no signature), not `404` or `500`.
+### Confirm that events arrive
+
+1. After a deploy, `curl -s -X POST https://api.<domain>/webhooks/stripe/connect/test` answers `400` with `"code": "parameter_invalid"` (no signature), not `404` or `500`.
+2. In the Stripe Dashboard, send a test event from the destination, or let a tenant start onboarding. The destination's delivery log must show `200`.
+3. Run `php artisan axispay:doctor` in the `web` terminal:
+   - `Stripe Connect webhook (<mode>)` is an **error** when the mode is in use (a Connect method is enabled with a platform secret key, or Connect connections exist) and its signing secret is empty or not a `whsec_` value;
+   - `Last Stripe event (<mode>)` shows when the last event arrived, in UTC;
+   - `Stripe Connect events` and `Stripe api_key events` are **warnings** when connections that can charge received no event for 7 days (`gateways.stripe.provider_events.silence_warning_days`). A very quiet account can cause it too.
+4. In the platform panel, open the tenant: **Payment gateway** shows the **Last Stripe event** of each connection and a **No events in 7 days** badge on a connection that can charge but has gone silent.
 
 ## Not needed yet
 

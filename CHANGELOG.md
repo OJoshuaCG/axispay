@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
+  2026-09-27): disputes, Dashboard refunds, payers who close the tab after
+  3D Secure, network cuts during capture and connected-account changes only
+  reach the platform as Stripe events; reconciliation is a safety net.
+  - `axispay:doctor` checks the Stripe webhooks per mode: an error when a
+    mode is in use without a valid Connect signing secret (never printed),
+    a warning when connections that can charge received no event for 7 days
+    (`gateways.stripe.provider_events.silence_warning_days`), and the time of
+    the last Stripe event. It also prints the pinned API version and the
+    events the Connect destination must send
+    (`gateways.stripe.connect_webhook_events`).
+  - Platform panel, tenant page: **Last Stripe event** per gateway
+    connection (UTC) and a **No events in 7 days** badge on a connection
+    that can charge but has gone silent.
+  - Deployment guides: the Connect webhook destination is a required step,
+    with a checklist per mode, how to confirm events arrive, and a
+    troubleshooting entry for "no Stripe events received".
+  - New indexes on `provider_events` for these checks.
 - ADR-0050 (decision only, implementation in Phases 4 and 5): payments are
   linear — the card is authorized first, the merchant's optional pre-payment
   validation runs next, and the charge is captured only after approval; a
