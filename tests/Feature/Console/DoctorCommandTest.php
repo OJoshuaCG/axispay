@@ -7,6 +7,7 @@ use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
 use App\Modules\Shared\Ids\Ulid;
+use App\Modules\Shared\Providers\SharedServiceProvider;
 use App\Modules\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
@@ -57,6 +58,29 @@ it('warns without failing when every proxy is trusted', function (): void {
 
     expect(Artisan::call('axispay:doctor'))->toBe(0);
     expect(Artisan::output())->toContain('trusts every client');
+});
+
+it('fails in production when TRUSTED_PROXIES is empty or trusts everyone (ADR-0051)', function (string $proxies): void {
+    config(['trustedproxy.proxies' => $proxies]);
+    app()->detectEnvironment(static fn (): string => 'production');
+
+    try {
+        expect(Artisan::call('axispay:doctor'))->toBe(1);
+        expect(Artisan::output())->toContain('TRUSTED_PROXIES');
+    } finally {
+        app()->detectEnvironment(static fn (): string => 'testing');
+    }
+})->with(['', '*']);
+
+it('refuses to boot in production without TRUSTED_PROXIES, and only there', function (): void {
+    config(['trustedproxy.proxies' => '']);
+
+    expect(fn () => SharedServiceProvider::assertTrustedProxies('production'))->toThrow(RuntimeException::class, 'TRUSTED_PROXIES must be set in production');
+
+    SharedServiceProvider::assertTrustedProxies('local');
+    SharedServiceProvider::assertTrustedProxies('testing');
+    config(['trustedproxy.proxies' => '10.0.0.0/8']);
+    SharedServiceProvider::assertTrustedProxies('production');
 });
 
 /*

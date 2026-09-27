@@ -23,7 +23,7 @@ beforeEach(function (): void {
 });
 
 it('asks for Turnstile after a decline and verifies it on the server before the gateway (case 16)', function (): void {
-    Http::fake(['challenges.cloudflare.com/*' => Http::response(['success' => true])]);
+    Http::fake(['challenges.cloudflare.com/*' => Http::response(['success' => true, 'hostname' => 'pay.localhost', 'action' => 'checkout'])]);
     [, $link, $fake] = Checkout::scenario();
 
     Checkout::pay($link, 'ctoken_decline')->assertJson(['turnstile_required' => true]);

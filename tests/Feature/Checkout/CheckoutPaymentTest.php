@@ -67,7 +67,7 @@ it('declines with a generic message, records the decline and keeps the link paya
 it('reuses the same attempt and gateway payment after a decline (plan 9.2)', function (): void {
     [, $link, $fake] = Checkout::scenario();
     config(['services.turnstile.secret_key' => '1x0000000000000000000000000000000AA']);
-    Http::fake(['challenges.cloudflare.com/*' => Http::response(['success' => true])]);
+    Http::fake(['challenges.cloudflare.com/*' => Http::response(['success' => true, 'hostname' => 'pay.localhost', 'action' => 'checkout'])]);
 
     Checkout::pay($link, 'ctoken_decline');
     Checkout::pay($link, 'ctoken_success_2', ['turnstile_token' => 'XXXX.DUMMY.TOKEN.XXXX'])->assertOk()->assertJson(['outcome' => 'paid']);

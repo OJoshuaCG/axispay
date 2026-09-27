@@ -131,6 +131,10 @@ final class FakePaymentGateway implements PaymentGateway
         $this->calls[] = 'inspectPaymentMethod:'.$confirmationToken;
         $this->throwIfFailing('inspectPaymentMethod');
 
+        if (str_starts_with($confirmationToken, 'ctoken_bogus')) {
+            throw new GatewayRequestException('Fake: no such confirmation token.', 'resource_missing', null, 404);
+        }
+
         return new PaymentMethodPreview('MX', 'visa', self::scenario($confirmationToken) === 'decline' ? '0002' : '4242');
     }
 
