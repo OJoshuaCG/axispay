@@ -632,7 +632,8 @@ Tenants configure nothing. The platform needs **one destination per mode**. In t
 - [ ] Events from **Connected accounts** (a Connect destination), not "Your account".
 - [ ] URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode. The mode in the URL must match the Dashboard mode.
 - [ ] API version `2026-08-26.dahlia`, the version pinned in the application (`config/services.php`, `stripe.api_version`).
-- [ ] Events `account.updated` and `account.application.deauthorized`, the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`). Phase 4 adds the payment events there and here.
+- [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
+- [ ] After deploying Phase 4: `php artisan axispay:stripe-sync-webhook-endpoints` (payment events on the merchants' own endpoints), `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set, `AXISPAY_CHECKOUT_SANDBOX` unset (the application refuses to boot with it outside local/testing).
 - [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` or `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET`, never the other mode's variable.
 
 `php artisan axispay:doctor` prints the pinned API version and the event list, so you can compare them with the Dashboard.

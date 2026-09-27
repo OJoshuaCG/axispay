@@ -86,6 +86,8 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 | `GATEWAY_CREDENTIALS_KEY` | generate | Dedicated key for merchant Stripe credentials, **not** `APP_KEY`: `php -r "echo 'base64:'.base64_encode(random_bytes(32)).PHP_EOL;"`. Back it up separately from `APP_KEY` and from database backups. |
 | `GATEWAY_CREDENTIALS_KEY_VERSION` / `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` | `1` / empty | Rotation: see "Rotating GATEWAY_CREDENTIALS_KEY". |
 | `AXISPAY_PAY_BASE_URL` | `http://pay.localhost:8000` | Base of the public link URL (`<base>/l/<token>`). Empty: `https://<pay host>`. |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Cloudflare test keys (below) | Bot check of the checkout after a decline (plan 11.7). Required in production; without the secret, a payment that needs the check is refused. |
+| `AXISPAY_CHECKOUT_SANDBOX` | `false` | `true` only with `APP_ENV=local` or `testing`: fake gateway + Stripe.js stub (ADR-0051). The application refuses to boot with it in any other environment. |
 | `AXISPAY_MAX_CHARGE_USD_MINOR` / `AXISPAY_MAX_CHARGE_MXN_MINOR` | `1000000` / `20000000` | Platform maximum per link in cents (USD 10,000.00 / MXN 200,000.00, ADR-0048). The minimums follow Stripe and are not variables. |
 | `AXISPAY_API_RATE_LIMIT_LIVE` / `AXISPAY_API_RATE_LIMIT_TEST` | `100` / `100` | API requests per minute per key (ADR-0048). |
 | `AXISPAY_API_FAILED_AUTH_PER_MINUTE` | `30` | Failed API authentications per IP and minute before that IP gets `429` (ADR-0048). Locally, `php artisan cache:clear` lifts a lock. |
@@ -389,6 +391,75 @@ to a public tunnel pointing at the API host before connecting with keys.
 3. Remove the old key from `GATEWAY_CREDENTIALS_PREVIOUS_KEYS` once the
    command re-encrypted every connection.
 
+## Checkout (Phase 4, ADR-0051)
+
+The payment page lives on the pay host: `http://pay.localhost:8000/l/<token>` locally. It has its own anonymous session (cookie `axispay_pay_session`) for the CSRF token of the pay button.
+
+### Running the checkout without Stripe keys (sandbox)
+
+1. In `.env`: `APP_ENV=local`, `AXISPAY_CHECKOUT_SANDBOX=true`, and the Cloudflare test keys for Turnstile (below).
+2. Build the assets (`pnpm run build`, or `pnpm run dev` while working on the page).
+3. Create the demo tenant and links: `php artisan axispay:checkout:demo` prints one URL per state (active in Spanish and in English, all payer fields, expired, canceled). Run it again for fresh links.
+4. Open a link. The card form is replaced by a **test card** picker:
+
+| Test card | What happens |
+|---|---|
+| Approved | Authorized, then captured: "Payment complete" |
+| Declined / Insufficient funds | Generic decline message; the next try asks for the security check |
+| Bank verification (3D Secure) | A "sandbox bank" dialog: approve (paid) or fail verification (error, link still payable) |
+| Slow processing | The completion page polls and turns into "Payment complete" after a few seconds |
+
+Nothing reaches Stripe: payments live in the cache. The real Stripe.js is never loaded in the sandbox, and the sandbox bank's route only exists while the flag is on.
+
+**Browser check of the whole flow** (Playwright, in `tools/viewport-check`): start the app with the sandbox on, then
+
+```sh
+URLS="$(php artisan axispay:checkout:demo --json)" node tools/viewport-check/checkout-flow.mjs --shots tools/viewport-check/shots
+```
+
+It pays with a decline, the security check and 3D Secure; checks "already paid" from another session, processing with polling, a failed verification with every payer field, the expired, canceled and unknown links. The responsive check works on the same URLs: `BASE_URL=http://pay.localhost:8000 PATHS=/l/<token>,... node check.mjs`.
+
+### Turnstile keys
+
+Cloudflare's documented test keys work on any host, including `*.localhost`:
+
+| Key | Value | Behaviour |
+|---|---|---|
+| Site key | `1x00000000000000000000AA` | Visible widget, always passes |
+| Site key | `2x00000000000000000000AB` | Visible widget, always fails |
+| Site key | `3x00000000000000000000FF` | Forces an interactive challenge |
+| Secret key | `1x0000000000000000000000000000000AA` | Server check always passes |
+| Secret key | `2x0000000000000000000000000000000AA` | Server check always fails |
+
+Production uses the keys of a Turnstile widget created in the Cloudflare dashboard for the pay host.
+
+### Card-testing protection, locally
+
+The per-link and per-IP counters live in the cache: `php artisan cache:clear` resets them. A link blocked after repeated declines is unblocked from its detail in the tenant panel (**Unblock payments**, permission `links:cancel`).
+
+### With real Stripe test keys
+
+Set the platform keys (`STRIPE_TEST_SECRET`, `STRIPE_TEST_PUBLISHABLE`), leave the sandbox off and forward the Connect events: `stripe listen --forward-connect-to localhost/webhooks/stripe/connect/test` (for an `api_key` connection, forward to its direct endpoint). The payment events the platform handles are listed by `php artisan axispay:doctor`.
+
+### Phase 4 acceptance gate (contract tests)
+
+Phase 4 is accepted only when the checkout contract tests pass with real test-mode keys (ADR-0051, "Stripe acceptance gate"):
+
+```sh
+STRIPE_TEST_SECRET=sk_test_… STRIPE_CONTRACT_CONNECTED_ACCOUNT=acct_… \
+STRIPE_CONTRACT_RESTRICTED_KEY=rk_test_… STRIPE_CONTRACT_PUBLISHABLE_KEY=pk_test_… \
+./vendor/bin/pest --group=stripe
+```
+
+The connected account must be an MX account that can charge. The items that need a browser (updating the card form, Mukta inside Stripe's iframe, the 3D Secure dialog) and the cost of voided authorizations are checked by hand and recorded in the ADR.
+
+### After deploying Phase 4
+
+1. Run the migrations.
+2. `php artisan axispay:stripe-sync-webhook-endpoints` so every `api_key` endpoint receives the payment events.
+3. Add the six `payment_intent.*` events to both Connect destinations in the Stripe Dashboard (`axispay:doctor` prints the list).
+4. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`; make sure `AXISPAY_CHECKOUT_SANDBOX` is not set.
+
 ## Quality checks
 
 | Command | What it does |
@@ -444,6 +515,7 @@ Scheduled tasks live in `routes/console.php`:
 | `ExpirePaymentLinksJob` (queued) | Every minute | Expires active links whose expiry has passed (plan 9.1, ADR-0048) |
 | `axispay:idempotency:purge` | Hourly | Deletes API idempotency records older than 24 hours (plan 7.8) |
 | `axispay:payment-links:reconcile-gateways` | Every 15 minutes | Queues the cancellation of active links in tenant modes that no longer have a gateway connection (plan 12.3.4) |
+| `axispay:payments:reconcile` | Every 15 minutes | Queues one reconciliation per tenant and mode: re-reads open payment attempts from Stripe, voids authorizations not captured after 15 minutes, releases links stuck in processing (plan 12.5, ADR-0051) |
 | `axispay:cache:purge-expired` | Hourly (database cache store only) | Deletes expired cache rows, such as per-IP failed-authentication counters that are never read again |
 
 Every task **must** use `withoutOverlapping()` and `onOneServer()`:

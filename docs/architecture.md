@@ -5,7 +5,7 @@ AxisPay is a **modular monolith** (ADR-0001): one Laravel application, one Maria
 - The application serves four surfaces, each on its own host.
 - Tenant isolation is enforced in layers, so one mistake does not leak data.
 
-This page describes what exists **today (Phases 0–1)** and marks what is planned. The plan ([`plans/master.md`](plans/master.md)) stays the source of truth.
+This page describes what exists **today (Phases 0–4)** and marks what is planned. The plan ([`plans/master.md`](plans/master.md)) stays the source of truth.
 
 ## At a glance
 
@@ -28,7 +28,8 @@ flowchart LR
     modules --> db[(MariaDB 11.8<br/>shared schema + jobs table)]
     workers[queue:work<br/>critical / default, low] --> db
     scheduler[schedule:work] --> db
-    modules -. "Phase 2+" .-> stripe[Stripe API]
+    modules --> stripe[Stripe API]
+    stripe -- "webhooks" --> api
 ```
 
 ## Surfaces and hosts
@@ -40,7 +41,7 @@ Each surface is bound to its host with `Route::domain()`. The hosts come from `c
 | Public API v1 | `api.` | Payment links (Phase 3) | `bootstrap/app.php` (`routes/api.php`, prefix `/v1`) | API key (`Authorization: Bearer axp_…`) |
 | Tenant panel | `app.` | Implemented | `app/Providers/Filament/AppPanelProvider.php`, plus `routes/web.php` (invitations, impersonation hand-off, test/live selector) | `web` guard, session, 2FA policy |
 | Platform panel | `admin.` | Implemented | `app/Providers/Filament/AdminPanelProvider.php` | `platform` guard, mandatory 2FA |
-| Checkout | `pay.` | Phase 4 | none yet | public token |
+| Checkout | `pay.` | Implemented (Phase 4) | `bootstrap/app.php` (`routes/checkout.php`, `web` group) | public link token; anonymous session for CSRF |
 
 Host-independent routes:
 
@@ -57,6 +58,7 @@ Host-independent routes:
   - At boot, `SharedServiceProvider` refuses to start when `SESSION_DOMAIN` is set (ADR-0034).
 - **`app.`** Filament panel middleware (`App\Support\Filament\PanelDefaults`) → `Authenticate` → `ResolveTenantContext`, which sets the `TenantContext` from the signed-in user → `RequireTwoFactorForSensitiveUsers` → policies → Actions.
 - **`admin.`** Filament panel middleware → `platform` guard → mandatory 2FA → policies. Cross-tenant reads run inside `TenantContext::runAsPlatform()`, which is audited.
+- **`pay.`** The `web` group (anonymous session with its own cookie, CSRF on the POST endpoints) → the checkout's security headers (nonce-based CSP, no framing, no Referer, no-store, noindex) → the link is found by its public token through `PaymentLinkLookup` and the tenant context of that link is set → Actions (ADR-0051). An invalid token always answers the same 404 page.
 - **`api.`** The `api` middleware group → API key (sets the tenant and the mode from the key) → rate limit per key → scope → idempotency on POST → controller → Action (ADR-0048). The API error envelope (plan 10.4) is rendered by `ApiErrorRenderer` only for requests on this host (`ApiSurface::matches()`).
 - **Queued jobs.** A tenant job implements `TenantAware` and uses `CapturesTenantContext`. The `RestoreTenantContext` job middleware re-enters the same tenant and mode. A tenant job without a context fails.
 
@@ -74,10 +76,12 @@ Code lives in `app/Modules/<Module>/`. The full map and the entry points are in 
 | `Audit` | Phase 1 | Append-only `audit_logs`; `AuditLogger` is the only writer |
 | `Gateways`, `ProviderEvents` | Phase 2 | Stripe port/adapter, connections, incoming webhooks |
 | `ApiKeys`, `PaymentLinks` | Phase 3 | API access (keys, authentication, scopes, rate limit, idempotency); payment links, their state machine and expiration |
-| `Checkout`, `Payments` | Phase 4 / 7 | Hosted checkout, attempts, refunds, disputes |
-| `Webhooks` | Phase 5 | Outgoing webhooks, outbox, SSRF protection, pre-payment validation |
+| `Checkout` | Phase 4 | Payment page, payment flow (authorize, validation hook, capture), card-testing protection, openings, sandbox demo |
+| `Payments` | Phase 4 / 7 | Payment attempts and their state machine, applying the gateway's state, capture and void, reconciliation; refunds and disputes in Phase 7 |
+| `PayerFields` | Phase 4 / 8 | Payer field catalog and validation (Phase 4); tenant configuration UI and purge (Phase 8) |
+| `Webhooks` | Phase 4 / 5 | Recorded business events (Phase 4); outgoing webhooks, outbox delivery, SSRF protection, pre-payment validation (Phase 5) |
 | `Fx` | Phase 6 | Banxico rates, quotes, conversion policy |
-| `Branding`, `PayerFields`, `Reporting`, `Billing`, `Notifications` | Phase 8 / 9 | See the plan |
+| `Branding`, `Reporting`, `Billing`, `Notifications` | Phase 8 / 9 | See the plan |
 
 Business logic lives in single-purpose Actions with DTOs, never in controllers or Filament resources (rules.md rule 12).
 
@@ -93,7 +97,23 @@ Business logic lives in single-purpose Actions with DTOs, never in controllers o
 | Tests | `tests/Feature/Isolation/TenantIsolationTest.php` (cross-tenant access → 404, route coverage), `tests/Feature/Tenancy/TenancyInventoryTest.php` (every `tenant_id` table is listed and its model uses the trait) | New endpoints or tables without isolation |
 | Explicit platform context | `TenantContext::runAsPlatform($reason, …)` (audited) and `runAsTenant()` | Silent cross-tenant access |
 
-Business tables (API keys, idempotency records and links since Phase 3; payments later) also carry `livemode`, so test and live data never mix (rules.md rule 4).
+Business tables (API keys, idempotency records and links since Phase 3; payment attempts and business events since Phase 4) also carry `livemode`, so test and live data never mix (rules.md rule 4).
+
+## Payments (Phase 4)
+
+How a link gets paid (ADR-0050, ADR-0051):
+
+| Step | Rule |
+|---|---|
+| Page | The link's state decides the page; an active link past its expiry is expired on opening; openings are counted (previewers excluded) |
+| Pay | Payer fields, rate limits, Turnstile after a decline (checked on the server), the card behind the confirmation token, the amount to charge |
+| Attempt | Under the link's lock, the link's single active attempt is reused or created (unique in the database) and leased, so a second tab waits |
+| Authorize | The Stripe payment is created with manual capture and confirmed with stable idempotency keys; 3D Secure runs in the page |
+| Validate | The pre-payment validation extension point runs with no lock or transaction open (not configured in Phase 4) |
+| Capture or void | Approved → captured; rejected → the authorization is voided, nothing charged |
+| Truth | Every Stripe state goes through one action; Stripe's events (re-read, never trusted) and the 15-minute reconciliation keep the database right; authorizations left uncaptured are voided |
+
+Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.failed`, `payment.succeeded`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks.
 
 ## Identity, access and 2FA
 

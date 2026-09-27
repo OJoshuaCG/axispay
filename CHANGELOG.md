@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 4 — Checkout and card payments** (ADR-0051; acceptance conditional
+  on the Stripe acceptance gate with real test-mode keys):
+  - Public payment page on the pay host (`/l/{token}`) in every state of plan
+    11.2, following the approved design: merchant header, order summary,
+    payer fields (the whole MVP catalog, stored encrypted), Stripe Payment
+    Element (card only), Turnstile when required, "Powered by" footer; EN and
+    ES (payer-facing Spanish uses *tú*); follows the OS theme; accessible
+    focus and live-region handling. Invalid tokens answer the same 404.
+  - Linear payment flow of ADR-0050: payment attempts (one active per link,
+    enforced by the database), manual-capture PaymentIntents confirmed with a
+    ConfirmationToken, 3D Secure through Stripe.js, the pre-payment
+    validation extension point (not configured until Phase 5), capture, and
+    the complete void path for rejections. Stable idempotency keys and a
+    lease per attempt: a second tab never pays twice.
+  - Stripe `payment_intent.*` events re-read and applied (duplicates and
+    out-of-order events harmless); a late success wins over an expired or
+    canceled link and is flagged; payments the platform did not create are
+    ignored as `foreign_object` with a reduced payload. `api_key` endpoints
+    and the Connect destinations subscribe to the six payment events (run
+    `axispay:stripe-sync-webhook-endpoints` after deploying).
+  - Reconciliation every 15 minutes (`axispay:payments:reconcile`): open
+    attempts re-read, authorizations left uncaptured voided, links stuck in
+    processing released. Expiring or canceling a link cancels its waiting
+    payment.
+  - Card-testing protection: 5 confirmations per link in 15 minutes (then 30
+    minutes paused), 10 per IP per hour, Turnstile after a decline (verified
+    on the server), 24-hour block after 10 declines with an e-mail to the
+    tenant and an **Unblock payments** action (`links:cancel`).
+  - Openings counted with previewers excluded; `payment_link.opened`,
+    `payment.failed`, `payment.succeeded` and `payment_link.paid` recorded for
+    Phase 5's webhooks.
+  - Checkout security headers: nonce-based CSP with Stripe's and
+    Cloudflare's origins, no framing, `no-referrer`, `no-store`, `noindex`,
+    two-year HSTS; nginx no longer duplicates headers the application sets
+    and serves font files with CORS for Stripe's iframe.
+  - Tenant panel: payment attempts on the link detail (`payments:read`), the
+    card-testing block and its unblock action.
+  - Checkout sandbox for local development and tests (fake gateway, Stripe.js
+    stub, `axispay:checkout:demo`), refused at boot outside local/testing; a
+    Playwright flow check in `tools/viewport-check`.
+  - Stripe acceptance-gate contract tests (`tests/Contract/StripeCheckoutContractTest.php`).
+
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after
   3D Secure, network cuts during capture and connected-account changes only

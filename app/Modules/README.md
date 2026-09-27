@@ -26,15 +26,15 @@ Rules:
 | `PlatformAdmin` | Superadmins, audited impersonation, global views. | Phase 1 (exists) |
 | `Audit` | Append-only audit log. | Phase 1 (exists) |
 | `Gateways` | `PaymentGateway` port, `StripeGateway`, `StripeClientFactory`, gateway connections and connection flows, credential encryption, health checks, whether a tenant can charge in a mode. | Phase 2 (exists; OAuth in 4B) |
-| `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch, reconciliation. | Phase 2 (exists; reconciliation in 4) |
+| `ProviderEvents` | Incoming provider webhooks: verification, storage, dispatch (account and payment events; foreign payments ignored). | Phase 2 (exists; payment events since 4) |
 | `ApiKeys` | API keys (issuing, hashing, verifying, scoping, revoking) and the rest of the public API's access layer: key authentication, rate limiting per key, failed-authentication limit, idempotency. The name follows plan 4.3. | Phase 3 (exists) |
 | `PaymentLinks` | Link creation, expiration, cancellation and queries; link state machine; cancelling links when a gateway disconnects. | Phase 3 (exists) |
-| `Checkout` | Public payment page, quotes, attempt start/confirmation, card-testing protection. | Phase 4 |
-| `Payments` | Payment attempts, refunds, disputes; attempt state machine. | Phase 4 / 7 |
-| `Webhooks` | Tenant endpoints, outbox, signed delivery, retries, delivery log, shared SSRF protection, pre-payment validation. | Phase 5 |
+| `Checkout` | Public payment page (pay host), the pay flow (authorize, validation hook, capture), 3D Secure continuation, status polling, card-testing protection (rate limits, Turnstile, long block and unblock), openings, security headers, sandbox demo command. | Phase 4 (exists) |
+| `Payments` | Payment attempts, declines and encrypted payer data; attempt state machine; applying the gateway's state (checkout, webhooks, reconciliation); capture, void, reconciliation; the pre-payment validation extension point. Refunds and disputes in Phase 7. | Phase 4 (exists) / 7 |
+| `Webhooks` | Recorded business events (`domain_events`, Phase 4). Tenant endpoints, outbox delivery, signed delivery, retries, delivery log, shared SSRF protection, pre-payment validation. | Phase 4 (events) / 5 |
 | `Fx` | Exchange rates (Banxico), quotes, conversion policy. | Phase 6 (the `FxMode` enum exists since Phase 3: links and tenant settings store it) |
 | `Branding` | Logo, colors, display name; contrast validation. | Phase 8 |
-| `PayerFields` | Payer field catalog, tenant/link configuration, validation, encrypted storage. | Phase 8 (the catalog enums `PayerField` / `PayerFieldRequirement` exist since Phase 3) |
+| `PayerFields` | Payer field catalog, tenant/link configuration, validation, encrypted storage. | Phase 8 (the catalog enums exist since Phase 3; the checkout's validation and country list since Phase 4) |
 | `Reporting` | Daily rollups, metrics, monthly usage reports. | Phase 8 / 9 |
 | `Billing` | Versioned pricing plans and fee calculation for usage reports (no charging). | Phase 9 |
 | `Notifications` | Operational e-mails. | Phase 9 |
@@ -42,6 +42,8 @@ Rules:
 Only `StripeClientFactory` builds a `StripeClient`; nothing outside
 `Gateways\Stripe` knows Stripe IDs, statuses or event names (ADR-019).
 `FakePaymentGateway` (tests/Support) implements the whole port for tests.
+`Gateways\Sandbox` is the checkout sandbox (local and testing only; the
+application refuses to boot with it anywhere else, ADR-0051).
 
 Filament resources live inside their module (`<Module>/Filament/...`) and are
 registered explicitly in `app/Providers/Filament/{Admin,App}PanelProvider.php`.

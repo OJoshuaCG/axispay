@@ -163,6 +163,7 @@ Defined in `theme.css`. `--spacing: 0.25rem` keeps Tailwind's numeric scale (`p-
 | `--spacing-section` | `clamp(3rem, 2rem + 5vw, 6rem)` | `gap-section`, `py-section` | Fluid space between page sections |
 | `--spacing-touch` | 2.75rem (44px) | `min-h-touch`, `size-touch` | Minimum interactive target |
 | `--container-narrow` | 40rem | `max-w-narrow` | Readable text column, forms |
+| `--container-checkout` | 60rem | `max-w-checkout` | Payment page from 1024px: summary and form side by side |
 | `--container-content` | 72rem | `max-w-content` | Main content |
 | `--container-wide` | 90rem | `max-w-wide` | Full-width shells |
 

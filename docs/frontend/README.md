@@ -61,6 +61,7 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Password field markup and behavior (reveal button, checklist, mismatch hint) | `resources/views/components/password-input.blade.php`, `resources/views/components/password/*`, `resources/js/password-input.js`, `app/Support/Filament/Forms/PasswordField.php` |
 | Control bar of the panels' simple pages (sign-in, 2FA set-up) | `resources/views/filament/partials/guest-controls.blade.php`, `panel-controls.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Autofocus of feedback on page load | `resources/js/focus.js` |
+| The payer-facing checkout: page, states, payer fields, Stripe appearance, sandbox stub | `resources/views/checkout/*`, `resources/views/components/checkout/*`, `resources/js/checkout/*` (copy: `lang/*/checkout.php`) |
 | Icon package registration | `config/blade-icons.php` |
 
 ## Documentation map

@@ -184,6 +184,42 @@ The session key above is illustrative; store a translated message (or a key) in 
 | Feature color | Decorative only; never on amounts, statuses or buttons. |
 | Success green on amounts | Comes from `amount-positive`; do not color amounts manually. |
 
+## Checkout
+
+The payer-facing payment page (plan 11, ADR-0051). Components: [components.md](components.md#checkout-components).
+
+### Layout
+
+| Width | Layout |
+|---|---|
+| 320–767px | One column on the page background: header, summary, payer fields, card form, Pay, trust line, footer |
+| 768–1023px | The same, centred at the narrow width inside a hairline card (`border-line`, `rounded-xl`) |
+| 1024px and up | Checkout width, summary on the left (sticky), form on the right; the header spans both |
+
+- No card fill in dark mode (primary on a raised surface fails contrast); everything sits on `bg-page`.
+- The Pay button is `primary`, `size="lg"`, full width and **not sticky** (iOS keyboard, focus not obscured). It reads "Pay 1,500.00 MXN" with the amount in the numeric font, stays `aria-disabled` until the card form is ready, and switches to "Processing payment…" while a request is in flight.
+- The page follows the operating system's theme; Stripe's card form gets the page's own colors (read from the rendered utilities) and Mukta, and is updated when the scheme changes.
+
+### States and feedback
+
+| Situation | What the payer sees |
+|---|---|
+| Card declined | Error alert above the card form, generic text (the reason stays in the panel), focused; the form stays usable |
+| After a decline | The security check (Turnstile) appears; without it the payment is not sent |
+| Too many attempts | Warning alert "payments are paused, try again in N minutes"; Pay disabled |
+| Bank verification (3D Secure) | Live status "Waiting for your bank to confirm…"; a failed or closed verification shows its own error alert |
+| Authorized, merchant checking (Phase 5) | "Checking your order…" |
+| Processing | Info panel; polls every 3 seconds for 2 minutes, then "we don't have final confirmation yet, don't pay again" with "Check again" |
+| Paid, this session | "Payment complete" with the amount, the date and, when the link has one, "Return to {merchant}" |
+| Paid, another session or later | "This payment has already been made" (description and date only) |
+| Merchant rejected (Phase 5) | "{merchant} couldn't accept this payment", the merchant's message (plain text) or "contact {merchant}", and "you were not charged" |
+| Expired / canceled / blocked | Informative panel, HTTP 200; expired and blocked add the merchant's support e-mail |
+| Unknown link | "We couldn't find this link", HTTP 404, no merchant information |
+
+- One polite live region announces each phase once, never on every poll. A state panel's heading receives focus; the page title becomes "{state} · {merchant}".
+- Field errors come back from the server and appear under each field; the first invalid field receives focus.
+- Spanish copy uses *tú* ([i18n.md](i18n.md)).
+
 ## Checklist
 
 - [ ] All amounts use `<x-amount>`; numeric columns use `amount` and `text-end` (Filament: `->fontFamily(FontFamily::Mono)`), so money is always Geist Mono.
@@ -194,3 +230,4 @@ The session key above is illustrative; store a translated message (or a key) in 
 - [ ] Payment forms have `data-prevent-double-submit` and a server-side idempotency key.
 - [ ] The Pay button is `primary`, `size="md"` or larger.
 - [ ] Post-submit error alerts use `focus`.
+- [ ] Checkout: copy from `checkout.php` (*tú* in Spanish), no theme toggle, Pay button not sticky, checked at 320–1440px in both languages and both schemes.

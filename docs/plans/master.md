@@ -2296,6 +2296,8 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - Registro de aperturas.
 - **Aceptación:** pago exitoso, rechazo, 3DS, link pagado, expirado o cancelado; casos críticos 1–4, 16 y 17 de la sección 26.2; prueba de navegador del flujo completo.
 
+> **Nota (2026-09-27, [ADR-0051](../adr/0051-checkout-and-card-payments-phase-4.md)):** por decisión del responsable del proyecto, la fase se construyó sin llaves de Stripe. El spike se convirtió en una **puerta de aceptación**: las pruebas de contrato (`--group=stripe`) y la lista manual del ADR deben pasar con llaves reales de modo test antes de aceptar la fase. Para desarrollo local y pruebas existe un **sandbox del checkout** (gateway simulado + sustituto de Stripe.js), imposible de activar en producción. El español del pagador usa "tú"; los paneles, "usted".
+
 ### Fase 4B — Métodos de conexión adicionales: `oauth` (2B) y `api_key` (2C)
 
 > Se hace después de la fase 4 para poder probar cada método de punta a punta con pagos reales en modo test.

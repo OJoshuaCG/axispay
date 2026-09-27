@@ -19,6 +19,8 @@ This is the catalogue of Blade components in `resources/views/components/`: purp
 | Theme toggle | `<x-theme-toggle>` | Light / Dark / System switch |
 | Language switcher | `<x-language-switcher>` | EN / ES switch (no-JS form) |
 | Site controls | `<x-site-controls>` | Language switcher + theme toggle for page headers |
+| Phone input | `<x-phone-input>` | Phone number with a calling-code selector (payer fields) |
+| Checkout layout and parts | `<x-layouts.checkout>`, `<x-checkout.*>` | The payer-facing payment page only (see [Checkout components](#checkout-components)) |
 
 ## Conventions for all components
 
@@ -441,3 +443,36 @@ Groups `<x-language-switcher>` and `<x-theme-toggle>` for page headers (`role="g
     <x-site-controls />
 </header>
 ```
+
+---
+
+## Phone input: `<x-phone-input>`
+
+A calling-code `<select>` (default Mexico, +52) next to a national number input (`type="tel"`, `autocomplete="tel-national"`, 16px). The select shows the short form ("MX +52") so both fit at 320px; the list is ordered by country name in the viewer's language. The server builds and checks the international number; the component never validates.
+
+| Prop | Default | Notes |
+|---|---|---|
+| `label` | required | Visible label above the pair |
+| `name` / `countryName` | `phone` / `phone_country` | Field names |
+| `country` | `MX` | Selected calling code |
+| `countries` | `[]` | Code → name, from the payer-country list |
+| `value`, `hint`, `error`, `required` | | As `<x-input>`; the error line is always in the DOM (hidden when empty) so a script can fill it |
+
+---
+
+## Checkout components
+
+The payer-facing payment page (ADR-0051, the approved checkout design). They are not for the panels.
+
+| Component | Purpose | Rules |
+|---|---|---|
+| `<x-layouts.checkout>` | Document of every checkout page | No theme toggle and no theme pre-paint: the page follows the operating system. Robots `noindex`, CSRF meta, CSP nonce on every script and style, Geist Mono 600 preloaded, Stripe.js from `js.stripe.com` only when the page takes payments (the sandbox stub replaces it locally) |
+| `<x-checkout.merchant-header>` | Merchant name (never truncated) and the language switcher | Phase 8 adds the logo; the name stays |
+| `<x-checkout.order-summary>` | "Payment to {merchant}", the description, the total (`<x-amount>`, 3xl semibold) and the expiry when it is less than 72 hours away | Never metadata or client references; the expiry is in the tenant's time zone with its abbreviation |
+| `<x-checkout.payment-element>` | Mount point of Stripe's card form with a three-bar skeleton | Reserves its height (no layout shift, no shimmer); the skeleton is removed when the form is ready |
+| `<x-checkout.turnstile>` | Slot of the bot check | Hidden until the server asks for it; between the card form and the Pay button |
+| `<x-checkout.status-panel>` | A state that replaces the form: paid, processing, expired, canceled, blocked, rejected | Icon in a `*-subtle` circle, the page's `h1` (focused on arrival), body and actions. `level="2"` only for previews |
+| `<x-checkout.field-error>` | Error line of a payer field, filled from the server's answer | Linked with `aria-describedby` |
+| `<x-checkout.footer>` | "Powered by {platform}", "Processed by Stripe", privacy notice (when payer data is collected) and support e-mail | On every state; links are 44px targets |
+
+The states and their exact copy are in [payments-ui.md](payments-ui.md#checkout).
