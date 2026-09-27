@@ -50,6 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     stub, `axispay:checkout:demo`), refused at boot outside local/testing; a
     Playwright flow check in `tools/viewport-check`.
   - Stripe acceptance-gate contract tests (`tests/Contract/StripeCheckoutContractTest.php`).
+  - Hardening: the link is reserved (`processing`) while a payment is
+    confirmed, so it cannot expire or be canceled mid-payment; closing a
+    tenant cancels its active links (`tenant_closed`) and its checkout stops
+    taking payments; creation of the Stripe payment carries only link-fixed
+    values (payer receipt e-mail moves to the confirmation) so a retry after
+    a lost answer never meets a refused idempotency key; the merchant's
+    decision is kept on the attempt; capture and void errors show
+    "processing" instead of an error; stale reads and mismatched amounts are
+    not applied; leases have owner tokens; payer data is collected only when
+    the tenant has a privacy notice URL; informative pages no longer show the
+    amount; `/status` returns the return URL once paid; declines and payer
+    data carry `livemode`.
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after

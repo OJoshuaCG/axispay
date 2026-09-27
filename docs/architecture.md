@@ -107,9 +107,9 @@ How a link gets paid (ADR-0050, ADR-0051):
 |---|---|
 | Page | The link's state decides the page; an active link past its expiry is expired on opening; openings are counted (previewers excluded) |
 | Pay | Payer fields, rate limits, Turnstile after a decline (checked on the server), the card behind the confirmation token, the amount to charge |
-| Attempt | Under the link's lock, the link's single active attempt is reused or created (unique in the database) and leased, so a second tab waits |
+| Attempt | Under the link's lock, the link's single active attempt is reused or created (unique in the database) and leased, and the link is reserved (`processing`), so a second tab waits and the link cannot expire or be canceled mid-payment |
 | Authorize | The Stripe payment is created with manual capture and confirmed with stable idempotency keys; 3D Secure runs in the page |
-| Validate | The pre-payment validation extension point runs with no lock or transaction open (not configured in Phase 4) |
+| Validate | The pre-payment validation extension point runs with no lock or transaction open (not configured in Phase 4); the decision is kept on the attempt |
 | Capture or void | Approved → captured; rejected → the authorization is voided, nothing charged |
 | Truth | Every Stripe state goes through one action; Stripe's events (re-read, never trusted) and the 15-minute reconciliation keep the database right; authorizations left uncaptured are voided |
 

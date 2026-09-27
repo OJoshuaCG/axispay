@@ -433,6 +433,10 @@ Cloudflare's documented test keys work on any host, including `*.localhost`:
 
 Production uses the keys of a Turnstile widget created in the Cloudflare dashboard for the pay host.
 
+### Payer fields and the privacy notice
+
+The checkout collects payer data only when the tenant has a privacy notice URL; the demo tenant has one. Without it the page shows no payer fields and the link detail in the panel warns about it.
+
 ### Card-testing protection, locally
 
 The per-link and per-IP counters live in the cache: `php artisan cache:clear` resets them. A link blocked after repeated declines is unblocked from its detail in the tenant panel (**Unblock payments**, permission `links:cancel`).
