@@ -177,7 +177,7 @@ final readonly class ProcessProviderEvent
                 'attempts' => $locked->attempts + 1,
                 'processed_at' => now(),
                 'last_error' => $reason,
-                ...($reduced !== null ? ['payload' => $reduced] : []),
+                ...($reduced !== null ? ['payload' => $reduced, 'payload_reduced' => true] : []),
             ])->save();
         });
     }

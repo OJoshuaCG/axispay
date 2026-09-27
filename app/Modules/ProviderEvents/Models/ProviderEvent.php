@@ -28,7 +28,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $type
  * @property string|null $object_id
  * @property string|null $payment_attempt_id
- * @property string $payload
+ * @property string $payload encrypted at rest (ADR-0051)
+ * @property bool $payload_reduced only the reduced envelope is kept
  * @property string|null $tenant_id
  * @property string|null $gateway_connection_id
  * @property ProviderEventStatus $status
@@ -53,6 +54,7 @@ final class ProviderEvent extends Model implements AllowsPlatformRows
 
     protected $attributes = [
         'attempts' => 0,
+        'payload_reduced' => false,
     ];
 
     protected function casts(): array
@@ -60,6 +62,9 @@ final class ProviderEvent extends Model implements AllowsPlatformRows
         return [
             'provider' => GatewayProvider::class,
             'status' => ProviderEventStatus::class,
+            // The event body may hold account or payer details (ADR-0051).
+            'payload' => 'encrypted',
+            'payload_reduced' => 'boolean',
             'attempts' => 'integer',
             'received_at' => 'immutable_datetime',
             'processed_at' => 'immutable_datetime',

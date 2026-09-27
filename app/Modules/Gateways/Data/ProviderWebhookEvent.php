@@ -41,9 +41,19 @@ final readonly class ProviderWebhookEvent
         return $this->kind === ProviderEventKind::PaymentUpdated && $this->attemptReference === null;
     }
 
-    /** Only events the platform acts on keep their full body. */
+    /**
+     * Only account events the platform acts on keep their full body. Payment
+     * events keep the reduced envelope too (ADR-0051): the handler re-reads
+     * the payment from the gateway (rules.md rule 6), and the body would
+     * carry payer data (billing details, receipt e-mail).
+     */
     public function storedPayload(bool $routed): string
     {
-        return $routed && $this->kind !== ProviderEventKind::Unhandled && ! $this->isForeignPayment() ? $this->rawPayload : $this->reducedPayload;
+        return $this->keepsFullPayload($routed) ? $this->rawPayload : $this->reducedPayload;
+    }
+
+    public function keepsFullPayload(bool $routed): bool
+    {
+        return $routed && in_array($this->kind, [ProviderEventKind::AccountUpdated, ProviderEventKind::AccountDeauthorized], true);
     }
 }

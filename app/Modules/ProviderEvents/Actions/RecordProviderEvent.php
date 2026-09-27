@@ -54,6 +54,7 @@ final readonly class RecordProviderEvent
             'object_id' => $event->objectId,
             'payment_attempt_id' => $event->attemptReference !== null && Ulid::isValid($event->attemptReference) ? $event->attemptReference : null,
             'payload' => $event->storedPayload(routed: $connection !== null),
+            'payload_reduced' => ! $event->keepsFullPayload(routed: $connection !== null),
             'received_at' => now(),
         ];
         $foreign = $event->isForeignPayment();

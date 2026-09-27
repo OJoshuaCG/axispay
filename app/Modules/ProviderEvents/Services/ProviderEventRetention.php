@@ -38,18 +38,17 @@ final readonly class ProviderEventRetention
         $reduced = 0;
 
         ProviderEvent::query()->withoutGlobalScopes()
-            ->select(['id', 'provider', 'payload'])
+            ->select(['id', 'provider', 'payload', 'tenant_id', 'livemode'])
             ->whereIn('status', [ProviderEventStatus::Processed->value, ProviderEventStatus::Failed->value])
             ->where('received_at', '<', now()->subDays($this->days('processed_payload_days', 30)))
-            ->where('payload', 'not like', '%"axispay_reduced":true%')
+            ->where('payload_reduced', false)
             ->orderBy('id')
             ->chunkById(500, function ($rows) use (&$reduced): void {
                 foreach ($rows as $row) {
                     $provider = $row->provider instanceof GatewayProvider ? $row->provider : GatewayProvider::Stripe;
 
-                    // Builder update: no model events, the row's tenant is untouched.
-                    ProviderEvent::query()->withoutGlobalScopes()->whereKey($row->id)
-                        ->update(['payload' => $this->gateways->for($provider)->reduceWebhookPayload($row->payload)]);
+                    // Saved without events on the tenant: the row's tenant is untouched; the cast re-encrypts.
+                    $row->forceFill(['payload' => $this->gateways->for($provider)->reduceWebhookPayload($row->payload), 'payload_reduced' => true])->saveQuietly();
                     $reduced++;
                 }
             });
