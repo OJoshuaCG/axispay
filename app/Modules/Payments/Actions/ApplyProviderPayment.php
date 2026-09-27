@@ -10,6 +10,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Http\Presenters\PaymentLinkPresenter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Data\AppliedPayment;
@@ -19,6 +20,7 @@ use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
+use App\Modules\Payments\Services\PaymentSnapshot;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Services\DomainEventRecorder;
 use Carbon\CarbonImmutable;
@@ -36,9 +38,11 @@ use LogicException;
  * In one transaction, locking the link first and then the attempt (the same
  * order everywhere, rules.md rule 8):
  *
- *  1. a new decline is recorded once (keyed by the gateway's reference),
- *     `failure_count` grows and `payment.failed` is recorded (plan 9.2);
- *  2. the attempt moves to the status of the gateway payment;
+ *  1. a new decline is recorded once (keyed by the gateway's reference) and
+ *     `failure_count` grows (plan 9.2);
+ *  2. the attempt moves to the status of the gateway payment; a new decline
+ *     records `payment.failed`, entering `processing` records
+ *     `payment.processing` (frozen snapshots, ADR-0051);
  *  3. the link follows (plan 9.1): a payment under way → `processing`; the
  *     attempt back to waiting or closed → `active` (or `expired` past its
  *     expiry); succeeded → `paid`. A success on an expired or canceled link
@@ -50,6 +54,8 @@ use LogicException;
  */
 final readonly class ApplyProviderPayment
 {
+    public const string SUCCEEDED_AFTER_CLOSE = 'succeeded_after_close';
+
     public function __construct(
         private PaymentAttemptStateMachine $attempts,
         private PaymentLinkStateMachine $links,
@@ -75,9 +81,7 @@ final readonly class ApplyProviderPayment
 
             if ($attempt->status->isTerminal()) {
                 if ($attempt->status !== PaymentAttemptStatus::Succeeded && $payment->status->value === PaymentAttemptStatus::Succeeded->value) {
-                    // Cannot happen with a real gateway (a closed payment never
-                    // succeeds); loud, because money would be unaccounted for.
-                    Log::critical('A closed payment attempt succeeded at the gateway.', ['payment_attempt_id' => $attempt->id]);
+                    $this->succeededAfterClose($attempt);
                 }
 
                 return new AppliedPayment($attempt, $link, false);
@@ -107,12 +111,29 @@ final readonly class ApplyProviderPayment
             }
 
             $this->recordCard($attempt, $payment);
-            $newDecline = $payment->failure !== null && $this->recordDecline($attempt, $link, $payment->failure, $clientIp);
+            $newDecline = $payment->failure !== null && $this->recordDecline($attempt, $payment->failure, $clientIp);
 
             $target = PaymentAttemptStatus::fromProvider($payment->status, $attempt->failure_count);
+            $previous = $attempt->status;
 
-            if ($target !== $attempt->status) {
+            if ($target !== $previous) {
                 $this->attempts->transition($attempt, $target);
+            }
+
+            // Recorded after the transition, so the frozen snapshot shows the
+            // payment as it is now (ADR-0051).
+            if ($newDecline) {
+                $this->events->record(DomainEventType::PaymentFailed, 'payment', $attempt->id, [
+                    'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+                    'failure_count' => $attempt->failure_count,
+                    'failure_code' => PaymentSnapshot::genericFailureCode($attempt->last_failure_code, $attempt->last_decline_code),
+                ]);
+            }
+
+            if ($target === PaymentAttemptStatus::Processing && $previous !== PaymentAttemptStatus::Processing) {
+                $this->events->record(DomainEventType::PaymentProcessing, 'payment', $attempt->id, [
+                    'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+                ]);
             }
 
             $this->followLink($link, $attempt, $newDecline);
@@ -144,7 +165,7 @@ final readonly class ApplyProviderPayment
         }
     }
 
-    private function recordDecline(PaymentAttempt $attempt, PaymentLink $link, ProviderPaymentFailure $failure, ?string $clientIp): bool
+    private function recordDecline(PaymentAttempt $attempt, ProviderPaymentFailure $failure, ?string $clientIp): bool
     {
         try {
             DB::transaction(function () use ($attempt, $failure, $clientIp): void {
@@ -170,14 +191,6 @@ final readonly class ApplyProviderPayment
             'last_decline_code' => $failure->declineCode !== null ? substr($failure->declineCode, 0, 64) : null,
             'last_failure_message' => $failure->message,
         ])->save();
-
-        $this->events->record(DomainEventType::PaymentFailed, 'payment', $attempt->id, [
-            'payment' => $attempt->prefixedId(),
-            'payment_link' => $link->prefixedId(),
-            'failure_count' => $attempt->failure_count,
-            'failure_code' => $attempt->last_failure_code,
-            'decline_code' => $attempt->last_decline_code,
-        ]);
 
         return true;
     }
@@ -231,15 +244,37 @@ final readonly class ApplyProviderPayment
             ]);
         }
 
+        // Frozen snapshots of both objects (ADR-0051, plan 15.3).
         $facts = [
-            'payment' => $attempt->prefixedId(),
-            'payment_link' => $link->prefixedId(),
-            'amount_minor' => $attempt->amount_minor,
-            'currency' => $attempt->currency->value,
+            'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+            'payment_link' => PaymentLinkPresenter::toApi($link),
             'late_payment' => $late,
         ];
 
         $this->events->record(DomainEventType::PaymentSucceeded, 'payment', $attempt->id, $facts);
         $this->events->record(DomainEventType::PaymentLinkPaid, 'payment_link', $link->id, $facts);
+    }
+
+    /**
+     * A closed attempt whose payment succeeded at the gateway anyway (a void
+     * that lost a race with a capture, or a gateway bug): money may be
+     * unaccounted for. The attempt is not reopened; it is flagged for review,
+     * audited and logged at critical level (ADR-0051).
+     */
+    private function succeededAfterClose(PaymentAttempt $attempt): void
+    {
+        Log::critical('A closed payment attempt succeeded at the gateway.', ['payment_attempt_id' => $attempt->id, 'status' => $attempt->status->value]);
+
+        if ($attempt->needs_review) {
+            return;
+        }
+
+        $attempt->forceFill(['needs_review' => true, 'review_reason' => self::SUCCEEDED_AFTER_CLOSE])->save();
+
+        $this->audit->record(AuditAction::PaymentNeedsReview, $attempt, [
+            'reason' => self::SUCCEEDED_AFTER_CLOSE,
+            'status' => $attempt->status->value,
+            'livemode' => $attempt->livemode,
+        ], actor: Actor::system());
     }
 }

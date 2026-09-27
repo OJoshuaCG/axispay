@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Checkout\Actions;
 
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Http\Presenters\PaymentLinkPresenter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Services\DomainEventRecorder;
@@ -50,7 +51,7 @@ final readonly class RecordCheckoutOpening
 
             if ($emit) {
                 $this->events->record(DomainEventType::PaymentLinkOpened, 'payment_link', $locked->id, [
-                    'payment_link' => $locked->prefixedId(),
+                    'payment_link' => PaymentLinkPresenter::toApi($locked),
                     'open_count' => $locked->open_count,
                     'first_open' => $first,
                 ]);

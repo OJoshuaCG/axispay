@@ -46,7 +46,7 @@ final readonly class VoidAuthorization
     ) {}
 
     /**
-     * @param  string  $reason  merchant_rejected | uncaptured_timeout | link_closed | abandoned_action
+     * @param  string  $reason  merchant_rejected | capture_window_elapsed | link_closed | abandoned_action
      * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
      *
      * @throws AttemptBusyException when another process holds the attempt
@@ -96,7 +96,8 @@ final readonly class VoidAuthorization
         [$gateway, $connection] = $this->gateways->for($attempt);
 
         try {
-            $payment = $gateway->cancelPayment($connection, $attempt->provider_payment_id, IdempotencyKeys::cancel($attempt->id));
+            $providerPaymentId = $attempt->provider_payment_id;
+            $payment = $this->gateways->guard($connection, static fn () => $gateway->cancelPayment($connection, $providerPaymentId, IdempotencyKeys::cancel($attempt->id)));
         } catch (GatewayConfigurationException $e) {
             // The connection lost its credentials (a disconnected api_key). A
             // payment that was never authorized cannot be charged any more and

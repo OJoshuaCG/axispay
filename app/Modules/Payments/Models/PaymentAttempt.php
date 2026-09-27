@@ -56,6 +56,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $validation_payer_message
  * @property CarbonImmutable|null $authorized_at
  * @property CarbonImmutable|null $capture_before
+ * @property CarbonImmutable|null $reconciled_at
  * @property CarbonImmutable|null $succeeded_at
  * @property CarbonImmutable|null $failed_at
  * @property CarbonImmutable|null $canceled_at
@@ -133,6 +134,7 @@ final class PaymentAttempt extends Model
             'validation_outcome' => ValidationOutcome::class,
             'authorized_at' => 'immutable_datetime',
             'capture_before' => 'immutable_datetime',
+            'reconciled_at' => 'immutable_datetime',
             'succeeded_at' => 'immutable_datetime',
             'failed_at' => 'immutable_datetime',
             'canceled_at' => 'immutable_datetime',

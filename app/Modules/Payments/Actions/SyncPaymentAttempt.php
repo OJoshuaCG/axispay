@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Actions;
 
+use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
@@ -23,10 +24,8 @@ use LogicException;
  *  - reconciliation, a 3D Secure step left unanswered for
  *    `axispay.checkout.abandon_action_after_minutes` → canceled (the payer
  *    abandoned it; the link is released);
- *  - reconciliation, authorization older than
- *    `axispay.payments.void_authorized_after_minutes` → voided: authorize and
- *    capture happen seconds apart, so a stale one is a flow that stopped;
- *  - otherwise → CaptureAuthorizedPayment (a payer who closed the tab after
+ *  - otherwise → CaptureAuthorizedPayment, which captures within the
+ *    capture window and voids after it (CaptureWindow, for every caller alike); (a payer who closed the tab after
  *    3D Secure still gets their payment completed). If another process holds
  *    the attempt, a webhook schedules one more try a minute later.
  */
@@ -54,7 +53,12 @@ final readonly class SyncPaymentAttempt
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
         $target = $attempt->provider_payment_id ?? $providerPaymentId;
 
-        if ($attempt->status->isTerminal() || $target === null) {
+        // A closed attempt is only re-read when the gateway reports on it
+        // (webhook): a payment that succeeded after it was closed must not go
+        // unnoticed (ApplyProviderPayment flags it for review, ADR-0051).
+        $closedButReported = $reason === SyncReason::Webhook && $attempt->status->isTerminal() && $attempt->status !== PaymentAttemptStatus::Succeeded;
+
+        if ($target === null || ($attempt->status->isTerminal() && ! $closedButReported)) {
             return $attempt;
         }
 
@@ -66,10 +70,16 @@ final readonly class SyncPaymentAttempt
 
         $idleSince = $attempt->updated_at ?? CarbonImmutable::now();
         [$gateway, $connection] = $this->gateways->for($attempt);
-        $payment = $gateway->retrievePayment($connection, $target);
+        $payment = $this->gateways->guard($connection, static fn () => $gateway->retrievePayment($connection, $target));
 
         if ($payment->attemptReference !== $attempt->id) {
             Log::warning('A gateway payment does not name the attempt it was read for.', ['payment_attempt_id' => $attempt->id]);
+
+            return $attempt;
+        }
+
+        if ($attempt->provider_payment_id === null && ! self::createdForAttempt($payment, $attempt)) {
+            Log::warning('A gateway payment was not adopted: it was not created while its attempt could create it.', ['payment_attempt_id' => $attempt->id]);
 
             return $attempt;
         }
@@ -88,10 +98,6 @@ final readonly class SyncPaymentAttempt
             return $attempt;
         }
 
-        if ($reason === SyncReason::Reconciliation && $this->isStale($attempt)) {
-            return $this->void->handle($attempt->id, 'uncaptured_timeout');
-        }
-
         $result = $this->capture->handle($attempt->id);
 
         if ($result->outcome === CaptureOutcome::Pending && $reason === SyncReason::Webhook) {
@@ -101,10 +107,21 @@ final readonly class SyncPaymentAttempt
         return $result->attempt;
     }
 
-    private function isStale(PaymentAttempt $attempt): bool
+    /**
+     * ADR-0051: a payment is adopted by its metadata only when the gateway
+     * created it while this attempt's own create call could have: from just
+     * before the attempt existed until its idempotency keys expire (24 h).
+     * Metadata alone can be written by anyone with access to the account.
+     */
+    private static function createdForAttempt(ProviderPayment $payment, PaymentAttempt $attempt): bool
     {
-        $authorizedAt = $attempt->authorized_at ?? $attempt->updated_at ?? CarbonImmutable::now();
+        if ($payment->createdAt === null || $attempt->created_at === null) {
+            return false;
+        }
 
-        return $authorizedAt->lessThanOrEqualTo(CarbonImmutable::now()->subMinutes(config()->integer('axispay.payments.void_authorized_after_minutes')));
+        $created = CarbonImmutable::createFromTimestampUTC($payment->createdAt);
+
+        return $created->greaterThanOrEqualTo($attempt->created_at->subMinute())
+            && $created->lessThanOrEqualTo($attempt->created_at->addDay());
     }
 }

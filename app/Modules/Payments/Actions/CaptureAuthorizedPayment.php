@@ -15,6 +15,7 @@ use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
+use App\Modules\Payments\Services\CaptureWindow;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Tenancy\Enums\TenantStatus;
@@ -34,7 +35,8 @@ use LogicException;
  *     still be authorized; if the link was closed meanwhile (expired,
  *     canceled, closed tenant) the authorization is voided instead of
  *     captured (if the gateway says it already succeeded, the payment wins);
- *  3. approved → capture (stable idempotency key); rejected → void.
+ *  3. approved and within the capture window → capture (stable idempotency
+ *     key); rejected, or past the window (CaptureWindow) → void.
  *
  * Gateway errors never escape: the attempt stays authorized, the answer is
  * Pending, and the webhook or the reconciliation completes it later with the
@@ -83,8 +85,10 @@ final readonly class CaptureAuthorizedPayment
     {
         $outcome = $attempt->validation_outcome;
         $payerMessage = $attempt->validation_payer_message;
+        // Past the capture window nobody captures (or asks the merchant): void.
+        $windowElapsed = CaptureWindow::elapsed($attempt);
 
-        if ($outcome === null) {
+        if ($outcome === null && ! $windowElapsed) {
             // Step 4, outside any lock or transaction (rule 7b).
             $decision = $this->validator->decide(PaymentLink::query()->findOrFail($attempt->payment_link_id), $attempt);
             [$outcome, $payerMessage] = [$decision->outcome(), $decision->payerMessage];
@@ -119,9 +123,17 @@ final readonly class CaptureAuthorizedPayment
             return new CaptureResult(CaptureOutcome::Pending, $current);
         }
 
-        if ($linkClosed || ! $outcome->allowsCapture()) {
+        $windowElapsed = $windowElapsed || CaptureWindow::elapsed($current);
+
+        if ($linkClosed || $windowElapsed || $outcome === null || ! $outcome->allowsCapture()) {
+            $reason = match (true) {
+                $linkClosed => 'link_closed',
+                $windowElapsed => 'capture_window_elapsed',
+                default => 'merchant_rejected',
+            };
+
             try {
-                $voided = $this->void->handle($current->id, $linkClosed ? 'link_closed' : 'merchant_rejected', $token);
+                $voided = $this->void->handle($current->id, $reason, $token);
             } catch (GatewayException $e) {
                 Log::warning('Void outcome unknown; left to the webhook and the reconciliation.', ['payment_attempt_id' => $current->id, 'exception' => $e::class]);
 
@@ -132,18 +144,20 @@ final readonly class CaptureAuthorizedPayment
                 return new CaptureResult(CaptureOutcome::Captured, $voided);
             }
 
-            return new CaptureResult($linkClosed ? CaptureOutcome::NotAuthorized : CaptureOutcome::Rejected, $voided, $payerMessage);
+            return new CaptureResult($reason === 'merchant_rejected' ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
         }
 
         [$gateway, $connection] = $this->gateways->for($current);
 
         try {
+            $providerPaymentId = (string) $current->provider_payment_id;
+
             try {
-                $payment = $gateway->capturePayment($connection, (string) $current->provider_payment_id, IdempotencyKeys::capture($current->id));
+                $payment = $this->gateways->guard($connection, static fn () => $gateway->capturePayment($connection, $providerPaymentId, IdempotencyKeys::capture($current->id)));
             } catch (GatewayRequestException $e) {
                 // Refused (e.g. the authorization expired): apply what the gateway says now.
                 Log::warning('The gateway refused a capture.', ['payment_attempt_id' => $current->id, 'provider_code' => $e->providerCode]);
-                $payment = $gateway->retrievePayment($connection, (string) $current->provider_payment_id);
+                $payment = $this->gateways->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
             }
         } catch (GatewayException $e) {
             // Unknown outcome: the webhook or the reconciliation settles it

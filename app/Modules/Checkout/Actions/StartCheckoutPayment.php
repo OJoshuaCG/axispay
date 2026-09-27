@@ -16,6 +16,7 @@ use App\Modules\Gateways\Data\PaymentRequest;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Gateways\Services\GatewayAccessFailures;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\PayerFields\Data\PayerData;
 use App\Modules\PayerFields\Exceptions\InvalidPayerDataException;
@@ -85,6 +86,7 @@ final readonly class StartCheckoutPayment
         private ReleaseLinkAfterAttempt $release,
         private PaymentLinkStateMachine $links,
         private EffectivePayerFields $effectiveFields,
+        private GatewayAccessFailures $failures,
     ) {}
 
     /**
@@ -127,7 +129,7 @@ final readonly class StartCheckoutPayment
         $gateway = $this->gateways->for($connection->provider);
 
         try {
-            $card = $gateway->inspectPaymentMethod($connection, $input->confirmationToken);
+            $card = $this->failures->guard($connection, static fn () => $gateway->inspectPaymentMethod($connection, $input->confirmationToken));
         } catch (GatewayException $e) {
             Log::warning('The confirmation token could not be read.', ['payment_link_id' => $link->id, 'exception' => $e::class, 'provider_code' => $e->providerCode]);
 
@@ -331,11 +333,13 @@ final readonly class StartCheckoutPayment
             if ($attempt->provider_payment_id === null) {
                 // Always the attempt's STORED amount: a retry after a lost
                 // answer repeats the very same request under the same key.
-                $attempt = $this->apply->handle($attempt->id, $gateway->createOrUpdatePayment($connection, $request($attempt->money(), IdempotencyKeys::create($attempt->id))), leaseToken: $leaseToken)->attempt;
+                $created = $this->failures->guard($connection, static fn () => $gateway->createOrUpdatePayment($connection, $request($attempt->money(), IdempotencyKeys::create($attempt->id))));
+                $attempt = $this->apply->handle($attempt->id, $created, leaseToken: $leaseToken)->attempt;
             }
 
             if ($attempt->amount_minor !== $amount->minorAmount || $attempt->currency !== $amount->currency) {
-                $updated = $gateway->createOrUpdatePayment($connection, $request($amount, IdempotencyKeys::update($attempt->id, $amount), $attempt->provider_payment_id));
+                $current = $attempt;
+                $updated = $this->failures->guard($connection, static fn () => $gateway->createOrUpdatePayment($connection, $request($amount, IdempotencyKeys::update($current->id, $amount), $current->provider_payment_id)));
                 PaymentAttempt::query()->whereKey($attempt->id)->update(['amount_minor' => $amount->minorAmount, 'currency' => $amount->currency->value]);
                 $attempt = $this->apply->handle($attempt->id, $updated, leaseToken: $leaseToken)->attempt;
             }
@@ -344,14 +348,11 @@ final readonly class StartCheckoutPayment
                 return CheckoutResult::of(CheckoutOutcome::InProgress);
             }
 
-            $payment = $gateway->confirmPayment(
-                $connection,
-                (string) $attempt->provider_payment_id,
-                $input->confirmationToken,
-                IdempotencyKeys::confirm($attempt->id, $input->confirmationToken),
-                $this->urls->complete($link),
-                $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null,
-            );
+            $providerPaymentId = (string) $attempt->provider_payment_id;
+            $confirmKey = IdempotencyKeys::confirm($attempt->id, $input->confirmationToken);
+            $returnUrl = $this->urls->complete($link);
+            $receiptEmail = $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null;
+            $payment = $this->failures->guard($connection, static fn () => $gateway->confirmPayment($connection, $providerPaymentId, $input->confirmationToken, $confirmKey, $returnUrl, $receiptEmail));
         } catch (GatewayException $e) {
             // Unknown or refused: the payer may try again (same keys); the
             // webhook and the reconciliation settle any payment that did go through.

@@ -162,6 +162,11 @@ return [
         // long is canceled by the reconciliation: the payer abandoned it, and
         // the link becomes payable again (ADR-0051).
         'abandon_action_after_minutes' => 30,
+        // An authorization is captured only within this many minutes of being
+        // authorized; after that whoever sees it (checkout, webhook,
+        // reconciliation) voids it, and a late capture never happens. If the
+        // gateway already reports it succeeded, the payment wins (ADR-0051).
+        'capture_window_minutes' => 15,
         // The status polled by the page is re-read from the gateway when the
         // attempt has not changed for this long (webhooks stay the source of
         // truth; this only speeds the page up).
@@ -183,9 +188,11 @@ return [
         // Reconciliation (every 15 minutes): attempts not final and untouched
         // for this long are re-read from the gateway.
         'reconcile_after_minutes' => 10,
-        // An authorization still not captured after this long is voided
-        // (ADR-0050: authorize and capture happen seconds apart).
-        'void_authorized_after_minutes' => 15,
+        // Attempts re-read per tenant and mode and per run, and the seconds
+        // after which a run starts no new re-read (ADR-0051).
+        'reconcile_batch_size' => 200,
+        'reconcile_time_budget_seconds' => 25,
+        // (The capture window is `checkout.capture_window_minutes`.)
         // Plan 19.2: payer data is kept this long after the attempt (the
         // purge itself is Phase 8).
         'payer_retention_months' => 24,
@@ -349,6 +356,10 @@ return [
                 // connection, when a connection that can charge has received
                 // no event for this many days (ADR-0050).
                 'silence_warning_days' => 7,
+                // An event still `received` after this long (its job was
+                // lost) is queued again by a duplicate delivery or by
+                // `axispay:provider-events:sweep` (ADR-0051).
+                'redispatch_after_seconds' => 300,
             ],
 
             // Version of the risk notice the tenant accepts before storing API
