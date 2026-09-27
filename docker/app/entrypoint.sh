@@ -122,7 +122,7 @@ run_queue_worker() {
         --queue="$queues" \
         --sleep="${QUEUE_SLEEP:-3}" \
         --tries="${QUEUE_TRIES:-3}" \
-        --timeout="${QUEUE_TIMEOUT:-60}" \
+        --timeout="${QUEUE_TIMEOUT:-120}" \
         --memory="${QUEUE_MEMORY:-192}" \
         --no-interaction
 }
@@ -183,7 +183,7 @@ case "$role" in
         export PHP_FPM_MAX_CHILDREN="${PHP_FPM_MAX_CHILDREN:-10}"
         # supervisord expands these in its config: a worker gets its job's
         # timeout plus a margin before it is killed on stop.
-        export QUEUE_TIMEOUT="${QUEUE_TIMEOUT:-60}"
+        export QUEUE_TIMEOUT="${QUEUE_TIMEOUT:-120}"
         export QUEUE_STOP_WAIT_SECONDS=$((QUEUE_TIMEOUT + 15))
         prepare_schema
         warm_caches
