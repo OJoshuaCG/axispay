@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\PaymentLinks\Services;
 
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Events\PaymentLinkClosed;
 use App\Modules\PaymentLinks\Exceptions\InvalidStateTransition;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use Carbon\CarbonImmutable;
@@ -12,11 +13,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * The link state machine of plan 9.1 (rules.md rule 8). The table holds every
- * transition of the plan; Phase 3 applies the ones it owns (active → expired,
- * active → canceled). Transitions driven by payment attempts (into or out of
- * `processing`, into `paid`) are defined here but refused until Phase 4 wires
- * them to the attempt state machine.
+ * The link state machine of plan 9.1 (rules.md rule 8). Every transition has
+ * its own method:
+ *
+ *  - expire() / cancel(): the job, the API and the panel (Phase 3);
+ *  - enterProcessing(), resumeAfterAttempt(), markPaid(): driven by payment
+ *    attempts (Phase 4, ADR-0051). markPaid() also accepts an expired or
+ *    canceled link: a late successful payment wins (ADR-006) and the caller
+ *    records the anomaly.
  *
  * Callers pass a row they locked with lockForUpdate() inside a transaction;
  * apply() refuses to run outside one. An invalid transition is logged and
@@ -39,14 +43,6 @@ final class PaymentLinkStateMachine
         return in_array($to, self::TRANSITIONS[$from->value], true);
     }
 
-    /** Attempt-driven transitions (Phase 4). */
-    private static function isAttemptDriven(PaymentLinkStatus $from, PaymentLinkStatus $to): bool
-    {
-        return $to === PaymentLinkStatus::Processing
-            || $to === PaymentLinkStatus::Paid
-            || $from === PaymentLinkStatus::Processing;
-    }
-
     public function expire(PaymentLink $locked): PaymentLink
     {
         return $this->apply($locked, PaymentLinkStatus::Expired, ['expired_at' => CarbonImmutable::now()]);
@@ -58,6 +54,36 @@ final class PaymentLinkStateMachine
             'canceled_at' => CarbonImmutable::now(),
             'cancel_reason' => $reason,
         ]);
+    }
+
+    /** An attempt started a payment (bank verification, authorized, processing). */
+    public function enterProcessing(PaymentLink $locked): PaymentLink
+    {
+        return $this->apply($locked, PaymentLinkStatus::Processing, []);
+    }
+
+    /**
+     * The attempt in progress failed or was canceled: the link can be paid
+     * again, or it expires now if its expiry passed meanwhile (plan 9.1).
+     */
+    public function resumeAfterAttempt(PaymentLink $locked): PaymentLink
+    {
+        return $locked->isPastExpiry()
+            ? $this->expire($locked)
+            : $this->apply($locked, PaymentLinkStatus::Active, []);
+    }
+
+    /**
+     * An attempt succeeded. Returns true when the payment is late (the link
+     * was expired or canceled): the payment wins and the caller records the
+     * anomaly (plan 9.1, ADR-006).
+     */
+    public function markPaid(PaymentLink $locked): bool
+    {
+        $late = in_array($locked->status, [PaymentLinkStatus::Expired, PaymentLinkStatus::Canceled], true);
+        $this->apply($locked, PaymentLinkStatus::Paid, ['paid_at' => CarbonImmutable::now()]);
+
+        return $late;
     }
 
     /**
@@ -77,11 +103,11 @@ final class PaymentLinkStateMachine
             throw new InvalidStateTransition($from, $to);
         }
 
-        if (self::isAttemptDriven($from, $to)) {
-            throw new InvalidStateTransition($from, $to, 'is driven by payment attempts (Phase 4)');
-        }
-
         $locked->forceFill(['status' => $to, ...$attributes])->save();
+
+        if ($to === PaymentLinkStatus::Expired || $to === PaymentLinkStatus::Canceled) {
+            event(new PaymentLinkClosed($locked->tenant_id, $locked->livemode, $locked->id));
+        }
 
         return $locked;
     }

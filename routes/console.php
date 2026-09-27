@@ -44,6 +44,14 @@ Schedule::command('axispay:payment-links:reconcile-gateways')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Plan 12.5 / ADR-0050: re-sync open payment attempts with the gateway, void
+// authorizations left uncaptured and release links stuck in processing
+// (ADR-0051).
+Schedule::command('axispay:payments:reconcile')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Expired rows of the database cache store (per-IP failed-authentication
 // counters, locks) are otherwise only removed when read again.
 Schedule::command('axispay:cache:purge-expired')

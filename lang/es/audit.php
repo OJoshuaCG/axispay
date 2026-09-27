@@ -84,6 +84,10 @@ return [
         'api_key_revoked' => 'Llave de API revocada',
         'payment_link_created' => 'Link de pago creado',
         'payment_link_canceled' => 'Link de pago cancelado',
+        'payment_link_checkout_blocked' => 'Link de pago bloqueado por posible prueba de tarjetas',
+        'payment_link_checkout_unblocked' => 'Link de pago desbloqueado',
+        'payment_late_succeeded' => 'Pago confirmado después del cierre del link',
+        'payment_authorization_voided' => 'Autorización de tarjeta anulada',
     ],
 
 ];

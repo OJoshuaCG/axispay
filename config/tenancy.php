@@ -34,6 +34,11 @@ return [
         'api_keys',
         'idempotency_records',
         'payment_links',
+        // Phase 4 (plan 7.5, 9.2, 19.2; ADR-0051).
+        'payment_attempts',
+        'payment_attempt_failures',
+        'payer_details',
+        'domain_events',
     ],
 
     /*
@@ -71,6 +76,9 @@ return [
         'App\\Modules\\ProviderEvents\\Services\\ProviderEventActivity',
         // Phase 3 (ADR-0048): expiry purge of idempotency_records across tenants.
         'App\\Modules\\ApiKeys\\Services\\IdempotencyRecordRetention',
+        // Phase 4 (ADR-0051): the reconciliation finds, across tenants, the
+        // (tenant, mode) pairs with attempts to re-sync (identifiers only).
+        'App\\Modules\\Payments\\Services\\PaymentAttemptLookup',
     ],
 
 ];

@@ -51,6 +51,10 @@ enum AuditAction: string
     case ApiKeyRevoked = 'api_key.revoked';
     case PaymentLinkCreated = 'payment_link.created';
     case PaymentLinkCanceled = 'payment_link.canceled';
+    case PaymentLinkCheckoutBlocked = 'payment_link.checkout_blocked';
+    case PaymentLinkCheckoutUnblocked = 'payment_link.checkout_unblocked';
+    case PaymentLateSucceeded = 'payment.late_succeeded';
+    case PaymentAuthorizationVoided = 'payment.authorization_voided';
 
     public function label(): string
     {

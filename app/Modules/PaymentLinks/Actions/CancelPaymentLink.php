@@ -32,8 +32,9 @@ use Illuminate\Support\Facades\Gate;
  * handle() is the API and system entry point (the API scope `links:cancel`
  * is checked by the route; plan 10.2 only blocks creation for suspended
  * tenants). handleForUser() is the panel entry point: a panel that is not
- * read-only (plan 21.3) and `links:cancel` through the policy. The
- * PaymentIntent cancel of plan 9.1 is added with attempts (Phase 4).
+ * read-only (plan 21.3) and `links:cancel` through the policy. The link's
+ * waiting gateway payment is canceled after commit (PaymentLinkClosed,
+ * plan 9.1, Phase 4).
  */
 final readonly class CancelPaymentLink
 {

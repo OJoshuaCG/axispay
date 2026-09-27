@@ -84,6 +84,10 @@ return [
         'api_key_revoked' => 'API key revoked',
         'payment_link_created' => 'Payment link created',
         'payment_link_canceled' => 'Payment link canceled',
+        'payment_link_checkout_blocked' => 'Payment link blocked for card testing',
+        'payment_link_checkout_unblocked' => 'Payment link unblocked',
+        'payment_late_succeeded' => 'Payment succeeded after the link closed',
+        'payment_authorization_voided' => 'Card authorization voided',
     ],
 
 ];
