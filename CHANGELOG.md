@@ -71,6 +71,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     and the `checkout` action; the sandbox refuses live mode; every pay-host
     response (404, 419) carries the checkout headers; client secrets inside
     URLs are masked in logs.
+  - Concurrency and double charge: abandoned 3D Secure steps are canceled by
+    the reconciliation after 30 minutes; Stripe calls are bounded (42 s worst
+    case) below the 90 s attempt lease, which is renewed before every call
+    and re-checked before capture or void; the first stored merchant
+    decision wins; stale reads without a new decline no longer move a
+    payment back; claims avoid gap-lock deadlocks between links (and retry
+    them); a dead confirmation's reservation is taken over; retried
+    confirmations continue from Stripe's current state; attempts closed
+    without Stripe are flagged "needs review".
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after
