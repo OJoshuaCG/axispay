@@ -43,21 +43,60 @@ it('refuses a forbidden transition and keeps the status', function (S $state): v
     expect(ApiTestHelpers::freshLink($link->id)->status)->toBe($state);
 })->with([S::Paid, S::Expired, S::Processing]);
 
-it('refuses the attempt-driven transitions until Phase 4, even when the table allows them', function (): void {
+it('applies the attempt-driven transitions (Phase 4)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant);
+
+    app(TenantContext::class)->runAsTenant($tenant->id, false, function () use ($link): void {
+        DB::transaction(function () use ($link): void {
+            $machine = app(PaymentLinkStateMachine::class);
+            $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
+
+            expect($machine->enterProcessing($locked)->status)->toBe(S::Processing)
+                ->and($machine->resumeAfterAttempt($locked)->status)->toBe(S::Active)
+                ->and($machine->markPaid($locked))->toBeFalse()
+                ->and($locked->status)->toBe(S::Paid)
+                ->and($locked->paid_at)->not->toBeNull();
+        });
+    });
+});
+
+it('expires instead of reopening when the attempt fails after the expiry', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
     $link = ApiTestHelpers::link($tenant, state: static fn ($f) => $f->processing()->pastExpiry());
-
-    // processing -> expired is in the plan's table, but payment attempts drive it.
-    expect(PaymentLinkStateMachine::canTransition(S::Processing, S::Expired))->toBeTrue();
 
     app(TenantContext::class)->runAsTenant($tenant->id, false, function () use ($link): void {
         DB::transaction(function () use ($link): void {
             $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
 
-            expect(fn () => app(PaymentLinkStateMachine::class)->expire($locked))
-                ->toThrow(InvalidStateTransition::class, 'payment attempts (Phase 4)');
+            expect(app(PaymentLinkStateMachine::class)->resumeAfterAttempt($locked)->status)->toBe(S::Expired);
         });
     });
+});
 
-    expect(ApiTestHelpers::freshLink($link->id)->status)->toBe(S::Processing);
+it('reports a late payment on an expired or canceled link (the payment wins)', function (S $closed): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant, state: ApiTestHelpers::inStatus($closed));
+
+    app(TenantContext::class)->runAsTenant($tenant->id, false, function () use ($link): void {
+        DB::transaction(function () use ($link): void {
+            $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
+
+            expect(app(PaymentLinkStateMachine::class)->markPaid($locked))->toBeTrue()->and($locked->status)->toBe(S::Paid);
+        });
+    });
+})->with([S::Expired, S::Canceled]);
+
+it('never leaves paid', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant, state: ApiTestHelpers::inStatus(S::Paid));
+
+    app(TenantContext::class)->runAsTenant($tenant->id, false, function () use ($link): void {
+        DB::transaction(function () use ($link): void {
+            $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
+
+            expect(fn () => app(PaymentLinkStateMachine::class)->enterProcessing($locked))->toThrow(InvalidStateTransition::class)
+                ->and(fn () => app(PaymentLinkStateMachine::class)->markPaid($locked))->toThrow(InvalidStateTransition::class);
+        });
+    });
 });
