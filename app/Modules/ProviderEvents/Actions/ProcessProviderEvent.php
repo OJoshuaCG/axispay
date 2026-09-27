@@ -162,7 +162,10 @@ final readonly class ProcessProviderEvent
 
     private function finish(ProviderEvent $event, ProviderEventStatus $outcome, ?string $reason): void
     {
-        DB::transaction(static function () use ($event, $outcome, $reason): void {
+        // Plan 14.4: a foreign object keeps only the reduced payload.
+        $reduced = $reason === ProviderEventStatus::FOREIGN_OBJECT ? $this->gateways->for($event->provider)->reduceWebhookPayload($event->payload) : null;
+
+        DB::transaction(static function () use ($event, $outcome, $reason, $reduced): void {
             $locked = ProviderEvent::query()->lockForUpdate()->find($event->id);
 
             if ($locked === null || $locked->status !== ProviderEventStatus::Received) {
@@ -174,6 +177,7 @@ final readonly class ProcessProviderEvent
                 'attempts' => $locked->attempts + 1,
                 'processed_at' => now(),
                 'last_error' => $reason,
+                ...($reduced !== null ? ['payload' => $reduced] : []),
             ])->save();
         });
     }

@@ -17,6 +17,7 @@ use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Events\PaymentDeclined;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
+use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Services\DomainEventRecorder;
@@ -56,9 +57,14 @@ final readonly class ApplyProviderPayment
         private AuditLogger $audit,
     ) {}
 
-    public function handle(string $attemptId, ProviderPayment $payment, ?string $clientIp = null): AppliedPayment
+    /**
+     * @param  string|null  $leaseToken  given by the holder of the attempt's lease, answering its
+     *                                   own call to the gateway: only then may the payment move
+     *                                   backwards (PaymentAttemptStateMachine::isBackward())
+     */
+    public function handle(string $attemptId, ProviderPayment $payment, ?string $clientIp = null, ?string $leaseToken = null): AppliedPayment
     {
-        $result = DB::transaction(function () use ($attemptId, $payment, $clientIp): AppliedPayment {
+        $result = DB::transaction(function () use ($attemptId, $payment, $clientIp, $leaseToken): AppliedPayment {
             $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
             $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->firstOrFail();
             $attempt = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
@@ -77,6 +83,22 @@ final readonly class ApplyProviderPayment
                 return new AppliedPayment($attempt, $link, false);
             }
 
+            if ($payment->amountMinor !== $attempt->amount_minor || strtoupper($payment->currency) !== $attempt->currency->value) {
+                // Never adopt a gateway payment for another amount (a bug or a
+                // tampered object): nothing is applied, the anomaly is loud.
+                Log::critical('A gateway payment does not match its attempt amount; not applied.', ['payment_attempt_id' => $attempt->id]);
+
+                return new AppliedPayment($attempt, $link, false);
+            }
+
+            $target = PaymentAttemptStatus::fromProvider($payment->status, $attempt->failure_count + ($payment->failure !== null ? 1 : 0));
+
+            if (PaymentAttemptStateMachine::isBackward($attempt->status, $target) && ! AttemptLease::holds($attempt, $leaseToken)) {
+                Log::notice('A stale gateway read was not applied.', ['payment_attempt_id' => $attempt->id, 'from' => $attempt->status->value, 'to' => $target->value]);
+
+                return new AppliedPayment($attempt, $link, false);
+            }
+
             $this->recordCard($attempt, $payment);
             $newDecline = $payment->failure !== null && $this->recordDecline($attempt, $link, $payment->failure, $clientIp);
 
@@ -86,7 +108,7 @@ final readonly class ApplyProviderPayment
                 $this->attempts->transition($attempt, $target);
             }
 
-            $this->followLink($link, $attempt);
+            $this->followLink($link, $attempt, $newDecline);
 
             return new AppliedPayment($attempt, $link, $newDecline);
         });
@@ -153,7 +175,7 @@ final readonly class ApplyProviderPayment
         return true;
     }
 
-    private function followLink(PaymentLink $link, PaymentAttempt $attempt): void
+    private function followLink(PaymentLink $link, PaymentAttempt $attempt, bool $newDecline): void
     {
         $status = $attempt->status;
 
@@ -173,8 +195,10 @@ final readonly class ApplyProviderPayment
             return;
         }
 
-        // Waiting for a payment method again, or closed without success.
-        if ($link->status === PaymentLinkStatus::Processing) {
+        // Waiting for a payment method again, or closed without success. While
+        // a confirmation holds the lease the link stays reserved; the holder
+        // frees it (ReleaseLinkAfterAttempt) unless this is its decline.
+        if ($link->status === PaymentLinkStatus::Processing && ($newDecline || $attempt->status->isTerminal() || ! $attempt->leaseHeld())) {
             $this->links->resumeAfterAttempt($link);
         }
     }

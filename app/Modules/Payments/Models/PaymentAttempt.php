@@ -6,6 +6,7 @@ namespace App\Modules\Payments\Models;
 
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ValidationOutcome;
 use App\Modules\Shared\Database\HasPrefixedId;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
@@ -50,6 +51,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $client_ip
  * @property string|null $user_agent
  * @property CarbonImmutable|null $confirmation_lease_until
+ * @property string|null $confirmation_lease_token
+ * @property ValidationOutcome|null $validation_outcome
+ * @property string|null $validation_payer_message
  * @property CarbonImmutable|null $authorized_at
  * @property CarbonImmutable|null $capture_before
  * @property CarbonImmutable|null $succeeded_at
@@ -75,7 +79,7 @@ final class PaymentAttempt extends Model
     protected $guarded = ['*'];
 
     /** Fraud-analysis data stays out of arrays and JSON. */
-    protected $hidden = ['client_ip', 'user_agent', 'active_link_id', 'confirmation_lease_until'];
+    protected $hidden = ['client_ip', 'user_agent', 'active_link_id', 'confirmation_lease_until', 'confirmation_lease_token'];
 
     protected $attributes = [
         'provider' => 'stripe',
@@ -123,6 +127,7 @@ final class PaymentAttempt extends Model
             'original_currency' => CurrencyCode::class,
             'failure_count' => 'integer',
             'confirmation_lease_until' => 'immutable_datetime',
+            'validation_outcome' => ValidationOutcome::class,
             'authorized_at' => 'immutable_datetime',
             'capture_before' => 'immutable_datetime',
             'succeeded_at' => 'immutable_datetime',

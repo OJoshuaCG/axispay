@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Modules\Shared\Money\Money;
+
 /**
  * Idempotency keys of the gateway calls of an attempt (plan 11.4, rules.md
  * rule 5): stable per attempt and operation, so a retry (network error,
@@ -15,6 +17,12 @@ final class IdempotencyKeys
     public static function create(string $attemptId): string
     {
         return "axispay:create_pi:{$attemptId}";
+    }
+
+    /** Phase 6: the payment's amount changes before confirmation; the key names the new amount. */
+    public static function update(string $attemptId, Money $amount): string
+    {
+        return "axispay:update_pi:{$attemptId}:{$amount->minorAmount}{$amount->currency->value}";
     }
 
     public static function confirm(string $attemptId, string $confirmationToken): string

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Jobs;
 
 use App\Modules\Payments\Actions\VoidAuthorization;
+use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use Illuminate\Bus\Queueable;
@@ -42,6 +43,12 @@ final class CloseAttemptOfClosedLinkJob implements ShouldQueue, TenantAware
 
     public function handle(VoidAuthorization $void): void
     {
-        $void->handle($this->paymentAttemptId, 'link_closed');
+        try {
+            $void->handle($this->paymentAttemptId, 'link_closed');
+        } catch (AttemptBusyException) {
+            // A confirmation holds the attempt; it hands the attempt back when
+            // it ends (ReleaseLinkAfterAttempt). Try again later anyway.
+            $this->release(30);
+        }
     }
 }

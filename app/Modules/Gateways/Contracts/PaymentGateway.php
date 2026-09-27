@@ -81,12 +81,14 @@ interface PaymentGateway
     /**
      * Confirms with the confirmation token: authorizes the card, possibly
      * asking for 3D Secure (`requires_action` + client secret). `returnUrl`
-     * is where a redirect-based authentication comes back to.
+     * is where a redirect-based authentication comes back to. The payer's
+     * receipt e-mail travels here, not at creation: creation only carries
+     * what the link fixes, so its idempotency key never meets other values.
      *
      * @throws GatewayUnavailableException
      * @throws GatewayRequestException
      */
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment;
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment;
 
     /**
      * @throws GatewayUnavailableException

@@ -29,6 +29,24 @@ final class PaymentAttemptStateMachine
         return ! $from->isTerminal() && $from !== $to;
     }
 
+    /**
+     * A move backwards in the payment's progress: an authorized or
+     * processing payment reported again as waiting for the bank or for a card.
+     * The gateway never does it on its own; from a read it is a stale view
+     * (an older read applied after a newer one), so ApplyProviderPayment
+     * only accepts it from the lease holder, answering its own call (plan
+     * 26.2 case 4).
+     */
+    public static function isBackward(PaymentAttemptStatus $from, PaymentAttemptStatus $to): bool
+    {
+        return match ($from) {
+            PaymentAttemptStatus::RequiresCapture => in_array($to, [PaymentAttemptStatus::RequiresPaymentMethod, PaymentAttemptStatus::RequiresConfirmation, PaymentAttemptStatus::RequiresAction], true),
+            // A processing payment may still fail (back to a card), but never asks the bank again.
+            PaymentAttemptStatus::Processing => in_array($to, [PaymentAttemptStatus::RequiresConfirmation, PaymentAttemptStatus::RequiresAction], true),
+            default => false,
+        };
+    }
+
     public function transition(PaymentAttempt $locked, PaymentAttemptStatus $to): PaymentAttempt
     {
         $from = $locked->status;
@@ -56,6 +74,7 @@ final class PaymentAttemptStateMachine
 
         if ($to->isTerminal()) {
             $attributes['confirmation_lease_until'] = null;
+            $attributes['confirmation_lease_token'] = null;
         }
 
         $locked->forceFill($attributes)->save();

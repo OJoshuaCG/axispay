@@ -8,9 +8,15 @@ use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
+use App\Modules\Gateways\Exceptions\GatewayException;
+use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
+use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
 use App\Modules\Shared\Database\Transactions;
@@ -34,12 +40,18 @@ final readonly class VoidAuthorization
         private ApplyProviderPayment $apply,
         private AuditLogger $audit,
         private PaymentAttemptStateMachine $machine,
+        private AttemptLease $lease,
+        private PaymentLinkStateMachine $links,
     ) {}
 
     /**
      * @param  string  $reason  merchant_rejected | uncaptured_timeout | link_closed
+     * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
+     *
+     * @throws AttemptBusyException when another process holds the attempt
+     * @throws GatewayException when the gateway could not be reached or refused (retry)
      */
-    public function handle(string $attemptId, string $reason): PaymentAttempt
+    public function handle(string $attemptId, string $reason, ?string $leaseToken = null): PaymentAttempt
     {
         if (Transactions::open()) {
             throw new LogicException('Voiding calls the gateway: never inside a transaction.');
@@ -47,6 +59,23 @@ final readonly class VoidAuthorization
 
         $attempt = PaymentAttempt::query()->findOrFail($attemptId);
 
+        if ($attempt->status->isTerminal()) {
+            return $attempt;
+        }
+
+        $token = $leaseToken ?? $this->lease->acquire($attemptId) ?? throw AttemptBusyException::for($attemptId);
+
+        try {
+            return $this->void($attempt->refresh(), $reason, $token);
+        } finally {
+            if ($leaseToken === null) {
+                $this->lease->release($attemptId, $token);
+            }
+        }
+    }
+
+    private function void(PaymentAttempt $attempt, string $reason, string $token): PaymentAttempt
+    {
         if ($attempt->status->isTerminal()) {
             return $attempt;
         }
@@ -73,7 +102,7 @@ final readonly class VoidAuthorization
             return $this->closeLocally($attempt->id);
         }
 
-        $applied = $this->apply->handle($attempt->id, $payment);
+        $applied = $this->apply->handle($attempt->id, $payment, leaseToken: $token);
 
         if ($wasAuthorized && $applied->attempt->status->isTerminal() && $applied->attempt->status !== PaymentAttemptStatus::Succeeded) {
             DB::transaction(fn () => $this->audit->record(AuditAction::PaymentAuthorizationVoided, $applied->attempt, [
@@ -89,10 +118,16 @@ final readonly class VoidAuthorization
     private function closeLocally(string $attemptId): PaymentAttempt
     {
         return DB::transaction(function () use ($attemptId): PaymentAttempt {
+            $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
+            $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->first();
             $locked = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
 
             if (! $locked->status->isTerminal()) {
                 $this->machine->transition($locked, $locked->failure_count > 0 ? PaymentAttemptStatus::Failed : PaymentAttemptStatus::Canceled);
+            }
+
+            if ($link?->status === PaymentLinkStatus::Processing) {
+                $this->links->resumeAfterAttempt($link);
             }
 
             return $locked;

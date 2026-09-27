@@ -6,6 +6,7 @@ namespace App\Modules\Payments\Models;
 
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
+use App\Modules\Tenancy\Concerns\BelongsToMode;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * @property string $id
  * @property string $tenant_id
+ * @property bool $livemode
  * @property string $payment_attempt_id
  * @property string $provider_reference
  * @property string|null $code
@@ -30,6 +32,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 final class PaymentAttemptFailure extends Model
 {
+    use BelongsToMode;
     use BelongsToTenant;
     use HasUlidPrimaryKey;
     use UsesMicrosecondDates;

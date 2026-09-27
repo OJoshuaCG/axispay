@@ -110,7 +110,7 @@ final class SandboxPaymentGateway implements PaymentGateway
         });
     }
 
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment
     {
         return $this->idempotent($idempotencyKey, function () use ($providerPaymentId, $confirmationToken): array {
             $state = $this->load($providerPaymentId);

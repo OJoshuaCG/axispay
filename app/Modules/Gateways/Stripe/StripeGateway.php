@@ -118,13 +118,12 @@ final readonly class StripeGateway implements PaymentGateway
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
     {
         $context = $this->clients->for($connection);
-        $params = array_filter([
+        $params = [
             'amount' => $request->amountMinor,
             'currency' => strtolower($request->currency),
             'description' => mb_substr($request->description, 0, self::DESCRIPTION_MAX),
             'metadata' => $request->metadata,
-            'receipt_email' => $request->receiptEmail,
-        ], static fn (mixed $value): bool => $value !== null);
+        ];
 
         try {
             $intent = $request->providerPaymentId === null
@@ -148,17 +147,18 @@ final readonly class StripeGateway implements PaymentGateway
      * Stripe.js `handleNextAction` run 3D Secure in the page. A declined card
      * answers 402: the payment is re-read and returned with its failure.
      */
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment
     {
         $context = $this->clients->for($connection);
 
         try {
-            $intent = $context->client->paymentIntents->confirm($providerPaymentId, [
+            $intent = $context->client->paymentIntents->confirm($providerPaymentId, array_filter([
                 'confirmation_token' => $confirmationToken,
                 'return_url' => $returnUrl,
                 'use_stripe_sdk' => true,
+                'receipt_email' => $receiptEmail,
                 'expand' => self::EXPAND,
-            ], $context->options($idempotencyKey));
+            ], static fn (mixed $value): bool => $value !== null), $context->options($idempotencyKey));
         } catch (CardException) {
             return $this->retrievePayment($connection, $providerPaymentId);
         } catch (ApiErrorException $e) {

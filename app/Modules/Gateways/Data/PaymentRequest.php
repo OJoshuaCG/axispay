@@ -9,7 +9,8 @@ namespace App\Modules\Gateways\Data;
  * (rules.md rule 1). Every payment is card-only (ADR-018) and authorized
  * with a separate capture (ADR-0050). `metadata` carries only our own
  * identifiers (plan 11.4). `providerPaymentId` set means "update this
- * payment" (allowed before it is confirmed).
+ * payment" (allowed before it is confirmed). Only values the link fixes
+ * belong here; payer-dependent ones go with the confirmation (ADR-0051).
  */
 final readonly class PaymentRequest
 {
@@ -23,6 +24,5 @@ final readonly class PaymentRequest
         public array $metadata,
         public string $idempotencyKey,
         public ?string $providerPaymentId = null,
-        public ?string $receiptEmail = null,
     ) {}
 }

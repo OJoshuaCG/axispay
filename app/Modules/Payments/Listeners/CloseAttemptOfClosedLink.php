@@ -13,8 +13,11 @@ use App\Modules\Tenancy\TenantContext;
 /**
  * Plan 9.1: when a link expires or is canceled, its attempt that is still
  * waiting for a payment method is closed and its gateway payment canceled
- * (queued, with retries). An attempt under way never reaches here: the link
- * is `processing` then and neither expires nor can be canceled.
+ * (queued, with retries). A payment being confirmed keeps its link
+ * `processing` (reserved when the attempt is claimed, ADR-0051), so expiry
+ * and cancellation skip it; when a link is closed anyway (for example its
+ * tenant was closed) and its attempt is authorized, the job voids the
+ * authorization, and a payment that already succeeded wins.
  */
 final readonly class CloseAttemptOfClosedLink
 {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Data;
 
+use App\Modules\Payments\Enums\ValidationOutcome;
+
 /**
  * The merchant's answer before capture (ADR-024, ADR-0050 step 4, plan
  * 15.8.4). `notConfigured` means no validation applies to the link: the flow
@@ -19,6 +21,15 @@ final readonly class PrePaymentDecision
         public ?string $payerMessage,
         public bool $cancelLink,
     ) {}
+
+    public function outcome(): ValidationOutcome
+    {
+        return match (true) {
+            $this->notConfigured => ValidationOutcome::NotConfigured,
+            $this->approved => ValidationOutcome::Approved,
+            default => ValidationOutcome::Rejected,
+        };
+    }
 
     public static function notConfigured(): self
     {
