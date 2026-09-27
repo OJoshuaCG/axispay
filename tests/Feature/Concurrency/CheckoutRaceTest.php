@@ -2,11 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Gateways\Sandbox\SandboxPaymentGateway;
+use App\Modules\Gateways\Stripe\StripeGateway;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\Process\Process;
 use Tests\Support\ApiTestHelpers;
@@ -32,29 +38,34 @@ afterEach(function (): void {
 });
 
 /**
+ * Runs one child per entry of `$actors` ([mode, argument, token?]) at the
+ * same instant (start barrier) and returns their outputs in order.
+ *
+ * @param  list<array{0: string, 1?: string, 2?: string}>  $actors
  * @return list<string>
  */
-function checkoutRace(string $token, int $processes = 8, int $cancellers = 0): array
+function raceActors(string $token, array $actors): array
 {
     $barrier = sys_get_temp_dir().'/axispay-checkout-race-'.bin2hex(random_bytes(6));
     mkdir($barrier);
     $running = [];
 
     try {
-        foreach (range(1, $processes) as $i) {
+        foreach ($actors as $actor) {
             $process = new Process(
-                [PHP_BINARY, base_path('tests/Fixtures/checkout-race.php'), $token, $barrier, $i <= $cancellers ? 'cancel' : 'pay'],
+                [PHP_BINARY, base_path('tests/Fixtures/checkout-race.php'), $actor[2] ?? $token, $barrier, $actor[0], $actor[1] ?? ''],
                 base_path(),
-                ['APP_ENV' => 'testing', 'AXISPAY_CHECKOUT_SANDBOX' => 'true', 'CACHE_STORE' => 'array', 'QUEUE_CONNECTION' => 'sync'],
-                timeout: 60,
+                // The sandbox keeps its payments in the cache: the database store is shared by the processes.
+                ['APP_ENV' => 'testing', 'AXISPAY_CHECKOUT_SANDBOX' => 'true', 'CACHE_STORE' => 'database', 'QUEUE_CONNECTION' => 'sync'],
+                timeout: 90,
             );
             $process->start();
             $running[] = $process;
         }
 
-        $deadline = microtime(true) + 45;
+        $deadline = microtime(true) + 60;
 
-        while (count(glob($barrier.'/ready-*') ?: []) < $processes) {
+        while (count(glob($barrier.'/ready-*') ?: []) < count($actors)) {
             expect(microtime(true))->toBeLessThan($deadline, 'Not every race process booted in time.');
             usleep(20_000);
         }
@@ -79,6 +90,32 @@ function checkoutRace(string $token, int $processes = 8, int $cancellers = 0): a
     }
 }
 
+/**
+ * @return list<string>
+ */
+function checkoutRace(string $token, int $processes = 8, int $cancellers = 0, int $cancelDelayMs = 0): array
+{
+    $actors = [];
+
+    foreach (range(1, $processes) as $i) {
+        $actors[] = $i <= $cancellers ? ['cancel', (string) $cancelDelayMs] : ['pay'];
+    }
+
+    return raceActors($token, $actors);
+}
+
+/** Captures the sandbox performed for a gateway payment (shared database cache). */
+function sandboxCaptures(?string $providerPaymentId): int
+{
+    if ($providerPaymentId === null) {
+        return 0;
+    }
+
+    $state = Cache::store('database')->get('axispay:sandbox:pi:'.$providerPaymentId);
+
+    return is_array($state) && is_int($state['captures'] ?? null) ? $state['captures'] : 0;
+}
+
 it('lets only one of eight simultaneous sessions pay a link (case 1)', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
     $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
@@ -99,24 +136,92 @@ it('lets only one of eight simultaneous sessions pay a link (case 1)', function 
         ->and($fresh->status)->toBe(PaymentLinkStatus::Paid);
 })->group('concurrency');
 
-it('never pays a link that a simultaneous cancellation canceled, and vice versa (plan 9.1)', function (): void {
+it('never pays a link that a simultaneous cancellation canceled, and vice versa, over several rounds (plan 9.1)', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
-    $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
+    $finals = [];
 
-    $outcomes = checkoutRace($link->public_token, 8, cancellers: 4);
-    $counts = array_count_values($outcomes);
-    $fresh = PaymentLink::query()->withoutGlobalScopes()->findOrFail($link->id);
-    $succeeded = PaymentAttempt::query()->withoutGlobalScopes()->where('payment_link_id', $link->id)->where('status', PaymentAttemptStatus::Succeeded->value)->count();
+    // Round delays of the cancellers: at once (cancel usually wins) and late (pay wins).
+    foreach ([0, 0, 4000, 4000] as $delay) {
+        $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
+        $outcomes = checkoutRace($link->public_token, 8, cancellers: 4, cancelDelayMs: $delay);
+        $counts = array_count_values($outcomes);
+        $fresh = PaymentLink::query()->withoutGlobalScopes()->findOrFail($link->id);
+        $attempts = PaymentAttempt::query()->withoutGlobalScopes()->where('payment_link_id', $link->id)->get();
+        $captures = $attempts->sum(static fn (PaymentAttempt $attempt): int => sandboxCaptures($attempt->provider_payment_id));
+        $finals[] = $fresh->status;
 
-    expect(array_diff(array_keys($counts), ['paid', 'in_progress', 'already_paid', 'canceled', 'not_cancelable']))->toBe([], implode(',', $outcomes));
+        expect(array_diff(array_keys($counts), ['paid', 'in_progress', 'already_paid', 'canceled', 'not_cancelable']))->toBe([], implode(',', $outcomes))
+            ->and($captures)->toBeLessThanOrEqual(1, implode(',', $outcomes));
 
-    if ($fresh->status === PaymentLinkStatus::Paid) {
-        expect($counts['canceled'] ?? 0)->toBe(0, implode(',', $outcomes))->and($succeeded)->toBe(1)->and($counts['paid'] ?? 0)->toBe(1);
+        if ($fresh->status === PaymentLinkStatus::Paid) {
+            expect($counts['canceled'] ?? 0)->toBe(0, implode(',', $outcomes))
+                ->and($attempts->where('status', PaymentAttemptStatus::Succeeded)->count())->toBe(1)
+                ->and($counts['paid'] ?? 0)->toBe(1)
+                ->and($captures)->toBe(1);
+        } else {
+            expect($fresh->status)->toBe(PaymentLinkStatus::Canceled)
+                ->and($counts['paid'] ?? 0)->toBe(0, implode(',', $outcomes))
+                ->and($attempts->whereIn('status', [PaymentAttemptStatus::Succeeded, PaymentAttemptStatus::RequiresCapture])->count())->toBe(0)
+                ->and($captures)->toBe(0)
+                // Canceling a canceled link answers it again (idempotent, plan 10.5).
+                ->and($counts['canceled'] ?? 0)->toBeGreaterThanOrEqual(1);
+        }
+    }
+
+    expect($finals)->toContain(PaymentLinkStatus::Paid)->toContain(PaymentLinkStatus::Canceled);
+})->group('concurrency');
+
+it('claims the first payment of eight links of one tenant at once without deadlocks (M2)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $links = array_map(static fn (): PaymentLink => ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000])), range(1, 8));
+
+    $outcomes = raceActors('', array_map(static fn (PaymentLink $link): array => ['pay', '', $link->public_token], $links));
+
+    expect($outcomes)->toBe(array_fill(0, 8, 'paid'));
+})->group('concurrency');
+
+it('captures an authorization at most once while webhooks, the checkout and the reconciliation race (ADR-0051)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->processing()->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
+
+    $attempt = app(TenantContext::class)->runAsTenant($tenant->id, false, static function () use ($link): PaymentAttempt {
+        $connection = GatewayConnection::query()->current()->firstOrFail();
+        $sandbox = new SandboxPaymentGateway(app(StripeGateway::class), Cache::store('database'));
+        $attempt = PaymentAttempt::factory()->inStatus(PaymentAttemptStatus::RequiresCapture)->createOne([
+            'payment_link_id' => $link->id,
+            'gateway_connection_id' => $connection->id,
+            'provider_payment_id' => null,
+            'amount_minor' => 150_000,
+            'currency' => 'MXN',
+            'original_amount_minor' => 150_000,
+            'original_currency' => 'MXN',
+            // Old enough for the reconciliation to void it.
+            'authorized_at' => now()->subHour(),
+        ]);
+        $created = $sandbox->createOrUpdatePayment($connection, new PaymentRequest(150_000, 'MXN', 'race', ['axispay_attempt_id' => $attempt->id], 'race-create-'.$attempt->id));
+        $sandbox->confirmPayment($connection, $created->providerPaymentId, 'ctoken_sandbox_success_race', 'race-confirm-'.$attempt->id, 'https://example.com');
+        $attempt->forceFill(['provider_payment_id' => $created->providerPaymentId])->save();
+
+        return $attempt;
+    });
+
+    $actors = [];
+
+    foreach (range(1, 8) as $i) {
+        $actors[] = [['webhook', 'reconcile', 'capture'][$i % 3], $attempt->id];
+    }
+
+    $outcomes = raceActors($link->public_token, $actors);
+    $fresh = PaymentAttempt::query()->withoutGlobalScopes()->findOrFail($attempt->id);
+    $freshLink = PaymentLink::query()->withoutGlobalScopes()->findOrFail($link->id);
+    $captures = sandboxCaptures($fresh->provider_payment_id);
+
+    expect($captures)->toBeLessThanOrEqual(1, implode(',', $outcomes))
+        ->and($fresh->status)->toBeIn([PaymentAttemptStatus::Succeeded, PaymentAttemptStatus::Canceled]);
+
+    if ($fresh->status === PaymentAttemptStatus::Succeeded) {
+        expect($captures)->toBe(1)->and($freshLink->status)->toBe(PaymentLinkStatus::Paid);
     } else {
-        expect($fresh->status)->toBe(PaymentLinkStatus::Canceled)
-            ->and($counts['paid'] ?? 0)->toBe(0, implode(',', $outcomes))
-            ->and($succeeded)->toBe(0)
-            // Canceling a canceled link answers it again (idempotent, plan 10.5).
-            ->and($counts['canceled'] ?? 0)->toBeGreaterThanOrEqual(1);
+        expect($captures)->toBe(0)->and($freshLink->status)->toBe(PaymentLinkStatus::Active);
     }
 })->group('concurrency');
