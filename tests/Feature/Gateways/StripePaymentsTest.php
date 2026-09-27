@@ -124,3 +124,13 @@ it('maps every PaymentIntent status and each payment event to one kind', functio
 
     expect(stripePayments()->eventKind('payment_intent.created', false)->value)->toBe('unhandled');
 });
+
+it('returns the current payment when a retried confirmation finds it already confirmed', function (): void {
+    $connection = paymentsConnection();
+    stripeHttp()->error('post', '/v1/payment_intents/pi_Again0001/confirm', 400, 'invalid_request_error', 'payment_intent_unexpected_state');
+    stripeHttp()->on('get', '/v1/payment_intents/pi_Again0001', intentFixture('pi_Again0001', 'requires_capture', ['amount_capturable' => 150000]));
+
+    $payment = app(TenantContext::class)->runAsTenant($connection->tenant_id, false, static fn () => stripePayments()->confirmPayment($connection, 'pi_Again0001', 'ctoken_again', 'axispay:confirm:x:ctoken_again', 'https://pay.localhost/x'));
+
+    expect($payment->status)->toBe(ProviderPaymentStatus::RequiresCapture);
+});

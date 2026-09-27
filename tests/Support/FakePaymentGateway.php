@@ -182,6 +182,12 @@ final class FakePaymentGateway implements PaymentGateway
         }
 
         $this->idempotent[$idempotencyKey] = $providerPaymentId;
+
+        // Like the Stripe adapter: an already confirmed payment is returned as it is.
+        if (! in_array($this->payments[$providerPaymentId]['status'], [ProviderPaymentStatus::RequiresPaymentMethod, ProviderPaymentStatus::RequiresConfirmation], true)) {
+            return $this->toPayment($this->payments[$providerPaymentId]);
+        }
+
         $payment = &$this->payments[$providerPaymentId];
         $payment['failure'] = null;
         $scenario = self::scenario($confirmationToken);
@@ -199,6 +205,7 @@ final class FakePaymentGateway implements PaymentGateway
 
         $result = $this->toPayment($payment);
         unset($payment);
+        $this->throwIfLost('confirmPayment');
 
         return $result;
     }
