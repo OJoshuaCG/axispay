@@ -15,6 +15,7 @@ use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use App\Modules\Tenancy\Models\Tenant;
+use DateTimeInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -24,8 +25,8 @@ use Illuminate\Queue\InteractsWithQueue;
  * Plan 21.3: cancels every active link of a closed tenant in the current
  * mode with reason `tenant_closed` (system actor), through the link state
  * machine. Idempotent (only active links), retried by the queue. A link with
- * a payment under way (`processing`) is left to finish; the job runs again
- * later for it, and meanwhile the checkout refuses new payments of a closed
+ * a payment under way (`processing`) is left to finish; the job is released
+ * and runs again later for it (bounded by time, not tries), and meanwhile the checkout refuses new payments of a closed
  * tenant. Nothing happens if the tenant was reopened before the job ran.
  */
 final class CancelLinksOfClosedTenantJob implements ShouldQueue, TenantAware
@@ -35,9 +36,18 @@ final class CancelLinksOfClosedTenantJob implements ShouldQueue, TenantAware
     use InteractsWithQueue;
     use Queueable;
 
-    public int $tries = 10;
-
     public int $timeout = 55;
+
+    /**
+     * Bounded by time, not by tries: waiting for payments under way releases
+     * the job many times, and the reconciliation releases every link within
+     * about an hour (an abandoned 3D Secure step is canceled after 30
+     * minutes), so two days is ample.
+     */
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addDays(2);
+    }
 
     public function __construct()
     {

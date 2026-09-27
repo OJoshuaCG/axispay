@@ -327,6 +327,13 @@ final class PaymentLinkResource extends Resource
                                 ->label(__('payments.attempts.late_payment'))
                                 ->state(static fn (PaymentAttempt $record): string => __('payments.attempts.late_payment_yes'))
                                 ->visible(static fn (PaymentAttempt $record): bool => $record->late_payment),
+                            TextEntry::make('needs_review')
+                                ->label(__('payments.attempts.needs_review'))
+                                ->state(__('payments.attempts.needs_review_help'))
+                                ->color('warning')
+                                ->icon(Heroicon::OutlinedExclamationTriangle)
+                                ->visible(static fn (PaymentAttempt $record): bool => $record->needs_review)
+                                ->columnSpanFull(),
                             TextEntry::make('public_id')
                                 ->label(__('payments.attempts.id'))
                                 ->state(static fn (PaymentAttempt $record): string => $record->prefixedId())

@@ -47,6 +47,18 @@ final class PaymentAttemptStateMachine
         };
     }
 
+    /**
+     * A payment under way (bank verification, processing) reported as waiting
+     * for a card again. Legitimate only as the result of a failure: a read
+     * that carries a decline not recorded yet, or the lease holder's own call.
+     * Anything else is an older read arriving late (ADR-0051).
+     */
+    public static function needsFreshDecline(PaymentAttemptStatus $from, PaymentAttemptStatus $to): bool
+    {
+        return in_array($from, [PaymentAttemptStatus::RequiresAction, PaymentAttemptStatus::Processing], true)
+            && in_array($to, [PaymentAttemptStatus::RequiresPaymentMethod, PaymentAttemptStatus::RequiresConfirmation], true);
+    }
+
     public function transition(PaymentAttempt $locked, PaymentAttemptStatus $to): PaymentAttempt
     {
         $from = $locked->status;

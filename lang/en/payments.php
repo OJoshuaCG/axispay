@@ -46,6 +46,8 @@ return [
         'failures' => 'Declines',
         'last_decline' => 'Last decline',
         'late_payment' => 'Paid after the link closed',
+        'needs_review' => 'Needs review',
+        'needs_review_help' => 'Closed without Stripe (the connection lost its keys): check in Stripe that no hold remains on the card.',
         'late_payment_yes' => 'Yes',
         'provider_payment_id' => 'Stripe payment',
         'created_at' => 'Started',

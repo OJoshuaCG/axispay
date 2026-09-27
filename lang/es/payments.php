@@ -44,6 +44,8 @@ return [
         'failures' => 'Rechazos',
         'last_decline' => 'Último rechazo',
         'late_payment' => 'Pagado después del cierre del link',
+        'needs_review' => 'Requiere revisión',
+        'needs_review_help' => 'Cerrado sin Stripe (la conexión perdió sus llaves): verifique en Stripe que no quede una retención en la tarjeta.',
         'late_payment_yes' => 'Sí',
         'provider_payment_id' => 'Pago en Stripe',
         'created_at' => 'Iniciado',

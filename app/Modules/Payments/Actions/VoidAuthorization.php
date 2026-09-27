@@ -21,6 +21,7 @@ use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
 use App\Modules\Shared\Database\Transactions;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use LogicException;
 
 /**
@@ -45,7 +46,7 @@ final readonly class VoidAuthorization
     ) {}
 
     /**
-     * @param  string  $reason  merchant_rejected | uncaptured_timeout | link_closed
+     * @param  string  $reason  merchant_rejected | uncaptured_timeout | link_closed | abandoned_action
      * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
      *
      * @throws AttemptBusyException when another process holds the attempt
@@ -86,6 +87,12 @@ final readonly class VoidAuthorization
             return $this->closeLocally($attempt->id); // never reached the gateway
         }
 
+        // The lease must still be ours right before the call (it may have
+        // expired while the caller waited): otherwise another actor decides.
+        if (! $this->lease->extend($attempt->id, $token)) {
+            throw AttemptBusyException::for($attempt->id);
+        }
+
         [$gateway, $connection] = $this->gateways->for($attempt);
 
         try {
@@ -99,7 +106,9 @@ final readonly class VoidAuthorization
                 throw $e;
             }
 
-            return $this->closeLocally($attempt->id);
+            // Closed without the gateway: if a confirmation's answer was ever
+            // lost, a hold may remain on the payer's card. Flag it for review.
+            return $this->closeLocally($attempt->id, needsReview: true);
         }
 
         $applied = $this->apply->handle($attempt->id, $payment, leaseToken: $token);
@@ -115,15 +124,25 @@ final readonly class VoidAuthorization
         return $applied->attempt;
     }
 
-    private function closeLocally(string $attemptId): PaymentAttempt
+    private function closeLocally(string $attemptId, bool $needsReview = false): PaymentAttempt
     {
-        return DB::transaction(function () use ($attemptId): PaymentAttempt {
+        return DB::transaction(function () use ($attemptId, $needsReview): PaymentAttempt {
             $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
             $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->first();
             $locked = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
 
             if (! $locked->status->isTerminal()) {
                 $this->machine->transition($locked, $locked->failure_count > 0 ? PaymentAttemptStatus::Failed : PaymentAttemptStatus::Canceled);
+            }
+
+            if ($needsReview) {
+                $locked->forceFill(['needs_review' => true, 'review_reason' => 'closed_without_gateway'])->save();
+                $this->audit->record(AuditAction::PaymentNeedsReview, $locked, [
+                    'reason' => 'closed_without_gateway',
+                    'payment_link_id' => $locked->payment_link_id,
+                    'livemode' => $locked->livemode,
+                ], actor: Actor::system());
+                Log::warning('A payment attempt was closed without the gateway; a card hold may remain.', ['payment_attempt_id' => $locked->id]);
             }
 
             if ($link?->status === PaymentLinkStatus::Processing) {

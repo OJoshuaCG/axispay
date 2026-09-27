@@ -93,6 +93,11 @@ final readonly class CaptureAuthorizedPayment
                 'validation_outcome' => $outcome->value,
                 'validation_payer_message' => $payerMessage !== null ? mb_substr($payerMessage, 0, 500) : null,
             ]);
+
+            // Another actor may have stored its decision first: the stored one wins.
+            $stored = PaymentAttempt::query()->findOrFail($attempt->id);
+            $outcome = $stored->validation_outcome ?? $outcome;
+            $payerMessage = $stored->validation_payer_message;
         }
 
         // Re-verify after the (possibly slow) merchant call: link first, then attempt.
@@ -106,6 +111,12 @@ final readonly class CaptureAuthorizedPayment
 
         if ($current->status !== PaymentAttemptStatus::RequiresCapture) {
             return new CaptureResult(CaptureOutcome::NotAuthorized, $current);
+        }
+
+        // The lease may have expired during the merchant call: whoever holds
+        // it now decides; this actor stops without touching the gateway.
+        if (! AttemptLease::holds($current, $token) || ! $this->lease->extend($current->id, $token)) {
+            return new CaptureResult(CaptureOutcome::Pending, $current);
         }
 
         if ($linkClosed || ! $outcome->allowsCapture()) {

@@ -157,7 +157,11 @@ return [
 
         // A confirmation holds the attempt this long at most (another tab
         // waits; a crashed request frees it after this time).
-        'confirmation_lease_seconds' => 60,
+        'confirmation_lease_seconds' => 90,
+        // A payment left waiting for the bank's verification (3D Secure) this
+        // long is canceled by the reconciliation: the payer abandoned it, and
+        // the link becomes payable again (ADR-0051).
+        'abandon_action_after_minutes' => 30,
         // The status polled by the page is re-read from the gateway when the
         // attempt has not changed for this long (webhooks stay the source of
         // truth; this only speeds the page up).

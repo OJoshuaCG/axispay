@@ -49,6 +49,26 @@ final class AttemptLease
         });
     }
 
+    /**
+     * Renews the lease for another full period, before each gateway call, so
+     * a slow call never runs on an expired lease. False when `$token` lost
+     * the lease meanwhile: the caller must stop.
+     */
+    public function extend(string $attemptId, string $token): bool
+    {
+        $now = CarbonImmutable::now();
+        $held = PaymentAttempt::query()
+            ->whereKey($attemptId)
+            ->where('confirmation_lease_token', $token)
+            ->where('confirmation_lease_until', '>', $now->utc()->format('Y-m-d H:i:s.u'));
+
+        // Affected rows are not a reliable answer (an unchanged value counts
+        // as none in MariaDB): renew, then check the lease is still ours.
+        (clone $held)->update(['confirmation_lease_until' => $now->addSeconds(max(5, config()->integer('axispay.checkout.confirmation_lease_seconds')))]);
+
+        return $held->exists();
+    }
+
     /** Releases the lease only if `$token` still holds it. */
     public function release(string $attemptId, string $token): void
     {

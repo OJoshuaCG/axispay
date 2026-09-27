@@ -20,6 +20,9 @@ use LogicException;
  * the gateway's current state, never an event payload). Then, if the
  * payment is authorized and waiting for capture (ADR-0050):
  *
+ *  - reconciliation, a 3D Secure step left unanswered for
+ *    `axispay.checkout.abandon_action_after_minutes` → canceled (the payer
+ *    abandoned it; the link is released);
  *  - reconciliation, authorization older than
  *    `axispay.payments.void_authorized_after_minutes` → voided: authorize and
  *    capture happen seconds apart, so a stale one is a flow that stopped;
@@ -61,6 +64,7 @@ final readonly class SyncPaymentAttempt
             return $attempt;
         }
 
+        $idleSince = $attempt->updated_at ?? CarbonImmutable::now();
         [$gateway, $connection] = $this->gateways->for($attempt);
         $payment = $gateway->retrievePayment($connection, $target);
 
@@ -71,6 +75,14 @@ final readonly class SyncPaymentAttempt
         }
 
         $attempt = $this->apply->handle($attempt->id, $payment)->attempt;
+
+        // A 3D Secure step the payer abandoned keeps the link reserved:
+        // canceled after `abandon_action_after_minutes`, the link is then
+        // payable again (or expires) through the usual path.
+        if ($reason === SyncReason::Reconciliation && $attempt->status === PaymentAttemptStatus::RequiresAction
+            && $idleSince->lessThanOrEqualTo(CarbonImmutable::now()->subMinutes(max(1, config()->integer('axispay.checkout.abandon_action_after_minutes'))))) {
+            return $this->void->handle($attempt->id, 'abandoned_action');
+        }
 
         if ($attempt->status !== PaymentAttemptStatus::RequiresCapture || ! $complete) {
             return $attempt;

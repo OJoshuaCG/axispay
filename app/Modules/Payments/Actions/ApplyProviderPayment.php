@@ -93,7 +93,14 @@ final readonly class ApplyProviderPayment
 
             $target = PaymentAttemptStatus::fromProvider($payment->status, $attempt->failure_count + ($payment->failure !== null ? 1 : 0));
 
-            if (PaymentAttemptStateMachine::isBackward($attempt->status, $target) && ! AttemptLease::holds($attempt, $leaseToken)) {
+            $freshDecline = $payment->failure !== null && ! PaymentAttemptFailure::query()
+                ->where('payment_attempt_id', $attempt->id)
+                ->where('provider_reference', substr($payment->failure->reference, 0, 255))
+                ->exists();
+            $stale = PaymentAttemptStateMachine::isBackward($attempt->status, $target)
+                || (PaymentAttemptStateMachine::needsFreshDecline($attempt->status, $target) && ! $freshDecline);
+
+            if ($stale && ! AttemptLease::holds($attempt, $leaseToken)) {
                 Log::notice('A stale gateway read was not applied.', ['payment_attempt_id' => $attempt->id, 'from' => $attempt->status->value, 'to' => $target->value]);
 
                 return new AppliedPayment($attempt, $link, false);

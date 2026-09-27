@@ -61,6 +61,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CarbonImmutable|null $canceled_at
  * @property int $amount_refunded_minor
  * @property bool $late_payment
+ * @property bool $needs_review
+ * @property string|null $review_reason
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
@@ -86,6 +88,7 @@ final class PaymentAttempt extends Model
         'failure_count' => 0,
         'amount_refunded_minor' => 0,
         'late_payment' => false,
+        'needs_review' => false,
     ];
 
     public static function resourceType(): ResourceType
@@ -135,6 +138,7 @@ final class PaymentAttempt extends Model
             'canceled_at' => 'immutable_datetime',
             'amount_refunded_minor' => 'integer',
             'late_payment' => 'boolean',
+            'needs_review' => 'boolean',
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

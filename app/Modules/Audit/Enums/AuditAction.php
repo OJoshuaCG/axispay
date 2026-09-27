@@ -55,6 +55,7 @@ enum AuditAction: string
     case PaymentLinkCheckoutUnblocked = 'payment_link.checkout_unblocked';
     case PaymentLateSucceeded = 'payment.late_succeeded';
     case PaymentAuthorizationVoided = 'payment.authorization_voided';
+    case PaymentNeedsReview = 'payment.needs_review';
 
     public function label(): string
     {
