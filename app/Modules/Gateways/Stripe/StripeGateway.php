@@ -161,6 +161,13 @@ final readonly class StripeGateway implements PaymentGateway
             ], static fn (mixed $value): bool => $value !== null), $context->options($idempotencyKey));
         } catch (CardException) {
             return $this->retrievePayment($connection, $providerPaymentId);
+        } catch (InvalidRequestException $e) {
+            // Already confirmed (a retry after a lost answer): the payment as it is now.
+            if ($e->getStripeCode() === 'payment_intent_unexpected_state') {
+                return $this->retrievePayment($connection, $providerPaymentId);
+            }
+
+            throw StripeErrorMapper::map($e, 'confirmPayment');
         } catch (ApiErrorException $e) {
             throw StripeErrorMapper::map($e, 'confirmPayment');
         }

@@ -9,6 +9,7 @@ use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayCredentialsEncrypter;
 use SensitiveParameter;
+use Stripe\HttpClient\CurlClient;
 use Stripe\StripeClient;
 
 /**
@@ -70,11 +71,21 @@ final readonly class StripeClientFactory
     private function client(#[SensitiveParameter] string $apiKey): StripeClient
     {
         $retries = config('services.stripe.max_network_retries');
+        $timeout = config('services.stripe.timeout_seconds');
+        $connectTimeout = config('services.stripe.connect_timeout_seconds');
+
+        // Bounded calls (ADR-0051): a call never outlives the attempt lease.
+        $http = CurlClient::instance();
+
+        if ($http instanceof CurlClient) { // the SDK's untyped singleton
+            $http->setTimeout(is_int($timeout) ? $timeout : 20);
+            $http->setConnectTimeout(is_int($connectTimeout) ? $connectTimeout : 5);
+        }
 
         return new StripeClient([
             'api_key' => $apiKey,
             'stripe_version' => $this->platformKeys->apiVersion(),
-            'max_network_retries' => is_int($retries) ? $retries : 2,
+            'max_network_retries' => is_int($retries) ? $retries : 1,
         ]);
     }
 }

@@ -123,7 +123,7 @@ final class SandboxPaymentGateway implements PaymentGateway
             $state = $this->load($providerPaymentId);
 
             if (! in_array($state['status'], [ProviderPaymentStatus::RequiresPaymentMethod->value, ProviderPaymentStatus::RequiresConfirmation->value], true)) {
-                throw new GatewayRequestException('The sandbox payment cannot be confirmed in its state.', 'payment_intent_unexpected_state', null, 400);
+                return $state; // already confirmed: like the Stripe adapter, the payment as it is
             }
 
             $scenario = self::scenario($confirmationToken);
@@ -174,6 +174,8 @@ final class SandboxPaymentGateway implements PaymentGateway
             }
 
             $state['status'] = ProviderPaymentStatus::Succeeded->value;
+            // Counted, so tests can prove a payment is captured at most once.
+            $state['captures'] = (is_int($state['captures'] ?? null) ? $state['captures'] : 0) + 1;
 
             return $this->store($state);
         });

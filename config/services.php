@@ -52,7 +52,14 @@ return [
         ],
         // Automatic retries of network failures; stripe-php reuses the same
         // Idempotency-Key on every retry (rules.md rule 5).
-        'max_network_retries' => 2,
+        //
+        // Worst case of one call, bounded below the checkout's attempt lease
+        // (axispay.checkout.confirmation_lease_seconds, 90 s; ADR-0051):
+        // (1 + retries) x timeout + stripe-php's retry delay (at most 2 s)
+        // = 2 x 20 s + 2 s = 42 s. The lease is also renewed before every call.
+        'max_network_retries' => 1,
+        'timeout_seconds' => 20,
+        'connect_timeout_seconds' => 5,
     ],
 
     /*
