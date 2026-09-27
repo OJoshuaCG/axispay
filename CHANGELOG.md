@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ADR-0050 (decision only, implementation in Phases 4 and 5): payments are
+  linear — the card is authorized first, the merchant's optional pre-payment
+  validation runs next, and the charge is captured only after approval; a
+  rejection voids the authorization, and a failed final webhook never
+  triggers an automatic refund.
 - **Phase 3 — Payment links API** (ADR-0048, ADR-0049):
   - `POST /v1/payment_links`, `GET /v1/payment_links/{id}`,
     `GET /v1/payment_links` (filters and cursor paging) and

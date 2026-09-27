@@ -377,6 +377,7 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
   - (a) Al abrir el link. *Contras:* la validación queda obsoleta si el pagador tarda en pagar y bloquea la carga de la página por el servidor del comercio.
   - (b) **Justo antes de confirmar el cobro** (después de capturar la tarjeta, de aplicar los rate limits y Turnstile, y de la confirmación FX si aplica). *Pros:* es la última oportunidad real de detener el cobro y los datos están completos.
   - (c) Ambos.
+- **Nota (2026-09-27, ADR-0050):** el responsable del proyecto modificó el momento dentro de (b): la tarjeta se **autoriza** primero (captura separada), después se consulta al comercio y recién con su aprobación se **captura**. Un rechazo anula la autorización, sin reembolso.
 - **Decisión:** (b) en el MVP. La opción (a) queda como posible fase futura; mientras tanto, el evento asíncrono `payment_link.opened` sigue existiendo, y el integrador puede cancelar un link vía API cuando quiera.
 - **Características:**
   - **Opcional por tenant** y activable/desactivable **por link** (`pre_payment_validation: true|false` al crear, con default del tenant).
@@ -1198,6 +1199,8 @@ Los estados `paid`, `expired` y `canceled` responden HTTP `200` con la vista inf
 
 ### 11.4 Flujo técnico del pago
 
+> **Nota (2026-09-27, ADR-0050):** el PaymentIntent se crea con **captura separada**. La confirmación con el ConfirmationToken **autoriza** la tarjeta (incluido 3DS); la validación previa del comercio ocurre después de la autorización, y solo con su aprobación (o sin validación configurada) se **captura**. Un `reject` o `fail_closed` anula la autorización. El diagrama siguiente conserva el orden original como referencia histórica.
+
 ```
 Pagador                   Checkout (nuestro backend)                    Stripe
    │  GET /l/{token}                 │                                     │
@@ -1742,7 +1745,7 @@ Aplica a los webhooks **y** a la URL de validación previa (15.8). Al **registra
 
 #### 15.8.2 Momento de la llamada
 
-En el flujo de 11.4, en este orden: campos del pagador validados → rate limits y Turnstile superados → ConfirmationToken inspeccionado → confirmación FX (si aplica) → **validación previa** → creación o confirmación del cobro. Se llama **una vez por intento de confirmación del pagador**: si una tarjeta es rechazada y el pagador reintenta, se vuelve a validar (el `attempt_number` lo indica).
+En el flujo de 11.4, en este orden: campos del pagador validados → rate limits y Turnstile superados → ConfirmationToken inspeccionado → confirmación FX (si aplica) → **autorización de la tarjeta** (captura separada, incluye 3DS) → **validación previa** → **captura** del cobro (orden vigente desde el 2026-09-27, ADR-0050; un `reject` o `fail_closed` anula la autorización). Se llama **una vez por intento de confirmación del pagador**: si una tarjeta es rechazada y el pagador reintenta, se vuelve a validar (el `attempt_number` lo indica).
 
 #### 15.8.3 Request
 
@@ -2286,7 +2289,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 
 ### Fase 4 — Checkout y pagos con tarjeta (sin FX)
 
-- **Spike técnico (máximo 1–2 días):** validar con Stripe en modo test el flujo deferred intent + ConfirmationToken con direct charges (`stripeAccount`), la inspección de `payment_method_preview.card.country`, la actualización de moneda y monto del PaymentIntent antes de confirmar y el comportamiento de `elements.update()`. Documentar el resultado en un ADR. **Si el comportamiento difiere de lo previsto en 11.4 y 13, detenerse y reportar antes de continuar.**
+- **Spike técnico (máximo 1–2 días):** validar con Stripe en modo test el flujo deferred intent + ConfirmationToken con direct charges (`stripeAccount`), la inspección de `payment_method_preview.card.country`, la actualización de moneda y monto del PaymentIntent antes de confirmar y el comportamiento de `elements.update()`. Además (ADR-0050): la captura separada con direct charges en cuentas conectadas de México y con el método `api_key`, cómo se ven y cuánto cuestan las autorizaciones anuladas, y la vigencia de una autorización con tarjeta. Documentar el resultado en un ADR. **Si el comportamiento difiere de lo previsto en 11.4 y 13, detenerse y reportar antes de continuar.**
 - Página de pago (estados, branding básico —header con el nombre del comercio y footer "Powered by" con el nombre de la plataforma, ADR-0038—, campos del pagador, Payment Element), endpoints internos, intentos (un PaymentIntent activo por link con restricción de BD), 3DS, página de completado y polling.
 - Handlers de `payment_intent.*`; reconciliación de intentos.
 - Protección anti card testing (rate limits, Turnstile, bloqueos), cabeceras de seguridad y CSP.
