@@ -95,8 +95,8 @@ it('connects with a valid restricted key: encrypted, masked, webhook created, ac
         ->and(app(GatewayCredentialsEncrypter::class)->decrypt((string) $connection->credentials_secret, $connection->credentials_key_version))->toBe($secret)
         ->and($endpoint['params']['url'])->toBe('https://api.localhost/webhooks/stripe/direct/'.$connection->id)
         ->and($endpoint['params']['api_version'])->toBe('2026-08-26.dahlia')
-        // Only what this phase handles (ADR-0047): no payment events carrying payer data yet.
-        ->and($endpoint['params']['enabled_events'])->toBe(['account.updated'])
+        // Only the events the platform handles (ADR-0047, ADR-0051): account and payment events.
+        ->and($endpoint['params']['enabled_events'])->toBe(['account.updated', 'payment_intent.amount_capturable_updated', 'payment_intent.canceled', 'payment_intent.payment_failed', 'payment_intent.processing', 'payment_intent.requires_action', 'payment_intent.succeeded'])
         ->and($endpoint['headers']['idempotency-key'])->toMatch('/^axispay-webhook-endpoint-'.$connection->id.'-[0-9A-HJKMNP-TV-Z]{26}$/')
         ->and($endpoint['headers'])->not->toHaveKey('stripe-account')
         ->and($connection->validated_permissions['missing'] ?? null)->toBe([])

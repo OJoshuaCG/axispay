@@ -83,8 +83,8 @@ it('maps revoked keys to an authentication error without Stripe details', functi
 it('keeps the payment methods of later phases honest', function (): void {
     $connection = GatewayTestHelpers::connection(activeTenant());
 
-    app(GatewayFactory::class)->for($connection->provider)->retrievePayment($connection, 'pi_123');
-})->throws(GatewayOperationNotImplementedException::class, 'Phase 4');
+    app(GatewayFactory::class)->for($connection->provider)->retrieveRefund($connection, 're_123');
+})->throws(GatewayOperationNotImplementedException::class, 'Phase 7');
 
 it('encrypts credentials with the dedicated versioned key, never APP_KEY', function (): void {
     $encrypter = app(GatewayCredentialsEncrypter::class);
