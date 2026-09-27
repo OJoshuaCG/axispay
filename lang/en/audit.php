@@ -89,6 +89,8 @@ return [
         'payment_late_succeeded' => 'Payment succeeded after the link closed',
         'payment_authorization_voided' => 'Card authorization voided',
         'payment_needs_review' => 'Payment flagged for review',
+        'provider_event_failed' => 'Gateway event failed',
+        'provider_event_retried' => 'Gateway event retried',
     ],
 
 ];

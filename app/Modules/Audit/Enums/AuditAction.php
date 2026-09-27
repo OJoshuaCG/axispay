@@ -56,6 +56,8 @@ enum AuditAction: string
     case PaymentLateSucceeded = 'payment.late_succeeded';
     case PaymentAuthorizationVoided = 'payment.authorization_voided';
     case PaymentNeedsReview = 'payment.needs_review';
+    case ProviderEventFailed = 'provider_event.failed';
+    case ProviderEventRetried = 'provider_event.retried';
 
     public function label(): string
     {

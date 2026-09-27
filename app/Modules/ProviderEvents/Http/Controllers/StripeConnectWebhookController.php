@@ -43,9 +43,13 @@ final class StripeConnectWebhookController
             throw ApiException::of(ApiErrorCode::ParameterInvalid, 'The webhook signature is invalid.');
         }
 
-        $connection = $event->providerAccountId === null
-            ? null
-            : $resolver->forProviderAccount(GatewayProvider::Stripe, $event->providerAccountId, $event->livemode);
+        $connection = match (true) {
+            $event->providerAccountId === null => null,
+            // A payment event belongs to the connection that created its attempt (ADR-0051).
+            $event->attemptReference !== null => $resolver->forPaymentAttempt(GatewayProvider::Stripe, $event->attemptReference, $event->providerAccountId, $event->livemode)
+                ?? $resolver->forProviderAccount(GatewayProvider::Stripe, $event->providerAccountId, $event->livemode),
+            default => $resolver->forProviderAccount(GatewayProvider::Stripe, $event->providerAccountId, $event->livemode),
+        };
 
         // The Connect endpoint only serves Connect connections (plan 14.1).
         if ($connection !== null && ! $connection->connection_method->usesConnect()) {

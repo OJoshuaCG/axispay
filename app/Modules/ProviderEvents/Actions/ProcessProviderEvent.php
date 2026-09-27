@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\ProviderEvents\Actions;
 
+use App\Modules\Audit\Data\Actor;
+use App\Modules\Audit\Enums\AuditAction;
+use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Actions\DisconnectGatewayConnection;
 use App\Modules\Gateways\Actions\SyncGatewayConnection;
 use App\Modules\Gateways\Enums\ProviderEventKind;
@@ -47,6 +50,7 @@ final readonly class ProcessProviderEvent
         private DisconnectGatewayConnection $disconnect,
         private TenantContext $context,
         private SyncPaymentAttempt $syncPayment,
+        private AuditLogger $audit,
     ) {}
 
     public function handle(string $providerEventId): void
@@ -83,11 +87,16 @@ final readonly class ProcessProviderEvent
 
             $event->forceFill(['status' => ProviderEventStatus::Failed, 'last_error' => self::describe($exception)])->save();
 
-            Log::error('A gateway event failed after all retries.', [
+            // Plan 14.2 step 7: a failed event alerts (the superadmin e-mail is Phase 9).
+            Log::alert('A gateway event failed.', [
                 'provider_event_id' => $event->provider_event_id,
                 'type' => $event->type,
                 'exception' => $exception !== null ? $exception::class : null,
             ]);
+            $this->audit->record(AuditAction::ProviderEventFailed, $event, [
+                'type' => $event->type,
+                'reason' => $exception !== null ? class_basename($exception) : null,
+            ], actor: Actor::system());
         });
     }
 

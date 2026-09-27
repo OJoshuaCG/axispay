@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\ProviderEvents\Jobs;
 
+use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
+use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\ProviderEvents\Actions\ProcessProviderEvent;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\Middleware\RestoreTenantContext;
@@ -24,6 +26,9 @@ final class ProcessProviderEventJob implements ShouldQueue, TenantAware
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
+
+    /** Below the queue's retry_after (150 s): two bounded Stripe calls (42 s each) plus the merchant validation (ADR-0051). */
+    public int $timeout = 115;
 
     public int $tries = 5;
 
@@ -63,7 +68,12 @@ final class ProcessProviderEventJob implements ShouldQueue, TenantAware
 
     public function handle(ProcessProviderEvent $process): void
     {
-        $process->handle($this->providerEventId);
+        try {
+            $process->handle($this->providerEventId);
+        } catch (GatewayAuthenticationException|GatewayRequestException $e) {
+            // Plan 12.6: refused credentials or a 4xx never succeed on retry: fail now.
+            $this->fail($e);
+        }
     }
 
     public function failed(?Throwable $exception): void

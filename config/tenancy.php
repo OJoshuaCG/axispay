@@ -79,6 +79,9 @@ return [
         // Phase 4 (ADR-0051): the reconciliation finds, across tenants, the
         // (tenant, mode) pairs with attempts to re-sync (identifiers only).
         'App\\Modules\\Payments\\Services\\PaymentAttemptLookup',
+        // ADR-0051: recovery of stored gateway events (stuck, unroutable,
+        // failed) across tenants; acts on each row in its own tenant context.
+        'App\\Modules\\ProviderEvents\\Services\\ProviderEventInbox',
     ],
 
 ];

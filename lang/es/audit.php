@@ -89,6 +89,8 @@ return [
         'payment_late_succeeded' => 'Pago confirmado después del cierre del link',
         'payment_authorization_voided' => 'Autorización de tarjeta anulada',
         'payment_needs_review' => 'Pago marcado para revisión',
+        'provider_event_failed' => 'Evento de la pasarela fallido',
+        'provider_event_retried' => 'Evento de la pasarela reintentado',
     ],
 
 ];

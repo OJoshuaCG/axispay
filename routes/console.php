@@ -25,6 +25,13 @@ Schedule::command('axispay:provider-events:purge')
     ->withoutOverlapping()
     ->onOneServer();
 
+// ADR-0051: queue again events stuck in `received` and route unroutable
+// events whose connection now exists.
+Schedule::command('axispay:provider-events:sweep')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Plan 9.1: expire active links whose expires_at has passed (ADR-0048).
 Schedule::job(new ExpirePaymentLinksJob)
     ->everyMinute()
@@ -44,9 +51,9 @@ Schedule::command('axispay:payment-links:reconcile-gateways')
     ->withoutOverlapping()
     ->onOneServer();
 
-// Plan 12.5 / ADR-0050: re-sync open payment attempts with the gateway, void
-// authorizations left uncaptured and release links stuck in processing
-// (ADR-0051).
+// Plan 12.5 / ADR-0050: re-sync in-flight payment attempts with the gateway,
+// void authorizations past the capture window and release links stuck in
+// processing (ADR-0051).
 Schedule::command('axispay:payments:reconcile')
     ->everyFifteenMinutes()
     ->withoutOverlapping()

@@ -11,6 +11,7 @@ use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
+use App\Modules\ProviderEvents\Services\ProviderEventInbox;
 use App\Modules\Shared\Ids\Ulid;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -38,7 +39,10 @@ use Illuminate\Support\Facades\Log;
  */
 final readonly class RecordProviderEvent
 {
-    public function __construct(private TenantContext $context) {}
+    public function __construct(
+        private TenantContext $context,
+        private ProviderEventInbox $inbox,
+    ) {}
 
     /**
      * @return bool true when the event is new (false: duplicate, not reprocessed)
@@ -80,7 +84,7 @@ final readonly class RecordProviderEvent
                 return $row;
             });
         } catch (UniqueConstraintViolationException) {
-            return false;
+            return $this->duplicate($provider, $event, $connection);
         }
 
         if ($handled) {
@@ -88,6 +92,39 @@ final readonly class RecordProviderEvent
         }
 
         return true;
+    }
+
+    /**
+     * A delivery of an event already stored (ADR-0051):
+     *
+     *  - stored as unroutable and routable now (the same event reached the
+     *    endpoint of its connection, or the connection exists now): the
+     *    routed copy replaces it;
+     *  - still `received` for longer than `redispatch_after_seconds` (its job
+     *    was lost, e.g. the dispatch failed after the insert): queued again;
+     *  - anything else: a plain duplicate, not reprocessed (plan 26.2 case 3).
+     */
+    private function duplicate(GatewayProvider $provider, ProviderWebhookEvent $event, ?GatewayConnection $connection): bool
+    {
+        $existing = $this->inbox->find($provider, $event->providerEventId);
+
+        if ($existing === null) {
+            return false;
+        }
+
+        if ($existing->status === ProviderEventStatus::Unroutable && $connection !== null) {
+            $this->inbox->forgetUnroutable($existing);
+
+            return $this->handle($provider, $event, $connection);
+        }
+
+        $after = max(1, config()->integer('axispay.gateways.stripe.provider_events.redispatch_after_seconds'));
+
+        if ($existing->status === ProviderEventStatus::Received && $existing->tenant_id !== null && $existing->received_at->lessThanOrEqualTo(now()->subSeconds($after))) {
+            ProcessProviderEventJob::dispatch($existing->id, $existing->tenant_id, $existing->livemode);
+        }
+
+        return false;
     }
 
     /**
