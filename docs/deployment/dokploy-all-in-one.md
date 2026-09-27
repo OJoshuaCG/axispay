@@ -158,7 +158,7 @@ Set them in the Application's **Environment** tab. With only one Application the
 | `SESSION_SECURE_COOKIE` | `true` | **`false` only without TLS**, otherwise sign-in fails with `419` |
 | `CACHE_STORE` | `database` | Also the lock store for scheduled tasks |
 | `QUEUE_CONNECTION` | `database` | |
-| `TRUSTED_PROXIES` | `10.0.1.0/24` | Traefik's network range. **Never `*`.** How to find it: [Trusted proxies](dokploy.md#trusted-proxies) |
+| `TRUSTED_PROXIES` | `10.0.1.0/24` | Traefik's network range. **Never `*`.** Required: the application refuses to start in production without it (ADR-0051). How to find it: [Trusted proxies](dokploy.md#trusted-proxies) |
 | `MAIL_MAILER` + `MAIL_*` | `smtp` … | Staging: a sandbox SMTP (for example Mailpit or a provider's test inbox). A local test server can use `log` (messages appear in the container log only with `LOG_LEVEL=debug`). Use `MAIL_SCHEME` (`smtps` for 465), never `MAIL_ENCRYPTION`: [Outgoing mail](dokploy.md#outgoing-mail) |
 | `QUEUE_TIMEOUT` | `60` | Seconds per job. Keep it below the queue's `retry_after` (90) |
 | `QUEUE_TRIES` / `QUEUE_SLEEP` / `QUEUE_MEMORY` | `3` / `3` / `192` | Same meaning as in production |

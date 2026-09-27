@@ -75,7 +75,7 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 | `AXISPAY_API_HOST`, `AXISPAY_APP_HOST`, `AXISPAY_ADMIN_HOST`, `AXISPAY_PAY_HOST` | `*.localhost` | Surface hosts (ADR-0027). |
 | `AXISPAY_PASSWORD_CHECK_UNCOMPROMISED` | `true` (default) | Breached-password check on new passwords (HIBP). Off in `phpunit.xml`. |
 | `LOG_STACK` | `single` | The production image logs redacted JSON to stderr instead (ADR-0035). |
-| `TRUSTED_PROXIES` | unset | Production behind Traefik: its network range (`config/trustedproxy.php`). |
+| `TRUSTED_PROXIES` | unset | Production behind Traefik: its network range (`config/trustedproxy.php`). **Required in production**: the application refuses to boot without it (the checkout's per-IP limits need the real client IP, ADR-0051); `*` is reported as an error by `axispay:doctor`. |
 | `SENTRY_LARAVEL_DSN` | empty | Error tracking stays off while empty (ADR-0029). |
 | `STRIPE_TEST_SECRET` / `STRIPE_LIVE_SECRET` | empty | Platform secret key per mode (`sk_test_…` / `sk_live_…`); a key of the wrong mode is refused. Never mix modes (ADR-0047). |
 | `STRIPE_TEST_PUBLISHABLE` / `STRIPE_LIVE_PUBLISHABLE` | empty | Platform publishable key per mode (checkout, Phase 4). |

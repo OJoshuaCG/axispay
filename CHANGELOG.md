@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the tenant has a privacy notice URL; informative pages no longer show the
     amount; `/status` returns the return URL once paid; declines and payer
     data carry `livemode`.
+  - Payment security: bogus confirmation tokens can no longer pause a link
+    for other payers; per-IP limits use the /64 network for IPv6; only the
+    session handed the 3D Secure step may continue it (debounced); payment
+    events are stored without payer data and every stored gateway event is
+    encrypted at rest; production refuses to boot without `TRUSTED_PROXIES`
+    (and the doctor fails on `*`); Turnstile answers must name the pay host
+    and the `checkout` action; the sandbox refuses live mode; every pay-host
+    response (404, 419) carries the checkout headers; client secrets inside
+    URLs are masked in logs.
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after

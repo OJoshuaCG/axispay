@@ -138,7 +138,7 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `SESSION_LIFETIME` | no | `120` | Minutes |
 | `CACHE_STORE` | yes | `database` | |
 | `QUEUE_CONNECTION` | yes | `database` | ADR-0016 |
-| `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). |
+| `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). Required: the application refuses to start in production without it, and `axispay:doctor` fails on `*` (ADR-0051). |
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5). `smtp` on 587 upgrades with STARTTLS; implicit TLS on 465 is `smtps`. `MAIL_ENCRYPTION` is **ignored** (Laravel 13 reads `MAIL_SCHEME` only). Example: [Outgoing mail](#outgoing-mail) |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | For a mailbox account, the username is the full address |
