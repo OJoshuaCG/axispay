@@ -13,6 +13,7 @@ use App\Modules\Payments\Actions\SyncPaymentAttempt;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Services\LinkReservation;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Log;
@@ -62,7 +63,8 @@ final readonly class ReadCheckoutStatus
             PaymentLinkStatus::Paid => CheckoutState::Paid,
             PaymentLinkStatus::Expired => CheckoutState::Expired,
             PaymentLinkStatus::Canceled => CheckoutState::Canceled,
-            PaymentLinkStatus::Processing => CheckoutState::Processing,
+            // An abandoned reservation (the confirmation died) offers the form again.
+            PaymentLinkStatus::Processing => LinkReservation::isAbandoned($link) && app(TenantAccess::class)->collects($link->tenant_id) ? CheckoutState::Active : CheckoutState::Processing,
             // Plan 21.3: a closed tenant's links no longer take payments
             // (ADR-013: a suspended tenant keeps collecting).
             PaymentLinkStatus::Active => match (true) {

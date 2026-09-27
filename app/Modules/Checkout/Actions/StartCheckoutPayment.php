@@ -32,9 +32,12 @@ use App\Modules\Payments\Models\PayerDetails;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\IdempotencyKeys;
+use App\Modules\Payments\Services\LinkReservation;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Shared\Money\Money;
 use App\Modules\Tenancy\Services\TenantAccess;
+use Illuminate\Database\DetectsConcurrencyErrors;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -63,6 +66,8 @@ use LogicException;
  */
 final readonly class StartCheckoutPayment
 {
+    use DetectsConcurrencyErrors;
+
     private const string TOKEN_PATTERN = '/^ctoken_[A-Za-z0-9_]{1,250}$/';
 
     public function __construct(
@@ -168,7 +173,9 @@ final readonly class StartCheckoutPayment
             ! $this->access->collects($link->tenant_id) => CheckoutOutcome::Canceled,
             $link->status === PaymentLinkStatus::Expired => CheckoutOutcome::Expired,
             $link->status === PaymentLinkStatus::Canceled => CheckoutOutcome::Canceled,
-            $link->status === PaymentLinkStatus::Processing => CheckoutOutcome::InProgress,
+            // A reservation left by a confirmation that died (lease expired,
+            // nothing under way) may be taken over (ADR-0051).
+            $link->status === PaymentLinkStatus::Processing && ! LinkReservation::isAbandoned($link) => CheckoutOutcome::InProgress,
             $link->isCheckoutBlocked() => CheckoutOutcome::Blocked,
             default => null,
         };
@@ -188,16 +195,33 @@ final readonly class StartCheckoutPayment
         try {
             return DB::transaction(function () use ($link, $connection, $amount, $payer, $input): array|CheckoutOutcome {
                 $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
+                $reclaiming = $locked->status === PaymentLinkStatus::Processing;
 
-                if ($locked->status !== PaymentLinkStatus::Active || $locked->isPastExpiry() || $locked->isCheckoutBlocked()) {
+                if (! in_array($locked->status, [PaymentLinkStatus::Active, PaymentLinkStatus::Processing], true) || $locked->isCheckoutBlocked()) {
                     return $locked->status === PaymentLinkStatus::Paid ? CheckoutOutcome::AlreadyPaid : CheckoutOutcome::InProgress;
                 }
 
-                $attempt = PaymentAttempt::query()
+                // The link lock already serializes this link: read its active
+                // attempt without a locking range read (no gap locks shared with
+                // other links of the tenant), then lock that row by its key.
+                $attemptId = PaymentAttempt::query()
                     ->where('payment_link_id', $locked->id)
                     ->whereIn('status', PaymentAttemptStatus::activeValues())
-                    ->lockForUpdate()
-                    ->first();
+                    ->value('id');
+                $attempt = is_string($attemptId) ? PaymentAttempt::query()->whereKey($attemptId)->lockForUpdate()->first() : null;
+                $attempt = $attempt !== null && ! $attempt->status->isTerminal() ? $attempt : null;
+
+                if ($reclaiming && ($attempt === null || $attempt->status->isInFlight() || $attempt->leaseHeld())) {
+                    return CheckoutOutcome::InProgress; // a live confirmation holds the reservation
+                }
+
+                if ($locked->isPastExpiry()) {
+                    if ($reclaiming) {
+                        $this->links->resumeAfterAttempt($locked); // expires it
+                    }
+
+                    return CheckoutOutcome::Expired;
+                }
 
                 $token = $attempt !== null && ! $attempt->status->isInFlight() ? $this->lease->acquireLocked($attempt) : null;
 
@@ -210,12 +234,24 @@ final readonly class StartCheckoutPayment
                 }
 
                 $this->storePayer($attempt, $payer);
-                $this->links->enterProcessing($locked);
+
+                if (! $reclaiming) {
+                    $this->links->enterProcessing($locked);
+                }
 
                 return [$attempt, (string) $token];
-            });
+            }, 3);
         } catch (UniqueConstraintViolationException) {
             // Another session created the link's active attempt at the same time (rule 9).
+            return CheckoutOutcome::InProgress;
+        } catch (QueryException $e) {
+            if (! $this->causedByConcurrencyError($e)) {
+                throw $e;
+            }
+
+            // Deadlocked three times: tell the payer a payment is in progress, never an error page.
+            Log::warning('Checkout claim kept deadlocking; answered in progress.', ['payment_link_id' => $link->id]);
+
             return CheckoutOutcome::InProgress;
         }
     }
@@ -273,9 +309,9 @@ final readonly class StartCheckoutPayment
     {
         $connection = GatewayConnection::query()->findOrFail($attempt->gateway_connection_id);
         $gateway = $this->gateways->for($attempt->provider);
-        $request = static fn (string $key, ?string $providerPaymentId = null): PaymentRequest => new PaymentRequest(
-            amountMinor: $amount->minorAmount,
-            currency: $amount->currency->value,
+        $request = static fn (Money $charge, string $key, ?string $providerPaymentId = null): PaymentRequest => new PaymentRequest(
+            amountMinor: $charge->minorAmount,
+            currency: $charge->currency->value,
             description: $link->description,
             metadata: [
                 'axispay_tenant_id' => $link->tenant_id,
@@ -287,13 +323,25 @@ final readonly class StartCheckoutPayment
             providerPaymentId: $providerPaymentId,
         );
 
+        if (! $this->lease->extend($attempt->id, $leaseToken)) {
+            return CheckoutResult::of(CheckoutOutcome::InProgress);
+        }
+
         try {
             if ($attempt->provider_payment_id === null) {
-                $attempt = $this->apply->handle($attempt->id, $gateway->createOrUpdatePayment($connection, $request(IdempotencyKeys::create($attempt->id))), leaseToken: $leaseToken)->attempt;
-            } elseif ($attempt->amount_minor !== $amount->minorAmount || $attempt->currency !== $amount->currency) {
-                $updated = $gateway->createOrUpdatePayment($connection, $request(IdempotencyKeys::update($attempt->id, $amount), $attempt->provider_payment_id));
+                // Always the attempt's STORED amount: a retry after a lost
+                // answer repeats the very same request under the same key.
+                $attempt = $this->apply->handle($attempt->id, $gateway->createOrUpdatePayment($connection, $request($attempt->money(), IdempotencyKeys::create($attempt->id))), leaseToken: $leaseToken)->attempt;
+            }
+
+            if ($attempt->amount_minor !== $amount->minorAmount || $attempt->currency !== $amount->currency) {
+                $updated = $gateway->createOrUpdatePayment($connection, $request($amount, IdempotencyKeys::update($attempt->id, $amount), $attempt->provider_payment_id));
                 PaymentAttempt::query()->whereKey($attempt->id)->update(['amount_minor' => $amount->minorAmount, 'currency' => $amount->currency->value]);
                 $attempt = $this->apply->handle($attempt->id, $updated, leaseToken: $leaseToken)->attempt;
+            }
+
+            if (! $this->lease->extend($attempt->id, $leaseToken)) {
+                return CheckoutResult::of(CheckoutOutcome::InProgress);
             }
 
             $payment = $gateway->confirmPayment(
