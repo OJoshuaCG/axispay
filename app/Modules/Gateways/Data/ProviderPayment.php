@@ -16,7 +16,8 @@ use SensitiveParameter;
  *    and never stored, logged or serialized;
  *  - `attemptReference` is our attempt ID read back from the payment's
  *    metadata (foreign payments have none, plan 14.4);
- *  - `failure` is the last payment error, if the last confirmation failed.
+ *  - `failure` is the last payment error, if the last confirmation failed;
+ *  - `createdAt` is when the gateway created the payment (Unix seconds).
  */
 final readonly class ProviderPayment
 {
@@ -31,6 +32,7 @@ final readonly class ProviderPayment
         public ?ProviderPaymentFailure $failure = null,
         public ?string $attemptReference = null,
         public ?string $captureBefore = null,
+        public ?int $createdAt = null,
     ) {}
 
     public function needsClientAction(): bool

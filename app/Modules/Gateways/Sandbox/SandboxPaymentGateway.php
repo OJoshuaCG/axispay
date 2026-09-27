@@ -107,6 +107,7 @@ final class SandboxPaymentGateway implements PaymentGateway
                 'card' => null,
                 'failure' => null,
                 'processing_until' => null,
+                'created' => CarbonImmutable::now()->getTimestamp(),
             ];
             $state['amount'] = $request->amountMinor;
             $state['currency'] = strtoupper($request->currency);
@@ -337,6 +338,7 @@ final class SandboxPaymentGateway implements PaymentGateway
                 : null,
             attemptReference: self::str($metadata['axispay_attempt_id'] ?? null),
             captureBefore: $status === ProviderPaymentStatus::RequiresCapture ? CarbonImmutable::now()->addDays(7)->toIso8601String() : null,
+            createdAt: is_int($state['created'] ?? null) ? $state['created'] : null,
         );
     }
 

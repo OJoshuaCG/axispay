@@ -65,6 +65,14 @@ trait ValidatesApiKeys
                 throw new ApiKeyValidationException(ApiKeyRejection::AccountAlreadyLinked);
             }
 
+            // ADR-0051: an account the platform reaches through Connect keeps
+            // sending its events to the Connect endpoint, even after the
+            // Connect connection is disconnected; the same event would then
+            // arrive through two routes. One account, one method.
+            if ($this->resolver->accountUsesConnect(GatewayProvider::Stripe, $result->account->providerAccountId, $livemode)) {
+                throw new ApiKeyValidationException(ApiKeyRejection::AccountUsesConnect);
+            }
+
             if ($livemode && $result->excessive !== [] && ! $data->acceptExcessivePermissions) {
                 throw new ApiKeyValidationException(ApiKeyRejection::ExcessivePermissionsNotConfirmed, $result->excessive);
             }

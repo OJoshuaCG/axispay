@@ -154,6 +154,7 @@ return [
             'missing_permissions' => 'The restricted key is missing permissions: :details. Edit the key in Stripe and try again.',
             'excessive_permissions_not_confirmed' => 'This key also has permissions we do not need (:details). Create a more limited key, or confirm below that you want to use it.',
             'account_already_linked' => 'This Stripe account is already connected to another account on the platform.',
+            'account_uses_connect' => 'This Stripe account is linked to the platform through Stripe Connect. It cannot also be connected with API keys.',
             'key_already_linked' => 'This key is already in use. Create a new restricted key for this connection.',
             'different_account' => 'These keys belong to a different Stripe account. To change accounts, disconnect and connect again.',
             'webhook_endpoint_failed' => 'We could not create the webhook in your Stripe account, so the connection was not saved. Try again.',

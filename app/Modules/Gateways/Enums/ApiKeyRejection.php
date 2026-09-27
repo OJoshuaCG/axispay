@@ -23,6 +23,7 @@ enum ApiKeyRejection: string
     case MissingPermissions = 'missing_permissions';
     case ExcessivePermissionsNotConfirmed = 'excessive_permissions_not_confirmed';
     case AccountAlreadyLinked = 'account_already_linked';
+    case AccountUsesConnect = 'account_uses_connect';
     case KeyAlreadyLinked = 'key_already_linked';
     case DifferentAccount = 'different_account';
     case WebhookEndpointFailed = 'webhook_endpoint_failed';

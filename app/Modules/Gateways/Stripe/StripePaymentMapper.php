@@ -39,6 +39,7 @@ final class StripePaymentMapper
             failure: self::failure($intent, $status),
             attemptReference: self::attemptReference($intent->metadata ?? null),
             captureBefore: self::captureBefore($charge),
+            createdAt: is_numeric($intent->created ?? null) ? (int) $intent->created : null,
         );
     }
 

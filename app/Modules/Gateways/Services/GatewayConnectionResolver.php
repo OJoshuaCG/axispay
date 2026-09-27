@@ -8,6 +8,7 @@ use App\Modules\Gateways\Enums\ConnectionMethod;
 use App\Modules\Gateways\Enums\ConnectionStatus;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Shared\Ids\Ulid;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -24,19 +25,66 @@ final class GatewayConnectionResolver
 {
     /**
      * The connection an event of `$accountId` belongs to (plan 14.2 step 5):
-     * the live one if any, otherwise the most recent (a late event for a
-     * disconnected connection is still routed, then ignored).
+     * the live one if any, otherwise the most recent disconnected one (a late
+     * event is still routed, then ignored) — but only when every connection
+     * of that account belongs to the same tenant: an event is never handed
+     * to another tenant's old connection (ADR-0051). Payment events are
+     * routed by their attempt first (forPaymentAttempt).
      */
     public function forProviderAccount(GatewayProvider $provider, string $accountId, bool $livemode): ?GatewayConnection
     {
-        return $this->unscoped()
+        $connections = $this->unscoped()
             ->where('provider', $provider->value)
             ->where('provider_account_id', $accountId)
             ->where('livemode', $livemode)
             // active_slot is 1 while not disconnected, NULL after (NULLs sort last).
             ->orderByDesc('active_slot')
             ->orderByDesc('created_at')
+            ->get();
+
+        $first = $connections->first();
+
+        if ($first === null || ! $first->status->isDisconnected()) {
+            return $first;
+        }
+
+        return $connections->every(static fn (GatewayConnection $c): bool => $c->tenant_id === $first->tenant_id) ? $first : null;
+    }
+
+    /**
+     * The connection of the attempt a payment event names in its metadata
+     * (ADR-0051), when it matches the event's account and mode: the payment
+     * belongs to the connection that created it, whatever its status now.
+     */
+    public function forPaymentAttempt(GatewayProvider $provider, string $attemptId, string $accountId, bool $livemode): ?GatewayConnection
+    {
+        if (! Ulid::isValid($attemptId)) {
+            return null;
+        }
+
+        $connectionId = PaymentAttempt::query()->withoutGlobalScopes()->whereKey($attemptId)->value('gateway_connection_id');
+
+        if (! is_string($connectionId)) {
+            return null;
+        }
+
+        return $this->unscoped()
+            ->whereKey($connectionId)
+            ->where('provider', $provider->value)
+            ->where('provider_account_id', $accountId)
+            ->where('livemode', $livemode)
             ->first();
+    }
+
+    /** ADR-0051: whether the platform reaches this account through Connect (any status). */
+    public function accountUsesConnect(GatewayProvider $provider, string $accountId, bool $livemode): bool
+    {
+        return $this->unscoped()
+            ->where('provider', $provider->value)
+            ->where('provider_account_id', $accountId)
+            ->where('livemode', $livemode)
+            ->whereIn('connection_method', array_map(static fn (ConnectionMethod $m): string => $m->value, array_filter(ConnectionMethod::cases(), static fn (ConnectionMethod $m): bool => $m->usesConnect())))
+            ->exists();
     }
 
     /** The api_key connection behind `/webhooks/stripe/direct/{id}`. */

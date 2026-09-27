@@ -26,6 +26,9 @@ final class CheckApiKeyConnectionsJob implements ShouldQueue, TenantAware
     use InteractsWithQueue;
     use Queueable;
 
+    /** Below the queue's retry_after (150 s): two bounded Stripe calls (42 s each) plus the merchant validation (ADR-0051). */
+    public int $timeout = 115;
+
     public int $tries = 3;
 
     public function __construct(public readonly string $connectionId)

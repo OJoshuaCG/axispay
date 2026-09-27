@@ -154,6 +154,7 @@ return [
             'missing_permissions' => 'A la llave restringida le faltan permisos: :details. Edite la llave en Stripe e inténtelo de nuevo.',
             'excessive_permissions_not_confirmed' => 'Esta llave también tiene permisos que no necesitamos (:details). Cree una llave más limitada o confirme abajo que quiere usarla.',
             'account_already_linked' => 'Esta cuenta de Stripe ya está conectada a otra cuenta de la plataforma.',
+            'account_uses_connect' => 'Esta cuenta de Stripe está vinculada a la plataforma mediante Stripe Connect. No puede conectarse también con llaves de API.',
             'key_already_linked' => 'Esta llave ya está en uso. Cree una llave restringida nueva para esta conexión.',
             'different_account' => 'Estas llaves pertenecen a otra cuenta de Stripe. Para cambiar de cuenta, desconecte y vuelva a conectar.',
             'webhook_endpoint_failed' => 'No pudimos crear el webhook en su cuenta de Stripe, así que la conexión no se guardó. Inténtelo de nuevo.',
