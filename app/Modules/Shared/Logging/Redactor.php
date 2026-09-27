@@ -61,7 +61,8 @@ final class Redactor
         // Webhook signing secrets (Stripe and Standard Webhooks).
         '/\bwhsec_[A-Za-z0-9+\/=]+/' => self::MASK,
         // Stripe PaymentIntent / SetupIntent client secrets.
-        '/\b(?:pi|seti)_[A-Za-z0-9]+_secret_[A-Za-z0-9]+/' => self::MASK,
+        // Also inside URLs and query strings (payment_intent_client_secret=...).
+        '/(?<![A-Za-z0-9])(?:pi|seti)_[A-Za-z0-9_]+?_secret_[A-Za-z0-9]+/' => self::MASK,
         // Bearer tokens in free text.
         '/\bBearer\s+[A-Za-z0-9._~+\/=-]+/i' => 'Bearer '.self::MASK,
         // E-mail addresses.

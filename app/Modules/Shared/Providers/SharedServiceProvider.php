@@ -33,9 +33,26 @@ final class SharedServiceProvider extends ServiceProvider
     {
         SchemaMacros::register();
         self::assertHostOnlySessionCookies();
+        self::assertTrustedProxies((string) $this->app->environment());
 
         if ($this->app->runningInConsole()) {
             $this->commands([DoctorCommand::class, MailTestCommand::class, PurgeExpiredCacheCommand::class]);
+        }
+    }
+
+    /**
+     * ADR-0051: production runs behind a reverse proxy (Traefik). Without
+     * TRUSTED_PROXIES every payer would appear with the proxy's IP, so the
+     * per-IP limits of the checkout would pause payments platform-wide.
+     * Refuse to boot in production without it (`*` is reported by the
+     * doctor instead).
+     */
+    public static function assertTrustedProxies(string $environment): void
+    {
+        $proxies = config('trustedproxy.proxies');
+
+        if ($environment === 'production' && (! is_string($proxies) || trim($proxies) === '')) {
+            throw new RuntimeException('TRUSTED_PROXIES must be set in production (the reverse proxy\'s network range): without it every client shares the proxy\'s IP (ADR-0051).');
         }
     }
 

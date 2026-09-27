@@ -208,9 +208,11 @@ final class DoctorCommand extends Command
     {
         $proxies = trim(self::string(config('trustedproxy.proxies')));
 
+        $production = app()->environment('production');
+
         [$status, $detail] = match (true) {
-            $proxies === '' => [app()->environment('local') ? self::OK : self::WARN, 'unset: no proxy is trusted (behind Traefik, HTTPS and client IPs are not detected)'],
-            in_array($proxies, ['*', '**'], true) => [self::WARN, "{$proxies}: trusts every client; only safe if port 8080 is reachable from Traefik alone"],
+            $proxies === '' => [$production ? self::ERROR : (app()->environment('local') ? self::OK : self::WARN), 'unset: no proxy is trusted (behind Traefik, HTTPS and client IPs are not detected; the checkout would rate-limit every payer as one IP)'],
+            in_array($proxies, ['*', '**'], true) => [$production ? self::ERROR : self::WARN, "{$proxies}: trusts every client, who can then fake their IP (checkout rate limits); set Traefik's network range"],
             default => [self::OK, $proxies],
         };
 
