@@ -10,13 +10,16 @@ use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
 use App\Modules\Gateways\Data\ProviderPayment;
+use App\Modules\Gateways\Data\ProviderPaymentFailure;
 use App\Modules\Gateways\Data\ProviderRefund;
 use App\Modules\Gateways\Data\ProviderWebhookEvent;
 use App\Modules\Gateways\Data\RefundRequest;
 use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
+use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
+use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
@@ -41,6 +44,17 @@ final class FakePaymentGateway implements PaymentGateway
 
     /** @var list<string> */
     public array $calls = [];
+
+    /** @var array<string, array<string, mixed>> */
+    private array $payments = [];
+
+    /** @var array<string, string> idempotency key => payment ID */
+    private array $idempotent = [];
+
+    /** @var array<string, Throwable> */
+    private array $nextFailures = [];
+
+    private ProviderPaymentStatus $captureResult = ProviderPaymentStatus::Succeeded;
 
     public static function install(): self
     {
@@ -96,29 +110,198 @@ final class FakePaymentGateway implements PaymentGateway
             : new CheckoutClientConfig('pk_test_fake_platform', $connection->provider_account_id);
     }
 
+    /**
+     * Confirmation tokens of the fake: `ctoken_<scenario>[_suffix]` with
+     * scenario success | decline | funds | threeds | processing | succeed
+     * (authorized AND captured by the gateway at once, like automatic capture).
+     */
     public function inspectPaymentMethod(GatewayConnection $connection, string $confirmationToken): PaymentMethodPreview
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 4');
+        $this->calls[] = 'inspectPaymentMethod:'.$confirmationToken;
+        $this->throwIfFailing('inspectPaymentMethod');
+
+        return new PaymentMethodPreview('MX', 'visa', self::scenario($confirmationToken) === 'decline' ? '0002' : '4242');
     }
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 4');
+        $this->calls[] = 'createOrUpdatePayment:'.$request->idempotencyKey;
+        $this->throwIfFailing('createOrUpdatePayment');
+
+        if (isset($this->idempotent[$request->idempotencyKey])) {
+            return $this->toPayment($this->payments[$this->idempotent[$request->idempotencyKey]]);
+        }
+
+        $id = $request->providerPaymentId ?? 'pi_fake_'.(count($this->payments) + 1).'_'.bin2hex(random_bytes(4));
+        $this->payments[$id] = [
+            ...($this->payments[$id] ?? ['status' => ProviderPaymentStatus::RequiresPaymentMethod, 'failure' => null]),
+            'id' => $id,
+            'amount' => $request->amountMinor,
+            'currency' => $request->currency,
+            'metadata' => $request->metadata,
+            'connection' => $connection->id,
+        ];
+        $this->idempotent[$request->idempotencyKey] = $id;
+
+        return $this->toPayment($this->payments[$id]);
     }
 
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey): ProviderPayment
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 4');
+        $this->calls[] = 'confirmPayment:'.$providerPaymentId;
+        $this->throwIfFailing('confirmPayment');
+
+        if (isset($this->idempotent[$idempotencyKey])) {
+            return $this->toPayment($this->payments[$providerPaymentId]);
+        }
+
+        $this->idempotent[$idempotencyKey] = $providerPaymentId;
+        $payment = &$this->payments[$providerPaymentId];
+        $payment['failure'] = null;
+        $scenario = self::scenario($confirmationToken);
+        $payment['status'] = match ($scenario) {
+            'threeds' => ProviderPaymentStatus::RequiresAction,
+            'processing' => ProviderPaymentStatus::Processing,
+            'decline', 'funds' => ProviderPaymentStatus::RequiresPaymentMethod,
+            'succeed' => ProviderPaymentStatus::Succeeded,
+            default => ProviderPaymentStatus::RequiresCapture,
+        };
+
+        if ($scenario === 'decline' || $scenario === 'funds') {
+            $payment['failure'] = new ProviderPaymentFailure('ch_fake_'.bin2hex(random_bytes(4)), 'card_declined', $scenario === 'funds' ? 'insufficient_funds' : 'generic_decline', 'Your card was declined.');
+        }
+
+        $result = $this->toPayment($payment);
+        unset($payment);
+
+        return $result;
     }
 
     public function retrievePayment(GatewayConnection $connection, string $providerPaymentId): ProviderPayment
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 4');
+        $this->calls[] = 'retrievePayment:'.$providerPaymentId;
+        $this->throwIfFailing('retrievePayment');
+
+        return $this->toPayment($this->payments[$providerPaymentId] ?? throw new LogicException("FakePaymentGateway has no payment {$providerPaymentId}."));
     }
 
-    public function cancelPayment(GatewayConnection $connection, string $providerPaymentId): ProviderPayment
+    public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 4');
+        $this->calls[] = 'capturePayment:'.$providerPaymentId;
+        $this->throwIfFailing('capturePayment');
+
+        if (! isset($this->idempotent[$idempotencyKey])) {
+            $this->idempotent[$idempotencyKey] = $providerPaymentId;
+
+            if ($this->payments[$providerPaymentId]['status'] !== ProviderPaymentStatus::RequiresCapture) {
+                throw new GatewayRequestException('Fake: not capturable.', 'payment_intent_unexpected_state', null, 400);
+            }
+
+            $this->payments[$providerPaymentId]['status'] = $this->captureResult;
+        }
+
+        return $this->toPayment($this->payments[$providerPaymentId]);
+    }
+
+    public function cancelPayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
+    {
+        $this->calls[] = 'cancelPayment:'.$providerPaymentId;
+        $this->throwIfFailing('cancelPayment');
+
+        $status = $this->payments[$providerPaymentId]['status'];
+
+        if ($status !== ProviderPaymentStatus::Succeeded && $status !== ProviderPaymentStatus::Processing) {
+            $this->payments[$providerPaymentId]['status'] = ProviderPaymentStatus::Canceled;
+        }
+
+        return $this->toPayment($this->payments[$providerPaymentId]);
+    }
+
+    /** Test seam: the gateway's payment changes behind our back (webhook tests). */
+    public function setPaymentStatus(string $providerPaymentId, ProviderPaymentStatus $status, ?ProviderPaymentFailure $failure = null): self
+    {
+        $this->payments[$providerPaymentId]['status'] = $status;
+        $this->payments[$providerPaymentId]['failure'] = $failure;
+
+        return $this;
+    }
+
+    /** Test seam: a payment created outside the checkout (reconciliation, foreign objects). */
+    public function seedPayment(string $providerPaymentId, ProviderPaymentStatus $status, int $amount, string $currency, ?string $attemptId): self
+    {
+        $this->payments[$providerPaymentId] = ['id' => $providerPaymentId, 'status' => $status, 'failure' => null, 'amount' => $amount, 'currency' => $currency, 'metadata' => $attemptId !== null ? ['axispay_attempt_id' => $attemptId] : [], 'connection' => null];
+
+        return $this;
+    }
+
+    /** Test seam: the next call of `$method` throws. */
+    public function failNext(string $method, Throwable $exception): self
+    {
+        $this->nextFailures[$method] = $exception;
+
+        return $this;
+    }
+
+    /** Test seam: what a capture turns the payment into (succeeded by default). */
+    public function capturesAs(ProviderPaymentStatus $status): self
+    {
+        $this->captureResult = $status;
+
+        return $this;
+    }
+
+    public function paymentStatus(string $providerPaymentId): ?ProviderPaymentStatus
+    {
+        $status = $this->payments[$providerPaymentId]['status'] ?? null;
+
+        return $status instanceof ProviderPaymentStatus ? $status : null;
+    }
+
+    /** @return list<string> */
+    public function callsTo(string $method): array
+    {
+        return array_values(array_filter($this->calls, static fn (string $call): bool => str_starts_with($call, $method.':')));
+    }
+
+    private function throwIfFailing(string $method): void
+    {
+        if (isset($this->nextFailures[$method])) {
+            $exception = $this->nextFailures[$method];
+            unset($this->nextFailures[$method]);
+
+            throw $exception;
+        }
+    }
+
+    private static function scenario(string $token): string
+    {
+        return preg_match('/^ctoken_(?:sandbox_)?(success|decline|funds|threeds|processing|succeed)/', $token, $match) === 1 ? $match[1] : 'success';
+    }
+
+    /**
+     * @param  array<string, mixed>  $payment
+     */
+    private function toPayment(array $payment): ProviderPayment
+    {
+        $status = $payment['status'];
+        assert($status instanceof ProviderPaymentStatus);
+        $metadata = is_array($payment['metadata'] ?? null) ? $payment['metadata'] : [];
+        $failure = $payment['failure'] ?? null;
+        $id = is_string($payment['id'] ?? null) ? $payment['id'] : '';
+        $amount = is_int($payment['amount'] ?? null) ? $payment['amount'] : 0;
+        $currency = is_string($payment['currency'] ?? null) ? $payment['currency'] : 'MXN';
+
+        return new ProviderPayment(
+            providerPaymentId: $id,
+            status: $status,
+            amountMinor: $amount,
+            currency: $currency,
+            amountCapturableMinor: $status === ProviderPaymentStatus::RequiresCapture ? $amount : 0,
+            clientSecret: $status === ProviderPaymentStatus::RequiresAction ? $id.'_secret_fake' : null,
+            cardPreview: new PaymentMethodPreview('MX', 'visa', '4242'),
+            failure: $status === ProviderPaymentStatus::RequiresPaymentMethod && $failure instanceof ProviderPaymentFailure ? $failure : null,
+            attemptReference: isset($metadata['axispay_attempt_id']) && is_string($metadata['axispay_attempt_id']) ? $metadata['axispay_attempt_id'] : null,
+        );
     }
 
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund
@@ -136,6 +319,8 @@ final class FakePaymentGateway implements PaymentGateway
         return match ($providerEventType) {
             'account.updated' => ProviderEventKind::AccountUpdated,
             'account.application.deauthorized' => $direct ? ProviderEventKind::Unhandled : ProviderEventKind::AccountDeauthorized,
+            'payment_intent.amount_capturable_updated', 'payment_intent.canceled', 'payment_intent.payment_failed',
+            'payment_intent.processing', 'payment_intent.requires_action', 'payment_intent.succeeded' => ProviderEventKind::PaymentUpdated,
             default => ProviderEventKind::Unhandled,
         };
     }
@@ -166,6 +351,21 @@ final class FakePaymentGateway implements PaymentGateway
             ? $source->connection->provider_account_id
             : (is_string($event['account'] ?? null) ? $event['account'] : null);
 
-        return new ProviderWebhookEvent($event['id'], $event['type'], $this->eventKind($event['type'], $source->isDirect()), $account, ($event['livemode'] ?? false) === true, null, $rawBody, $this->reduceWebhookPayload($rawBody));
+        $data = is_array($event['data'] ?? null) ? $event['data'] : [];
+        $object = is_array($data['object'] ?? null) ? $data['object'] : [];
+        $metadata = is_array($object['metadata'] ?? null) ? $object['metadata'] : [];
+        $reference = $metadata['axispay_attempt_id'] ?? null;
+
+        return new ProviderWebhookEvent(
+            $event['id'],
+            $event['type'],
+            $this->eventKind($event['type'], $source->isDirect()),
+            $account,
+            ($event['livemode'] ?? false) === true,
+            is_string($object['id'] ?? null) ? $object['id'] : null,
+            $rawBody,
+            $this->reduceWebhookPayload($rawBody),
+            is_string($reference) ? $reference : null,
+        );
     }
 }

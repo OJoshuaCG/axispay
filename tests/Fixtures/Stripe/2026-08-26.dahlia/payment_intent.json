@@ -1,0 +1,33 @@
+{
+  "id": "{{id}}",
+  "object": "payment_intent",
+  "amount": 150000,
+  "amount_capturable": 0,
+  "amount_received": 0,
+  "capture_method": "manual",
+  "client_secret": "{{id}}_secret_FakeSecret",
+  "confirmation_method": "automatic",
+  "created": 1790000200,
+  "currency": "usd",
+  "description": "Order #A-1029",
+  "last_payment_error": null,
+  "latest_charge": {
+    "id": "ch_FakeCharge0001",
+    "object": "charge",
+    "payment_method_details": {
+      "type": "card",
+      "card": { "brand": "visa", "country": "MX", "last4": "4242", "capture_before": 1790600200 }
+    }
+  },
+  "livemode": false,
+  "metadata": { "axispay_attempt_id": "{{attempt}}", "axispay_link_id": "{{link}}" },
+  "next_action": null,
+  "payment_method": {
+    "id": "pm_FakeMethod0001",
+    "object": "payment_method",
+    "type": "card",
+    "card": { "brand": "visa", "country": "MX", "last4": "4242" }
+  },
+  "payment_method_types": ["card"],
+  "status": "{{status}}"
+}

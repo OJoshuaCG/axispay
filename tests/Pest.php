@@ -46,7 +46,7 @@ pest()->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
         seed(PermissionCatalogSeeder::class);
     })
-    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console', 'Feature/Gateways', 'Feature/ApiKeys', 'Feature/PaymentLinks');
+    ->in('Feature/Tenancy', 'Feature/Identity', 'Feature/Access', 'Feature/Audit', 'Feature/PlatformAdmin', 'Feature/Panels', 'Feature/Isolation', 'Feature/Console', 'Feature/Gateways', 'Feature/ApiKeys', 'Feature/PaymentLinks', 'Feature/Checkout', 'Feature/Payments');
 
 /*
 | Gateway tests (Phase 2): the platform test key is a dummy and Stripe's HTTP
@@ -129,6 +129,14 @@ function submitAction(Testable $component, string $name, array $data, bool $moun
         calls: [['method' => 'callMountedAction', 'params' => [[]], 'path' => '']],
         updates: $updates,
     );
+}
+
+/**
+ * Absolute URL on the public checkout host (plan 11.1).
+ */
+function payUrl(string $path = '/'): string
+{
+    return 'http://'.config()->string('axispay.surfaces.pay').'/'.ltrim($path, '/');
 }
 
 /** An artisan command with output mocking (assertions available). */
