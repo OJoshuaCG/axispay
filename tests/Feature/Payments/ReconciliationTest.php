@@ -18,9 +18,11 @@ use App\Modules\Payments\Jobs\ReconcilePaymentAttemptsJob;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\Exceptions\MissingTenantContextException;
 use App\Modules\Tenancy\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\ApiTestHelpers;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 
 use function Pest\Laravel\travel;
@@ -31,7 +33,7 @@ use function Pest\Laravel\travel;
  * Plan 9.1: a link that expires or is canceled cancels its waiting payment.
  * Plan 26.2 case 17 for the new jobs.
  */
-it('voids an authorization left uncaptured past the threshold', function (): void {
+it('voids an authorization left uncaptured past the capture window', function (): void {
     [, $link, $fake] = Checkout::scenario();
     $fake->capturesAs(ProviderPaymentStatus::RequiresCapture); // the capture "never happened"
     Checkout::pay($link);
@@ -158,4 +160,38 @@ it('is scheduled every 15 minutes on one server without overlapping', function (
         ->and($events[0]->expression)->toBe('*/15 * * * *')
         ->and($events[0]->withoutOverlapping)->toBeTrue()
         ->and($events[0]->onOneServer)->toBeTrue();
+});
+
+it('visits the oldest-visited payments under way first, within the batch, failures included (B2)', function (): void {
+    [$tenant, $link, $fake] = Checkout::scenario();
+    config(['axispay.payments.reconcile_batch_size' => 3]);
+    $connection = Checkout::connectionOf($link);
+    $stale = now()->subHour();
+    $make = static function (PaymentAttemptStatus $status, ?CarbonImmutable $visited) use ($tenant, $connection, $stale): PaymentAttempt {
+        $owner = ApiTestHelpers::link($tenant, false);
+
+        return Checkout::inTenant($owner, static fn (): PaymentAttempt => PaymentAttempt::factory()->inStatus($status)->createOne([
+            'payment_link_id' => $owner->id,
+            'gateway_connection_id' => $connection->id,
+            'reconciled_at' => $visited,
+            'updated_at' => $stale,
+        ]));
+    };
+
+    // Rows visited recently whose reads fail (the gateway does not know them).
+    $visited = CarbonImmutable::now()->subMinutes(2);
+    $old = array_map(static fn (): PaymentAttempt => $make(PaymentAttemptStatus::RequiresCapture, $visited), range(1, 5));
+    $new = $make(PaymentAttemptStatus::RequiresAction, null);
+    $fake->seedPayment((string) $new->provider_payment_id, ProviderPaymentStatus::RequiresAction, $new->amount_minor, $new->currency->value, $new->id);
+    $waiting = $make(PaymentAttemptStatus::RequiresPaymentMethod, null);
+
+    Checkout::inTenant($link, static fn () => app()->call([new ReconcilePaymentAttemptsJob, 'handle']));
+
+    $fresh = static fn (PaymentAttempt $attempt): PaymentAttempt => Checkout::inTenant($link, static fn (): PaymentAttempt => PaymentAttempt::query()->findOrFail($attempt->id));
+    $revisited = array_filter($old, static fn (PaymentAttempt $attempt): bool => $fresh($attempt)->reconciled_at?->greaterThan($visited) === true);
+
+    expect($fresh($new)->reconciled_at)->not->toBeNull()
+        ->and($fake->callsTo('retrievePayment'))->toContain('retrievePayment:'.$new->provider_payment_id)
+        ->and($revisited)->toHaveCount(2)
+        ->and($fresh($waiting)->reconciled_at)->toBeNull();
 });

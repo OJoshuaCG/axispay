@@ -158,7 +158,7 @@ final class FakePaymentGateway implements PaymentGateway
 
         $id = $request->providerPaymentId ?? 'pi_fake_'.(count($this->payments) + 1).'_'.bin2hex(random_bytes(4));
         $this->payments[$id] = [
-            ...($this->payments[$id] ?? ['status' => ProviderPaymentStatus::RequiresPaymentMethod, 'failure' => null]),
+            ...($this->payments[$id] ?? ['status' => ProviderPaymentStatus::RequiresPaymentMethod, 'failure' => null, 'created' => now()->getTimestamp()]),
             'id' => $id,
             'amount' => $request->amountMinor,
             'currency' => $request->currency,
@@ -260,9 +260,9 @@ final class FakePaymentGateway implements PaymentGateway
     }
 
     /** Test seam: a payment created outside the checkout (reconciliation, foreign objects). */
-    public function seedPayment(string $providerPaymentId, ProviderPaymentStatus $status, int $amount, string $currency, ?string $attemptId): self
+    public function seedPayment(string $providerPaymentId, ProviderPaymentStatus $status, int $amount, string $currency, ?string $attemptId, ?int $createdAt = null): self
     {
-        $this->payments[$providerPaymentId] = ['id' => $providerPaymentId, 'status' => $status, 'failure' => null, 'amount' => $amount, 'currency' => $currency, 'metadata' => $attemptId !== null ? ['axispay_attempt_id' => $attemptId] : [], 'connection' => null];
+        $this->payments[$providerPaymentId] = ['id' => $providerPaymentId, 'status' => $status, 'failure' => null, 'amount' => $amount, 'currency' => $currency, 'metadata' => $attemptId !== null ? ['axispay_attempt_id' => $attemptId] : [], 'connection' => null, 'created' => $createdAt ?? now()->getTimestamp()];
 
         return $this;
     }
@@ -368,6 +368,7 @@ final class FakePaymentGateway implements PaymentGateway
             cardPreview: new PaymentMethodPreview('MX', 'visa', '4242'),
             failure: $status === ProviderPaymentStatus::RequiresPaymentMethod && $failure instanceof ProviderPaymentFailure ? $failure : null,
             attemptReference: isset($metadata['axispay_attempt_id']) && is_string($metadata['axispay_attempt_id']) ? $metadata['axispay_attempt_id'] : null,
+            createdAt: is_int($payment['created'] ?? null) ? $payment['created'] : null,
         );
     }
 

@@ -228,6 +228,18 @@ it('refuses a key or an account already linked to another tenant', function (): 
     expectRejection(fn () => app(ConnectWithApiKey::class)->handle($owner, apiKeyData(GatewayTestHelpers::restrictedKey(suffix: 'Zz99'))), ApiKeyRejection::AccountAlreadyLinked);
 });
 
+it('refuses api keys for an account the platform reaches through Connect, even disconnected (ADR-0051)', function (): void {
+    $owner = apiKeyOwner();
+    apiKeyScenario();
+    GatewayTestHelpers::connection(tenantOf($owner), state: static fn ($factory) => $factory->disconnected()->state(['provider_account_id' => 'acct_Merchant0001']));
+
+    $rejection = thrownBy(ApiKeyValidationException::class, fn () => app(ConnectWithApiKey::class)->handle($owner, apiKeyData()))->rejection;
+
+    expect($rejection)->toBe(ApiKeyRejection::AccountUsesConnect)
+        ->and(GatewayConnection::query()->where('connection_method', ConnectionMethod::ApiKey->value)->count())->toBe(0)
+        ->and(AuditLog::query()->where('action', AuditAction::GatewayCredentialsRejected->value)->count())->toBe(1);
+});
+
 it('keeps nothing when the webhook endpoint cannot be created', function (): void {
     $owner = apiKeyOwner();
     apiKeyScenario();
