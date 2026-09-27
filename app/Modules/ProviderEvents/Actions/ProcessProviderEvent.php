@@ -10,6 +10,9 @@ use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
+use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Enums\SyncReason;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
 use App\Modules\Shared\Logging\Redactor;
@@ -30,8 +33,11 @@ use Throwable;
  *  - account updated: SyncGatewayConnection (re-fetch, status transition);
  *  - account deauthorized (Connect): confirmed by re-reading the account;
  *    only when the gateway now denies access is the connection disconnected;
- *  - anything else: `ignored` (payments, refunds and disputes arrive in
- *    Phases 4 and 7).
+ *  - payment updated (Phase 4): the attempt named by the payment's
+ *    metadata is re-read from the gateway and applied (SyncPaymentAttempt);
+ *    an authorized payment is completed (a payer who closed the tab after 3D
+ *    Secure, ADR-0050). No attempt → `ignored`, `foreign_object` (14.4);
+ *  - anything else: `ignored` (refunds and disputes arrive in Phase 7).
  */
 final readonly class ProcessProviderEvent
 {
@@ -40,6 +46,7 @@ final readonly class ProcessProviderEvent
         private SyncGatewayConnection $sync,
         private DisconnectGatewayConnection $disconnect,
         private TenantContext $context,
+        private SyncPaymentAttempt $syncPayment,
     ) {}
 
     public function handle(string $providerEventId): void
@@ -55,14 +62,14 @@ final readonly class ProcessProviderEvent
             : null;
 
         try {
-            $outcome = $connection === null ? ProviderEventStatus::Ignored : $this->apply($event, $connection);
+            [$outcome, $reason] = $connection === null ? [ProviderEventStatus::Ignored, null] : $this->apply($event, $connection);
         } catch (Throwable $e) {
             $this->recordAttempt($event, $e);
 
             throw $e;
         }
 
-        $this->finish($event, $outcome);
+        $this->finish($event, $outcome, $reason);
     }
 
     public function markFailed(string $providerEventId, string $tenantId, bool $livemode, ?Throwable $exception): void
@@ -84,13 +91,33 @@ final readonly class ProcessProviderEvent
         });
     }
 
-    private function apply(ProviderEvent $event, GatewayConnection $connection): ProviderEventStatus
+    /**
+     * @return array{0: ProviderEventStatus, 1: string|null} outcome and the reason of an `ignored`
+     */
+    private function apply(ProviderEvent $event, GatewayConnection $connection): array
     {
         return match ($this->kindOf($event, $connection)) {
-            ProviderEventKind::AccountUpdated => $this->accountUpdated($connection),
-            ProviderEventKind::AccountDeauthorized => $this->accountDeauthorized($connection),
-            ProviderEventKind::Unhandled => ProviderEventStatus::Ignored,
+            ProviderEventKind::AccountUpdated => [$this->accountUpdated($connection), null],
+            ProviderEventKind::AccountDeauthorized => [$this->accountDeauthorized($connection), null],
+            ProviderEventKind::PaymentUpdated => $this->paymentUpdated($event),
+            ProviderEventKind::Unhandled => [ProviderEventStatus::Ignored, null],
         };
+    }
+
+    /**
+     * @return array{0: ProviderEventStatus, 1: string|null}
+     */
+    private function paymentUpdated(ProviderEvent $event): array
+    {
+        $attempt = $event->payment_attempt_id !== null ? PaymentAttempt::query()->find($event->payment_attempt_id) : null;
+
+        if ($attempt === null || $event->object_id === null) {
+            return [ProviderEventStatus::Ignored, ProviderEventStatus::FOREIGN_OBJECT];
+        }
+
+        $this->syncPayment->handle($attempt->id, SyncReason::Webhook, providerPaymentId: $event->object_id);
+
+        return [ProviderEventStatus::Processed, null];
     }
 
     private function accountUpdated(GatewayConnection $connection): ProviderEventStatus
@@ -133,9 +160,9 @@ final readonly class ProcessProviderEvent
         return $this->gateways->for($event->provider)->eventKind($event->type, direct: ! $connection->connection_method->usesConnect());
     }
 
-    private function finish(ProviderEvent $event, ProviderEventStatus $outcome): void
+    private function finish(ProviderEvent $event, ProviderEventStatus $outcome, ?string $reason): void
     {
-        DB::transaction(static function () use ($event, $outcome): void {
+        DB::transaction(static function () use ($event, $outcome, $reason): void {
             $locked = ProviderEvent::query()->lockForUpdate()->find($event->id);
 
             if ($locked === null || $locked->status !== ProviderEventStatus::Received) {
@@ -146,7 +173,7 @@ final readonly class ProcessProviderEvent
                 'status' => $outcome,
                 'attempts' => $locked->attempts + 1,
                 'processed_at' => now(),
-                'last_error' => null,
+                'last_error' => $reason,
             ])->save();
         });
     }

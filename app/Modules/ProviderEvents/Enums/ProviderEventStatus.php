@@ -14,4 +14,7 @@ enum ProviderEventStatus: string
     case Ignored = 'ignored';
     case Failed = 'failed';
     case Unroutable = 'unroutable';
+
+    /** `last_error` of a payment event the platform did not originate (plan 14.4). */
+    public const string FOREIGN_OBJECT = 'foreign_object';
 }

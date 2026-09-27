@@ -26,6 +26,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $provider_account_id
  * @property bool $livemode
  * @property string $type
+ * @property string|null $object_id
+ * @property string|null $payment_attempt_id
  * @property string $payload
  * @property string|null $tenant_id
  * @property string|null $gateway_connection_id

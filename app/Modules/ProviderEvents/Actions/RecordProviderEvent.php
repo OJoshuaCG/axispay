@@ -11,6 +11,7 @@ use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
+use App\Modules\Shared\Ids\Ulid;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +29,12 @@ use Illuminate\Support\Facades\Log;
  * its reduced payload (no object data, so no payer data of sales the
  * platform never made). Unroutable events keep the reduced payload too.
  * Old rows are purged by `axispay:provider-events:purge`.
+ *
+ * Plan 14.4 (Phase 4): a payment event about a payment the platform did not
+ * create (no attempt ID in its metadata, frequent on api_key and oauth
+ * accounts, which also carry the merchant's other sales) is stored as
+ * `ignored` with reason `foreign_object` and the reduced payload, before any
+ * call to the gateway.
  */
 final readonly class RecordProviderEvent
 {
@@ -44,10 +51,13 @@ final readonly class RecordProviderEvent
             'provider_account_id' => $event->providerAccountId,
             'livemode' => $event->livemode,
             'type' => $event->type,
+            'object_id' => $event->objectId,
+            'payment_attempt_id' => $event->attemptReference !== null && Ulid::isValid($event->attemptReference) ? $event->attemptReference : null,
             'payload' => $event->storedPayload(routed: $connection !== null),
             'received_at' => now(),
         ];
-        $handled = $event->kind !== ProviderEventKind::Unhandled;
+        $foreign = $event->isForeignPayment();
+        $handled = $event->kind !== ProviderEventKind::Unhandled && ! $foreign;
 
         try {
             if ($connection === null) {
@@ -56,13 +66,14 @@ final readonly class RecordProviderEvent
                 return true;
             }
 
-            $stored = $this->context->runAsTenant($connection->tenant_id, $event->livemode, static function () use ($attributes, $connection, $handled): ProviderEvent {
+            $stored = $this->context->runAsTenant($connection->tenant_id, $event->livemode, static function () use ($attributes, $connection, $handled, $foreign): ProviderEvent {
                 $row = new ProviderEvent;
                 $row->forceFill([
                     ...$attributes,
                     'gateway_connection_id' => $connection->id,
                     'status' => $handled ? ProviderEventStatus::Received : ProviderEventStatus::Ignored,
                     'processed_at' => $handled ? null : now(),
+                    'last_error' => $foreign ? ProviderEventStatus::FOREIGN_OBJECT : null,
                 ])->save();
 
                 return $row;
