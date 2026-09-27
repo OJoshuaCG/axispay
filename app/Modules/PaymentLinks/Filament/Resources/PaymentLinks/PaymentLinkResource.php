@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\PaymentLinks\Filament\Resources\PaymentLinks;
 
+use App\Modules\Checkout\Actions\UnblockCheckout;
 use App\Modules\Identity\Filament\Concerns\TenantPanel;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
@@ -15,6 +16,8 @@ use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ViewPaymentLi
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\CancelPaymentLinkInputParser;
 use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
+use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Shared\Http\Errors\ApiException;
 use App\Modules\Shared\Money\CurrencyCode;
 use App\Modules\Shared\Money\MoneyDisplay;
@@ -26,6 +29,7 @@ use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
@@ -43,6 +47,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 
@@ -165,6 +170,12 @@ final class PaymentLinkResource extends Resource
     public static function infolist(Schema $schema): Schema
     {
         return $schema->components([
+            Callout::make(static fn (PaymentLink $record): string => __('payments.checkout_block.callout', ['date' => $record->checkout_blocked_until !== null ? self::panelDate($record->checkout_blocked_until) : '']))
+                ->description(__('payments.checkout_block.callout_help'))
+                ->icon(Heroicon::OutlinedShieldExclamation)
+                ->color('warning')
+                ->visible(static fn (PaymentLink $record): bool => $record->isCheckoutBlocked())
+                ->columnSpanFull(),
             Callout::make(static fn (PaymentLink $record): string => self::terminalHeading($record))
                 ->description(static fn (PaymentLink $record): ?string => $record->status === PaymentLinkStatus::Canceled ? $record->cancel_reason : null)
                 ->icon(static fn (PaymentLink $record): Heroicon => $record->status->icon())
@@ -202,6 +213,7 @@ final class PaymentLinkResource extends Resource
                         TextEntry::make('created_at')->label(__('payment_links.fields.created_at'))->dateTime(),
                     ]),
                 ]),
+            self::attemptsSection(),
             Section::make(__('payment_links.sections.details'))
                 ->collapsible()
                 ->collapsed()
@@ -261,6 +273,96 @@ final class PaymentLinkResource extends Resource
                     ]),
                 ]),
         ]);
+    }
+
+    /**
+     * Payment attempts of the link (Phase 4, ADR-0051), read-only, for users
+     * with `payments:read`. The Stripe payment ID is shown here for support
+     * only; it never leaves the panel (ADR-019).
+     */
+    private static function attemptsSection(): Section
+    {
+        return Section::make(__('payments.attempts.section'))
+            ->columnSpanFull()
+            ->visible(static fn (): bool => Gate::allows('viewAny', PaymentAttempt::class))
+            ->schema([
+                TextEntry::make('attempts_empty')
+                    ->hiddenLabel()
+                    ->state(__('payments.attempts.empty'))
+                    ->visible(static fn (PaymentLink $record): bool => ! $record->attempts()->exists()),
+                RepeatableEntry::make('attempts')
+                    ->hiddenLabel()
+                    ->visible(static fn (PaymentLink $record): bool => $record->attempts()->exists())
+                    ->schema([
+                        Grid::make(['default' => 1, 'sm' => 2])->schema([
+                            TextEntry::make('status')
+                                ->label(__('payments.attempts.status'))
+                                ->badge()
+                                ->formatStateUsing(static fn (PaymentAttemptStatus $state): string => $state->label())
+                                ->color(static fn (PaymentAttemptStatus $state): string => $state->color())
+                                ->icon(static fn (PaymentAttemptStatus $state): Heroicon => $state->icon()),
+                            TextEntry::make('amount_minor')
+                                ->label(__('payments.attempts.amount'))
+                                ->formatStateUsing(static fn (PaymentAttempt $record): string => MoneyDisplay::format($record->money()))
+                                ->fontFamily(FontFamily::Mono),
+                            TextEntry::make('card')
+                                ->label(__('payments.attempts.card'))
+                                ->state(static fn (PaymentAttempt $record): ?string => $record->card_last4 !== null ? self::cardLine($record) : null)
+                                ->placeholder('—'),
+                            TextEntry::make('card_country')->label(__('payments.attempts.card_country'))->placeholder('—'),
+                            TextEntry::make('failure_count')->label(__('payments.attempts.failures')),
+                            TextEntry::make('last_decline_code')
+                                ->label(__('payments.attempts.last_decline'))
+                                ->state(static fn (PaymentAttempt $record): ?string => $record->last_decline_code ?? $record->last_failure_code)
+                                ->fontFamily(FontFamily::Mono)
+                                ->placeholder('—'),
+                            TextEntry::make('late_payment')
+                                ->label(__('payments.attempts.late_payment'))
+                                ->state(static fn (PaymentAttempt $record): string => __('payments.attempts.late_payment_yes'))
+                                ->visible(static fn (PaymentAttempt $record): bool => $record->late_payment),
+                            TextEntry::make('public_id')
+                                ->label(__('payments.attempts.id'))
+                                ->state(static fn (PaymentAttempt $record): string => $record->prefixedId())
+                                ->fontFamily(FontFamily::Mono)
+                                ->extraAttributes(['class' => 'break-all']),
+                            TextEntry::make('provider_payment_id')
+                                ->label(__('payments.attempts.provider_payment_id'))
+                                ->fontFamily(FontFamily::Mono)
+                                ->extraAttributes(['class' => 'break-all'])
+                                ->placeholder('—'),
+                            TextEntry::make('created_at')->label(__('payments.attempts.created_at'))->dateTime(),
+                            TextEntry::make('succeeded_at')->label(__('payments.attempts.succeeded_at'))->dateTime()
+                                ->visible(static fn (PaymentAttempt $record): bool => $record->succeeded_at !== null),
+                        ]),
+                    ]),
+            ]);
+    }
+
+    /** `Visa •••• 4242` */
+    private static function cardLine(PaymentAttempt $record): string
+    {
+        $line = __('payments.attempts.card_value', ['brand' => ucfirst((string) $record->card_brand), 'last4' => (string) $record->card_last4]);
+
+        return is_string($line) ? $line : (string) $record->card_last4;
+    }
+
+    /** Header action of the detail: lifts the card-testing block (plan 11.7 rule 4). */
+    public static function unblockCheckoutAction(): Action
+    {
+        return Action::make('unblockCheckout')
+            ->label(__('payments.checkout_block.unblock'))
+            ->icon(Heroicon::OutlinedLockOpen)
+            ->authorize('unblockCheckout')
+            ->visible(static fn (PaymentLink $record): bool => $record->isCheckoutBlocked())
+            ->requiresConfirmation()
+            ->modalHeading(__('payments.checkout_block.unblock_heading'))
+            ->modalDescription(__('payments.checkout_block.unblock_help'))
+            ->modalSubmitActionLabel(__('payments.checkout_block.unblock'))
+            ->action(static function (PaymentLink $record): void {
+                app(UnblockCheckout::class)->handleForUser(TenantPanel::user(), $record);
+
+                Notification::make()->success()->title(__('payments.checkout_block.unblocked'))->send();
+            });
     }
 
     public static function getPages(): array

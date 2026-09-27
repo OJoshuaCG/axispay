@@ -43,6 +43,7 @@ final class ViewPaymentLink extends ViewRecord
     {
         return [
             PaymentLinkResource::copyLinkAction(),
+            PaymentLinkResource::unblockCheckoutAction(),
             PaymentLinkResource::cancelAction(),
         ];
     }

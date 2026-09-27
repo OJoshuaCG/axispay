@@ -22,4 +22,43 @@ return [
         'unknown' => 'Unknown status',
     ],
 
+    // Payment attempts (plan 9.2, ADR-0050, ADR-0051), tenant panel.
+    'attempt_status' => [
+        'requires_payment_method' => 'Waiting for a card',
+        'requires_confirmation' => 'Waiting for confirmation',
+        'requires_action' => 'Bank verification',
+        'requires_capture' => 'Authorized, not captured',
+        'processing' => 'Processing',
+        'succeeded' => 'Succeeded',
+        'failed' => 'Failed',
+        'canceled' => 'Canceled',
+    ],
+
+    'attempts' => [
+        'section' => 'Payment attempts',
+        'empty' => 'Nobody has tried to pay this link yet.',
+        'id' => 'Payment',
+        'status' => 'Status',
+        'amount' => 'Amount',
+        'card' => 'Card',
+        'card_value' => ':brand •••• :last4',
+        'card_country' => 'Card country',
+        'failures' => 'Declines',
+        'last_decline' => 'Last decline',
+        'late_payment' => 'Paid after the link closed',
+        'late_payment_yes' => 'Yes',
+        'provider_payment_id' => 'Stripe payment',
+        'created_at' => 'Started',
+        'succeeded_at' => 'Paid',
+    ],
+
+    'checkout_block' => [
+        'callout' => 'Payments paused for possible card testing until :date.',
+        'callout_help' => 'The link received many declined cards in a short time. Unblock it only if you recognize the attempts.',
+        'unblock' => 'Unblock payments',
+        'unblock_heading' => 'Unblock this link?',
+        'unblock_help' => 'Payers will be able to try again right away. A security check stays on after the next decline.',
+        'unblocked' => 'Payments unblocked.',
+    ],
+
 ];
