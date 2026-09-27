@@ -40,7 +40,7 @@ New rules:
 
 - **Reject or `fail_closed` voids the authorization.** No money is taken and no refund is needed. The payer's bank may show the authorization as pending for a few days until it expires or is released; the payment page says so in plain words.
 - **No automatic refund when the final webhook fails.** Delivery failures are usually temporary and are retried for about 27 hours. The merchant sees failed deliveries in the panel and can refund a payment from the panel or the API (Phase 7).
-- **Authorization and capture happen in the same payer session**, seconds apart. An authorization that is not captured (for example, the process stops between steps 3 and 5) is voided by the reconciliation job; it never stays open until Stripe's own expiry.
+- **Authorization and capture happen in the same payer session**, seconds apart. **An authorization may only be captured within the capture window: 15 minutes (configurable) from the moment it was authorized.** Past the window, whoever sees it next (the checkout, a Stripe event, the reconciliation) voids it instead of capturing it, and the merchant is no longer asked. The only exception is a payment Stripe already reports as succeeded: the payment wins. An authorization therefore never stays open until Stripe's own expiry, and a late event never charges a payer who was long gone.
 - The only payment method of the MVP is the card (ADR-018), and cards support separate authorization and capture.
 
 ## Incoming Stripe webhooks stay mandatory

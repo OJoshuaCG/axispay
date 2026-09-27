@@ -335,7 +335,7 @@ Worker settings:
 | Variable | Default | Description |
 |---|---|---|
 | `QUEUE_NAMES` | `critical,default,low` | Queues in priority order |
-| `QUEUE_TIMEOUT` | `60` | Seconds per job before it is killed. Keep it below the database queue's `retry_after` (90). |
+| `QUEUE_TIMEOUT` | `120` | Seconds per job before it is killed. Keep it below the queue's `retry_after` (150): a job still running when `retry_after` passes is handed to a second worker. The payment and gateway-event jobs stop themselves at 115 s. |
 | `QUEUE_TRIES` | `3` | Attempts per job |
 | `QUEUE_SLEEP` | `3` | Seconds to sleep when the queue is empty |
 | `QUEUE_MEMORY` | `192` | MB. Above this the worker exits, and Swarm starts a fresh one. |
@@ -354,7 +354,7 @@ Worker settings:
   For `scheduler`, use `"Order": "stop-first"`.
 
 - **Restart Policy:** `{"Condition": "any", "Delay": 5000000000}`.
-- **Stop grace period:** 90 seconds for the workers, which is more than `QUEUE_TIMEOUT`, so a running job can finish on SIGTERM. The Dokploy v0.30 source has a `stopGracePeriodSwarm` setting (nanoseconds: `90000000000`), but the docs do not show where it appears in the UI **(verify)**. Without it Docker's default is 10 seconds. A job cut off by the default grace period is retried after `retry_after`, so jobs must stay idempotent.
+- **Stop grace period:** 150 seconds for the workers, which is more than `QUEUE_TIMEOUT` (120), so a running job can finish on SIGTERM. The Dokploy v0.30 source has a `stopGracePeriodSwarm` setting (nanoseconds: `150000000000`), but the docs do not show where it appears in the UI **(verify)**. Without it Docker's default is 10 seconds. A job cut off by the default grace period is retried after `retry_after`, so jobs must stay idempotent.
 - **Resources** (suggested): memory limit `536870912` (512 MiB) for the workers and `268435456` (256 MiB) for the scheduler.
 - **Replicas:** `1` for each. For the scheduler, always exactly `1`.
 

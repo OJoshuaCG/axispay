@@ -29,7 +29,7 @@ The all-in-one container gives all of that up in exchange for one Application to
 2. [Create one Application](#2-create-the-application) with the Dockerfile build and `CONTAINER_ROLE=all-in-one`.
 3. [Set the variables](#3-environment-variables) (one table).
 4. [Add the four domains](#4-domains) → port `8080`.
-5. [Advanced tab](#5-advanced-tab-health-update-order-stop-grace-period): health check, **update order `stop-first`**, stop grace period 150 s.
+5. [Advanced tab](#5-advanced-tab-health-update-order-stop-grace-period): health check, **update order `stop-first`**, stop grace period 210 s.
 6. [Deploy and verify](#6-deploy-and-verify).
 7. [Create the first platform admin](#7-create-the-first-platform-admin).
 8. [Create the Stripe Connect webhook destination](#8-stripe-connect-webhook-destination-required) of test mode (**required**).
@@ -160,7 +160,7 @@ Set them in the Application's **Environment** tab. With only one Application the
 | `QUEUE_CONNECTION` | `database` | |
 | `TRUSTED_PROXIES` | `10.0.1.0/24` | Traefik's network range. **Never `*`.** Required: the application refuses to start in production without it (ADR-0051). How to find it: [Trusted proxies](dokploy.md#trusted-proxies) |
 | `MAIL_MAILER` + `MAIL_*` | `smtp` … | Staging: a sandbox SMTP (for example Mailpit or a provider's test inbox). A local test server can use `log` (messages appear in the container log only with `LOG_LEVEL=debug`). Use `MAIL_SCHEME` (`smtps` for 465), never `MAIL_ENCRYPTION`: [Outgoing mail](dokploy.md#outgoing-mail) |
-| `QUEUE_TIMEOUT` | `60` | Seconds per job. Keep it below the queue's `retry_after` (90) |
+| `QUEUE_TIMEOUT` | `120` | Seconds per job. Keep it below the queue's `retry_after` (150). The payment jobs stop themselves at 115 s |
 | `QUEUE_TRIES` / `QUEUE_SLEEP` / `QUEUE_MEMORY` | `3` / `3` / `192` | Same meaning as in production |
 | `PHP_FPM_MAX_CHILDREN` | `10` | Minimum `6` (the pool's spare-server settings). Lower it on a small server |
 | `STRIPE_TEST_SECRET` / `STRIPE_TEST_PUBLISHABLE` | **secret** / `pk_test_…` | Platform test keys. Staging uses test mode only; leave the `STRIPE_LIVE_*` variables empty |
@@ -224,7 +224,7 @@ With `start-first`, the old and the new container would both run a scheduler dur
 
 **Swarm Settings → Restart Policy.** `{"Condition": "any", "Delay": 5000000000}`.
 
-**Stop grace period: 150 s** (`150000000000`). On stop, the workers get up to `QUEUE_TIMEOUT` + 15 s (75 s by default) to finish their jobs, then nginx and php-fpm up to 30 s each. Docker's default is 10 s, which kills running jobs. The Dokploy source has a `stopGracePeriodSwarm` setting, but the docs do not show where it is in the UI **(verify in your Dokploy version)**. If you raise `QUEUE_TIMEOUT`, raise this too: `QUEUE_TIMEOUT` + 90 s.
+**Stop grace period: 210 s** (`210000000000`). On stop, the workers get up to `QUEUE_TIMEOUT` + 15 s (135 s by default) to finish their jobs, then nginx and php-fpm up to 30 s each. Docker's default is 10 s, which kills running jobs. The Dokploy source has a `stopGracePeriodSwarm` setting, but the docs do not show where it is in the UI **(verify in your Dokploy version)**. If you raise `QUEUE_TIMEOUT`, raise this too: `QUEUE_TIMEOUT` + 90 s.
 
 **Resources** (optional; bytes and nanoCPUs):
 
@@ -432,7 +432,7 @@ Production never runs this role. To promote the setup:
 - [ ] External MariaDB server (not a Dokploy database service), with TLS across untrusted networks and a firewall.
 - [ ] `CONTAINER_ROLE=web` + `RUN_MIGRATIONS=true` on `web` only; `DB_MIGRATOR_*` on `web` only.
 - [ ] Update order: `start-first` for `web` and the workers, `stop-first` for `scheduler`.
-- [ ] Stop grace period 90 s on the workers.
+- [ ] Stop grace period 210 s (`QUEUE_TIMEOUT` + 90 s).
 - [ ] Real domains, HTTPS with Let's Encrypt, `SESSION_SECURE_COOKIE=true`, `APP_URL=https://…`.
 - [ ] A new `APP_KEY` for production, backed up outside Dokploy. Never reuse the staging key or data.
 - [ ] Auto Deploy off for production.
@@ -457,7 +457,7 @@ Production never runs this role. To promote the setup:
 | Scheduled tasks run twice around a deploy | Update order `start-first`, or more than one replica | `"Order": "stop-first"` and 1 replica |
 | Migrations fail: `CREATE command denied` / `ALTER command denied` | Migrator user missing or without DDL rights | Set `DB_MIGRATOR_*` and check its grants ([1.3](#13-database-users)) |
 | Migrations fail with error 1419 on `CREATE TRIGGER` | Binary logging on | See the [production troubleshooting](dokploy.md#troubleshooting) |
-| Jobs are retried or duplicated after a deploy; log shows no `stopped: worker-…` | The container was killed before jobs finished (grace period too short, Docker default 10 s) | Stop grace period 150 s (`QUEUE_TIMEOUT` + 90 s) |
+| Jobs are retried or duplicated after a deploy; log shows no `stopped: worker-…` | The container was killed before jobs finished (grace period too short, Docker default 10 s) | Stop grace period 210 s (`QUEUE_TIMEOUT` + 90 s) |
 | Browser always switches to `https://` for a `.test` host | The host (or its parent) was once opened over HTTPS and is HSTS-pinned | Clear it at `chrome://net-internals/#hsts` or use a different name |
 | Page never loads on a `.dev` or `.app` host | Those TLDs are HSTS-preloaded | Use `.test` |
 | An invitation (or any e-mail) does not arrive | SMTP settings, a stopped worker, a failed job, or spam filtering | `php artisan axispay:mail-test <you>` (errors are shown here), then with `--queue` (needs the `worker-*` programs running: `ps -eo user,args`), then `php artisan queue:failed`. Check the spam folder and SPF/DKIM. **Resend** the invitation from the tenant page. Details: [Outgoing mail](dokploy.md#outgoing-mail) |

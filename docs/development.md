@@ -519,7 +519,8 @@ Scheduled tasks live in `routes/console.php`:
 | `ExpirePaymentLinksJob` (queued) | Every minute | Expires active links whose expiry has passed (plan 9.1, ADR-0048) |
 | `axispay:idempotency:purge` | Hourly | Deletes API idempotency records older than 24 hours (plan 7.8) |
 | `axispay:payment-links:reconcile-gateways` | Every 15 minutes | Queues the cancellation of active links in tenant modes that no longer have a gateway connection (plan 12.3.4) |
-| `axispay:payments:reconcile` | Every 15 minutes | Queues one reconciliation per tenant and mode: re-reads open payment attempts from Stripe, voids authorizations not captured after 15 minutes, releases links stuck in processing (plan 12.5, ADR-0051) |
+| `axispay:payments:reconcile` | Every 15 minutes | Queues one reconciliation per tenant and mode: re-reads payments under way at Stripe (oldest visit first, a bounded batch and time budget per run), voids authorizations past the capture window, releases links stuck in processing (plan 12.5, ADR-0051) |
+| `axispay:provider-events:sweep` | Every 5 minutes | Queues again Stripe events stuck in `received` for 5 minutes and routes unroutable events whose connection now exists (ADR-0051). Failed events are retried by the operator with `axispay:provider-events:retry {id}` or `--failed` |
 | `axispay:cache:purge-expired` | Hourly (database cache store only) | Deletes expired cache rows, such as per-IP failed-authentication counters that are never read again |
 
 Every task **must** use `withoutOverlapping()` and `onOneServer()`:

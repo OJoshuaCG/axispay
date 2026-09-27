@@ -80,6 +80,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     them); a dead confirmation's reservation is taken over; retried
     confirmations continue from Stripe's current state; attempts closed
     without Stripe are flagged "needs review".
+  - Webhooks and reconciliation: an authorization is captured only within
+    the capture window (15 minutes from authorization); past it, it is
+    voided, unless Stripe already reports the payment as succeeded. Events
+    stuck in `received` are queued again (on a new delivery and by
+    `axispay:provider-events:sweep`, every 5 minutes); unroutable events are
+    routed once their connection exists; `axispay:provider-events:retry
+    {id?} {--failed}` retries failed events (audited, idempotent); failed
+    events raise an alert and an audit entry. Refused credentials and 4xx
+    answers fail at once instead of retrying, and refused credentials of an
+    `api_key` connection mark it `invalid_credentials`. Payment events are
+    routed by their attempt's connection, never to another tenant's old
+    connection; an account reached through Connect cannot also be connected
+    with API keys. The reconciliation only visits payments under way, oldest
+    visit first, within a batch and a 25 s budget. Recorded business events
+    freeze the link and payment snapshots Phase 5 needs (new
+    `payment.processing`; generic failure codes, never the raw decline
+    code). A closed attempt whose payment later succeeds is flagged for
+    review. Adoption of a payment by its metadata requires it to be created
+    within the attempt's window. Queue `retry_after` is 150 s, the workers'
+    default timeout 120 s and every job has its own limit below it (see the
+    deployment guides for the new stop grace periods).
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after
