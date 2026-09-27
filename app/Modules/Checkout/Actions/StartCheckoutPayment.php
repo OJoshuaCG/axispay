@@ -14,6 +14,7 @@ use App\Modules\Checkout\Services\EffectivePayerFields;
 use App\Modules\Checkout\Services\TurnstileVerifier;
 use App\Modules\Gateways\Data\PaymentRequest;
 use App\Modules\Gateways\Exceptions\GatewayException;
+use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\PayerFields\Data\PayerData;
@@ -100,7 +101,7 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of(CheckoutOutcome::Error);
         }
 
-        if (($minutes = $this->guard->throttle($link, $input->clientIp)) !== null) {
+        if (($minutes = $this->guard->check($link, $input->clientIp)) !== null) {
             return new CheckoutResult(CheckoutOutcome::RateLimited, minutes: $minutes);
         }
 
@@ -125,8 +126,14 @@ final readonly class StartCheckoutPayment
         } catch (GatewayException $e) {
             Log::warning('The confirmation token could not be read.', ['payment_link_id' => $link->id, 'exception' => $e::class, 'provider_code' => $e->providerCode]);
 
+            if ($e instanceof GatewayRequestException) {
+                $this->guard->countUnrecognizedToken($link, $input->clientIp);
+            }
+
             return CheckoutResult::of(CheckoutOutcome::Error);
         }
+
+        $this->guard->countConfirmation($link, $input->clientIp);
 
         $amount = $this->amounts->for($link, $card);
         $claimed = $this->claimAttempt($link, $connection, $amount, $payer, $input);
@@ -320,7 +327,7 @@ final readonly class StartCheckoutPayment
 
         if ($status === PaymentAttemptStatus::RequiresAction) {
             return $payment->needsClientAction()
-                ? new CheckoutResult(CheckoutOutcome::RequiresAction, clientSecret: $payment->clientSecret)
+                ? new CheckoutResult(CheckoutOutcome::RequiresAction, clientSecret: $payment->clientSecret, attemptId: $attempt->id)
                 : CheckoutResult::of(CheckoutOutcome::Processing);
         }
 

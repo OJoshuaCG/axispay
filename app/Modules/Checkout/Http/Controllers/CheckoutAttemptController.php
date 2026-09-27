@@ -71,13 +71,25 @@ final readonly class CheckoutAttemptController
 
         CheckoutLocale::apply($request, $link->locale);
 
-        return $this->answer($request, $link, $complete->handle($link));
+        // Only the session that was handed the 3D Secure step may continue
+        // it (ADR-0051): anyone else is told a payment is in progress.
+        $attemptId = CheckoutSession::takeNextAction($request, $link->id);
+
+        if ($attemptId === null) {
+            return $this->responses->result(CheckoutResult::of(CheckoutOutcome::InProgress), $link);
+        }
+
+        return $this->answer($request, $link, $complete->handle($link, $attemptId));
     }
 
     private function answer(Request $request, PaymentLink $link, CheckoutResult $result): JsonResponse
     {
         if ($result->declined || in_array($result->outcome, [CheckoutOutcome::Declined, CheckoutOutcome::AuthenticationFailed], true)) {
             CheckoutSession::recordDecline($request, $link->id);
+        }
+
+        if ($result->outcome === CheckoutOutcome::RequiresAction && $result->attemptId !== null) {
+            CheckoutSession::awaitNextAction($request, $link->id, $result->attemptId);
         }
 
         // This session started the payment: the completion page says

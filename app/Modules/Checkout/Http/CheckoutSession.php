@@ -29,6 +29,22 @@ final class CheckoutSession
         }
     }
 
+    /** This session was handed the next action (3D Secure) of this attempt. */
+    public static function awaitNextAction(Request $request, string $linkId, string $attemptId): void
+    {
+        if ($request->hasSession()) {
+            $request->session()->put("checkout.{$linkId}.next_action", $attemptId);
+        }
+    }
+
+    /** The attempt this session may continue after its next action, taken once. */
+    public static function takeNextAction(Request $request, string $linkId): ?string
+    {
+        $value = $request->hasSession() ? $request->session()->pull("checkout.{$linkId}.next_action") : null;
+
+        return is_string($value) ? $value : null;
+    }
+
     public static function markPaying(Request $request, string $linkId): void
     {
         if ($request->hasSession()) {

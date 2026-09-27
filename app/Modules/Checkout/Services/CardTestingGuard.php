@@ -17,8 +17,12 @@ use Illuminate\Support\Facades\RateLimiter;
  *
  *  1. per link: `link_attempts` confirmations in `link_window_minutes`, then
  *     the link refuses confirmations for `link_block_minutes`;
- *  2. per client IP: `ip_attempts` confirmations per `ip_window_minutes`,
- *     across links;
+ *  2. per client IP (the /64 network for IPv6): `ip_attempts` confirmations
+ *     per `ip_window_minutes`, across links;
+ *
+ * Rules 1 and 2 only count confirmations whose token the gateway
+ * recognized; unrecognized tokens are counted per link and client, so they
+ * can only pause that client (ADR-0051).
  *  3. Turnstile once the link, or the payer's session, has
  *     `turnstile_after_failures` declines;
  *  4. the long block (`long_block_declines` declines → `long_block_hours`)
@@ -33,10 +37,12 @@ final readonly class CardTestingGuard
     public function __construct(private Repository $cache) {}
 
     /**
-     * Counts one confirmation of `$link` from `$clientIp`. Returns the
-     * minutes the payer must wait, or null when the confirmation may go on.
+     * Whether a confirmation of `$link` from `$clientIp` may go on, WITHOUT
+     * counting it (counting happens once the gateway confirmed the token is
+     * real, countConfirmation()). Returns the minutes to wait, or null.
+     * Starts the link's pause when its counter is full.
      */
-    public function throttle(PaymentLink $link, ?string $clientIp): ?int
+    public function check(PaymentLink $link, ?string $clientIp): ?int
     {
         $config = config()->array('axispay.checkout.rate_limits');
         $blockKey = 'checkout:link-paused:'.$link->id;
@@ -46,12 +52,20 @@ final readonly class CardTestingGuard
             return self::minutes($pausedUntil - time());
         }
 
-        $ipKey = 'checkout:ip:'.hash('sha256', (string) $clientIp);
+        $ipKey = self::ipKey($clientIp);
 
-        if ($clientIp !== null && RateLimiter::tooManyAttempts($ipKey, self::int($config, 'ip_attempts', 10))) {
+        if ($ipKey !== null && RateLimiter::tooManyAttempts($ipKey, self::int($config, 'ip_attempts', 10))) {
             Log::notice('Checkout confirmations paused for a client IP.', ['payment_link_id' => $link->id]);
 
             return self::minutes(RateLimiter::availableIn($ipKey));
+        }
+
+        // Tokens the gateway did not recognize count per link AND client, so
+        // a stranger posting bogus tokens never pauses the link for others.
+        $bogusKey = self::bogusKey($link, $clientIp);
+
+        if (RateLimiter::tooManyAttempts($bogusKey, self::int($config, 'link_attempts', 5))) {
+            return self::minutes(RateLimiter::availableIn($bogusKey));
         }
 
         $linkKey = 'checkout:link:'.$link->id;
@@ -65,13 +79,57 @@ final readonly class CardTestingGuard
             return self::minutes($seconds);
         }
 
-        RateLimiter::hit($linkKey, self::int($config, 'link_window_minutes', 15) * 60);
+        return null;
+    }
 
-        if ($clientIp !== null) {
+    /** Counts a confirmation whose card the gateway recognized (plan 11.7 rules 1 and 2). */
+    public function countConfirmation(PaymentLink $link, ?string $clientIp): void
+    {
+        $config = config()->array('axispay.checkout.rate_limits');
+
+        RateLimiter::hit('checkout:link:'.$link->id, self::int($config, 'link_window_minutes', 15) * 60);
+
+        if (($ipKey = self::ipKey($clientIp)) !== null) {
             RateLimiter::hit($ipKey, self::int($config, 'ip_window_minutes', 60) * 60);
         }
+    }
 
-        return null;
+    /** Counts a confirmation token the gateway did not recognize, for this link and client only. */
+    public function countUnrecognizedToken(PaymentLink $link, ?string $clientIp): void
+    {
+        RateLimiter::hit(self::bogusKey($link, $clientIp), self::int(config()->array('axispay.checkout.rate_limits'), 'link_window_minutes', 15) * 60);
+    }
+
+    /**
+     * The client's network for the per-IP limit: the address for IPv4, the
+     * /64 prefix for IPv6 (one subscriber usually holds a whole /64, so
+     * rotating addresses inside it must not escape the limit).
+     */
+    public static function clientNetwork(?string $clientIp): ?string
+    {
+        if ($clientIp === null || $clientIp === '') {
+            return null;
+        }
+
+        if (filter_var($clientIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) !== false) {
+            $packed = inet_pton($clientIp);
+
+            return $packed !== false ? bin2hex(substr($packed, 0, 8)).'::/64' : $clientIp;
+        }
+
+        return $clientIp;
+    }
+
+    private static function ipKey(?string $clientIp): ?string
+    {
+        $network = self::clientNetwork($clientIp);
+
+        return $network !== null ? 'checkout:ip:'.hash('sha256', $network) : null;
+    }
+
+    private static function bogusKey(PaymentLink $link, ?string $clientIp): string
+    {
+        return 'checkout:bogus-token:'.$link->id.':'.hash('sha256', (string) self::clientNetwork($clientIp));
     }
 
     /** Minutes left of the short pause of a link, if any (page load). */

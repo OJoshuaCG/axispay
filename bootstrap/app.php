@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Middleware\SetLocale;
+use App\Modules\Checkout\Http\Middleware\CheckoutSecurityHeaders;
 use App\Modules\Shared\Http\Errors\ApiErrorRenderer;
 use App\Modules\Shared\Http\Errors\ApiException;
 use App\Modules\Shared\Http\Errors\ApiSurface;
@@ -30,7 +31,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
             // Public checkout (plan 11.5): pay host, web group (anonymous
             // session + CSRF), ADR-0051.
-            Route::middleware('web')
+            // The security headers wrap the whole group (listed before `web`),
+            // so session, CSRF (419) and not-found answers get them too.
+            Route::middleware([CheckoutSecurityHeaders::class, 'web'])
                 ->domain(config()->string('axispay.surfaces.pay'))
                 ->group(base_path('routes/checkout.php'));
 

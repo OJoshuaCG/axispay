@@ -18,6 +18,7 @@ use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PaymentAttempt;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -32,14 +33,24 @@ final readonly class CompleteCheckoutAuthorization
     public function __construct(
         private SyncPaymentAttempt $sync,
         private CaptureAuthorizedPayment $capture,
+        private Repository $cache,
     ) {}
 
-    public function handle(PaymentLink $link): CheckoutResult
+    /**
+     * @param  string  $attemptId  the attempt this payer's session was handed the next action of
+     */
+    public function handle(PaymentLink $link, string $attemptId): CheckoutResult
     {
-        $attempt = PaymentAttempt::query()->where('payment_link_id', $link->id)->orderByDesc('id')->first();
+        $attempt = PaymentAttempt::query()->where('payment_link_id', $link->id)->whereKey($attemptId)->first();
 
         if ($attempt === null) {
             return CheckoutResult::of(CheckoutOutcome::Error);
+        }
+
+        // Debounce per attempt: a repeated call within the interval only
+        // reads our own state; the gateway is asked once.
+        if (! $this->cache->add('checkout:continue:'.$attempt->id, 1, max(1, config()->integer('axispay.checkout.status_sync_after_seconds')))) {
+            return CheckoutResult::of(CheckoutOutcome::Processing);
         }
 
         try {

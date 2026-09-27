@@ -15,9 +15,18 @@ use Throwable;
  * endpoint with the secret, the token and the payer's IP; the token is valid
  * once and for 5 minutes (Cloudflare docs). Any failure (missing token,
  * rejection, timeout, missing secret) answers false: fail closed.
+ *
+ * Besides `success`, the answer must name the pay host as `hostname` and
+ * `checkout` as `action` (set by the page's widget), as Cloudflare
+ * recommends, so a token solved on another site or for another purpose is
+ * refused. Cloudflare's test keys answer with a dummy hostname and no action
+ * (flagged `result_with_testing_key`); that answer is accepted outside
+ * production only.
  */
 final class TurnstileVerifier
 {
+    public const string ACTION = 'checkout';
+
     public function siteKey(): ?string
     {
         $key = config('services.turnstile.site_key');
@@ -53,6 +62,20 @@ final class TurnstileVerifier
             return false;
         }
 
-        return $response->successful() && $response->json('success') === true;
+        if (! $response->successful() || $response->json('success') !== true) {
+            return false;
+        }
+
+        if ($response->json('metadata.result_with_testing_key') === true && ! app()->environment('production')) {
+            return true;
+        }
+
+        $valid = $response->json('hostname') === config()->string('axispay.surfaces.pay') && $response->json('action') === self::ACTION;
+
+        if (! $valid) {
+            Log::warning('A Turnstile token was solved for another host or action.');
+        }
+
+        return $valid;
     }
 }

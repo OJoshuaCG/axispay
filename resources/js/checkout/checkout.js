@@ -303,6 +303,8 @@ function initCheckout() {
             turnstileToken = null;
             turnstileWidget = turnstile.render(turnstileTarget, {
                 sitekey: config.turnstile.siteKey,
+                // Checked by the server with the hostname (TurnstileVerifier).
+                action: 'checkout',
                 appearance: 'always',
                 size: turnstileTarget.clientWidth < 340 ? 'compact' : 'flexible',
                 theme: prefersDark() ? 'dark' : 'light',

@@ -42,6 +42,7 @@ use LogicException;
  * | threeds      | requires_action; the stub's bank dialog decides |
  * | processing   | processing, authorized a few seconds later      |
  *
+ * Live-mode connections are refused: the sandbox only fakes test mode.
  * Capturing succeeds, canceling voids. Idempotency keys are honored like
  * Stripe does (same key, same answer). Account and webhook methods are
  * delegated to the real adapter (webhooks are not simulated: the sandbox
@@ -87,6 +88,8 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     public function inspectPaymentMethod(GatewayConnection $connection, string $confirmationToken): PaymentMethodPreview
     {
+        self::assertTestMode($connection);
+
         [$brand, $last4] = self::CARDS[self::scenario($confirmationToken)];
 
         return new PaymentMethodPreview('MX', $brand, $last4);
@@ -94,6 +97,8 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
     {
+        self::assertTestMode($connection);
+
         return $this->idempotent($request->idempotencyKey, function () use ($request): array {
             $state = $request->providerPaymentId !== null ? $this->load($request->providerPaymentId) : [
                 'id' => 'pi_sandbox_'.SecureToken::base62(12),
@@ -112,6 +117,8 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment
     {
+        self::assertTestMode($connection);
+
         return $this->idempotent($idempotencyKey, function () use ($providerPaymentId, $confirmationToken): array {
             $state = $this->load($providerPaymentId);
 
@@ -157,6 +164,8 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
     {
+        self::assertTestMode($connection);
+
         return $this->idempotent($idempotencyKey, function () use ($providerPaymentId): array {
             $state = $this->load($providerPaymentId);
 
@@ -226,6 +235,14 @@ final class SandboxPaymentGateway implements PaymentGateway
     public function parseWebhook(string $rawBody, array $headers, WebhookSource $source): ProviderWebhookEvent
     {
         return $this->stripe->parseWebhook($rawBody, $headers, $source);
+    }
+
+    /** Defence in depth: the sandbox never pretends to charge a live link. */
+    private static function assertTestMode(GatewayConnection $connection): void
+    {
+        if ($connection->livemode) {
+            throw new GatewayRequestException('The checkout sandbox refuses live-mode payments.', 'sandbox_live_mode', null, 400);
+        }
     }
 
     private static function scenario(string $confirmationToken): string
