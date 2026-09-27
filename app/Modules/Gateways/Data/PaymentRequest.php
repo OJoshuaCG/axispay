@@ -6,7 +6,10 @@ namespace App\Modules\Gateways\Data;
 
 /**
  * Input of `createOrUpdatePayment` (plan 12.4). Amounts in minor units
- * (rules.md rule 1). Completed by Phase 4.
+ * (rules.md rule 1). Every payment is card-only (ADR-018) and authorized
+ * with a separate capture (ADR-0050). `metadata` carries only our own
+ * identifiers (plan 11.4). `providerPaymentId` set means "update this
+ * payment" (allowed before it is confirmed).
  */
 final readonly class PaymentRequest
 {

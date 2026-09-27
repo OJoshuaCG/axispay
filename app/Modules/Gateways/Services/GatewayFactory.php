@@ -6,12 +6,16 @@ namespace App\Modules\Gateways\Services;
 
 use App\Modules\Gateways\Contracts\PaymentGateway;
 use App\Modules\Gateways\Enums\GatewayProvider;
+use App\Modules\Gateways\Sandbox\SandboxMode;
+use App\Modules\Gateways\Sandbox\SandboxPaymentGateway;
 use App\Modules\Gateways\Stripe\StripeGateway;
 use Illuminate\Contracts\Container\Container;
 
 /**
  * Picks the adapter for a provider (plan 12.1, ADR-019): a plain `match`, no
- * plugins. Tests swap adapters with fake() (FakePaymentGateway).
+ * plugins. Tests swap adapters with fake() (FakePaymentGateway). With the
+ * checkout sandbox on (local and testing only, ADR-0051) Stripe is served by
+ * SandboxPaymentGateway.
  */
 final class GatewayFactory
 {
@@ -27,7 +31,9 @@ final class GatewayFactory
         }
 
         return match ($provider) {
-            GatewayProvider::Stripe => $this->container->make(StripeGateway::class),
+            GatewayProvider::Stripe => SandboxMode::enabled()
+                ? $this->container->make(SandboxPaymentGateway::class)
+                : $this->container->make(StripeGateway::class),
         };
     }
 

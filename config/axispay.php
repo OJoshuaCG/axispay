@@ -44,6 +44,9 @@ return [
     'session_cookies' => [
         'admin' => 'axispay_admin_session',
         'app' => 'axispay_app_session',
+        // The checkout's anonymous session (CSRF token, per-link decline
+        // counter), never shared with the panels (ADR-0051).
+        'pay' => 'axispay_pay_session',
     ],
 
     /*
@@ -112,6 +115,76 @@ return [
 
         // Links read per chunk when a gateway disconnection cancels them.
         'disconnect_cancel_chunk_size' => 500,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Public checkout (plan 11, ADR-0051)
+    |--------------------------------------------------------------------------
+    */
+
+    'checkout' => [
+        // Sandbox: fake gateway + Stripe.js stub, for local development and
+        // tests without Stripe keys. Refused at boot outside local/testing.
+        'sandbox' => (bool) env('AXISPAY_CHECKOUT_SANDBOX', false),
+
+        // Card-testing protection (plan 11.7).
+        'rate_limits' => [
+            // 5 confirmations per link in 15 minutes, then 30 minutes blocked.
+            'link_attempts' => 5,
+            'link_window_minutes' => 15,
+            'link_block_minutes' => 30,
+            // 10 confirmations per client IP per hour, across links.
+            'ip_attempts' => 10,
+            'ip_window_minutes' => 60,
+        ],
+        // Turnstile is required once the link (or the payer's session) has
+        // this many declines (plan 11.7 rule 3, case 16).
+        'turnstile_after_failures' => 1,
+        // Long block: this many declines on a link block it for this long and
+        // notify the tenant, who can lift it from the panel.
+        'long_block_declines' => 10,
+        'long_block_hours' => 24,
+
+        // Plan 11.6: `payment_link.opened` at most once per link in this many
+        // minutes; link previewers (by user agent) are not counted.
+        'opened_event_debounce_minutes' => 30,
+        'bot_user_agents' => [
+            'WhatsApp', 'facebookexternalhit', 'Facebot', 'Slackbot', 'Slack-ImgProxy', 'TelegramBot',
+            'Twitterbot', 'LinkedInBot', 'Discordbot', 'SkypeUriPreview', 'Googlebot', 'bingbot',
+            'Applebot', 'Pinterest', 'redditbot', 'Embedly', 'vkShare', 'MicrosoftPreview',
+        ],
+
+        // A confirmation holds the attempt this long at most (another tab
+        // waits; a crashed request frees it after this time).
+        'confirmation_lease_seconds' => 60,
+        // The status polled by the page is re-read from the gateway when the
+        // attempt has not changed for this long (webhooks stay the source of
+        // truth; this only speeds the page up).
+        'status_sync_after_seconds' => 5,
+        // Plan 11.2: poll every 3 seconds for at most 2 minutes.
+        'poll_interval_seconds' => 3,
+        'poll_max_seconds' => 120,
+        // The expiry date is shown only when the link expires sooner.
+        'expiry_notice_hours' => 72,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payments (plan 9.2, 12.5, 19.2, ADR-0050, ADR-0051)
+    |--------------------------------------------------------------------------
+    */
+
+    'payments' => [
+        // Reconciliation (every 15 minutes): attempts not final and untouched
+        // for this long are re-read from the gateway.
+        'reconcile_after_minutes' => 10,
+        // An authorization still not captured after this long is voided
+        // (ADR-0050: authorize and capture happen seconds apart).
+        'void_authorized_after_minutes' => 15,
+        // Plan 19.2: payer data is kept this long after the attempt (the
+        // purge itself is Phase 8).
+        'payer_retention_months' => 24,
     ],
 
     /*
@@ -233,6 +306,14 @@ return [
             // endpoint: revocation is detected by authentication errors.
             'direct_webhook_events' => [
                 'account.updated',
+                // Phase 4 (ADR-0051). Run `axispay:stripe-sync-webhook-endpoints`
+                // after deploying so existing endpoints receive them.
+                'payment_intent.amount_capturable_updated',
+                'payment_intent.canceled',
+                'payment_intent.payment_failed',
+                'payment_intent.processing',
+                'payment_intent.requires_action',
+                'payment_intent.succeeded',
             ],
 
             // Events the platform's Connect webhook destination of each mode
@@ -244,6 +325,13 @@ return [
             'connect_webhook_events' => [
                 'account.updated',
                 'account.application.deauthorized',
+                // Phase 4 (ADR-0051): add these to both Connect destinations.
+                'payment_intent.amount_capturable_updated',
+                'payment_intent.canceled',
+                'payment_intent.payment_failed',
+                'payment_intent.processing',
+                'payment_intent.requires_action',
+                'payment_intent.succeeded',
             ],
 
             // Incoming events (plan 14.4): rows that were ignored (events we do

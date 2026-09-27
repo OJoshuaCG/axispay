@@ -28,9 +28,19 @@ use App\Modules\Gateways\Models\GatewayConnection;
  * statuses or connection methods. Connection flows (Account Links, OAuth,
  * API keys) are provider-specific and live next to the adapter.
  *
- * Phase 2 implements the account, client-config and webhook methods. The
- * payment and refund methods keep the plan's signatures and throw
- * GatewayOperationNotImplementedException until Phases 4 and 7 fill them.
+ * Phase 2 implemented the account, client-config and webhook methods;
+ * Phase 4 the payment methods (ADR-0051). Refunds keep the plan's
+ * signatures and throw GatewayOperationNotImplementedException until
+ * Phase 7.
+ *
+ * Payments are card-only (ADR-018) and authorized with a separate capture
+ * (ADR-0050): confirming authorizes, capturePayment() takes the money and
+ * cancelPayment() voids an authorization (or cancels a payment that was
+ * never confirmed). Every call that creates or modifies takes an
+ * idempotency key; a retry uses the same key (rules.md rule 5).
+ *
+ * A declined card is not an exception: confirmPayment() returns the payment
+ * with its `failure` (plan 12.6).
  *
  * Errors: GatewayAuthenticationException (credentials rejected or access
  * revoked), GatewayUnavailableException (network, rate limit, 5xx: retry
@@ -49,20 +59,57 @@ interface PaymentGateway
 
     public function clientConfig(GatewayConnection $connection): CheckoutClientConfig;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 4 */
+    /**
+     * Card country, brand and last four digits behind a confirmation token
+     * created in the payer's browser (plan 11.4).
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
     public function inspectPaymentMethod(GatewayConnection $connection, string $confirmationToken): PaymentMethodPreview;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 4 */
+    /**
+     * Creates the payment (manual capture, card only) or, with
+     * `providerPaymentId`, updates its amount and currency before it is
+     * confirmed (plan 11.4).
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 4 */
-    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey): ProviderPayment;
+    /**
+     * Confirms with the confirmation token: authorizes the card, possibly
+     * asking for 3D Secure (`requires_action` + client secret). `returnUrl`
+     * is where a redirect-based authentication comes back to.
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
+    public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl): ProviderPayment;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 4 */
+    /**
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
     public function retrievePayment(GatewayConnection $connection, string $providerPaymentId): ProviderPayment;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 4 */
-    public function cancelPayment(GatewayConnection $connection, string $providerPaymentId): ProviderPayment;
+    /**
+     * Captures the full authorized amount (ADR-0050 step 5).
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
+    public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment;
+
+    /**
+     * Cancels a payment that is not captured: voids an authorization (no
+     * money moves, ADR-0050) or closes an unconfirmed payment.
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
+    public function cancelPayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment;
 
     /** @throws GatewayOperationNotImplementedException until Phase 7 */
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund;
