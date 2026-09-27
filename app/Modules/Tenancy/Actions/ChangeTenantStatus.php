@@ -10,6 +10,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 use App\Modules\Tenancy\Data\ChangeTenantStatusData;
 use App\Modules\Tenancy\Enums\TenantStatus;
+use App\Modules\Tenancy\Events\TenantClosed;
 use App\Modules\Tenancy\Exceptions\InvalidTenantStatusTransitionException;
 use App\Modules\Tenancy\Exceptions\TenantCloseNotConfirmedException;
 use App\Modules\Tenancy\Models\Tenant;
@@ -25,6 +26,7 @@ use InvalidArgumentException;
  * The only way to change a tenant's status (plan 21.3): superadmin only,
  * reason required, allowed transitions only, closing double-confirmed,
  * audited, owners notified. Runs under a row lock (rules.md rule 8).
+ * Closing cancels the tenant's active links (TenantClosed, plan 21.3).
  *
  * handleAsSystem() is the same path for the automatic transitions of plan
  * 21.3 ("automático al completar onboarding"): no authorization (there is no
@@ -99,6 +101,11 @@ final readonly class ChangeTenantStatus
                 'after' => ['status' => $data->status->value],
                 'reason' => $reason,
             ], tenantId: $locked->id, actor: $actor);
+
+            if ($data->status === TenantStatus::Closed) {
+                // Plan 21.3: its active links are canceled (after commit, queued).
+                event(new TenantClosed($locked->id));
+            }
 
             return $locked;
         });

@@ -58,6 +58,17 @@ final class TenantAccess
         return ApiAccess::ReadOnly;
     }
 
+    /**
+     * Whether the tenant's links still take payments (plan 21.3): every
+     * status but `closed` (a suspended tenant keeps collecting, ADR-013).
+     */
+    public function collects(string $tenantId): bool
+    {
+        $status = $this->find($tenantId)?->status;
+
+        return $status !== null && $status !== TenantStatus::Closed;
+    }
+
     public function settings(string $tenantId): TenantSettings
     {
         return $this->find($tenantId)?->settings() ?? TenantSettings::defaults();
