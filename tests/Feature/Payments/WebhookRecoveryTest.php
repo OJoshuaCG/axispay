@@ -128,7 +128,15 @@ it('queues again an event stuck in received when it is delivered again late (H1)
 
 it('keeps one job per stored event for all its tries (P13)', function (): void {
     $job = new ProcessProviderEventJob('01K6AAAAAAAAAAAAAAAAAAAAAA', 'tenant', false);
-    $tries = $job->tries * $job->timeout + array_sum($job->backoff());
+    $retryAfter = config()->integer('queue.connections.database.retry_after');
+    $backoff = $job->backoff();
+    $tries = 0;
+
+    // Worst case of each try: it runs up to its timeout, then waits its
+    // backoff; a killed try only comes back after retry_after.
+    foreach (range(0, $job->tries - 1) as $try) {
+        $tries += max($job->timeout + ($backoff[$try] ?? 0), $retryAfter);
+    }
 
     expect($job)->toBeInstanceOf(ShouldBeUnique::class)
         ->and($job->uniqueId())->toBe('01K6AAAAAAAAAAAAAAAAAAAAAA')

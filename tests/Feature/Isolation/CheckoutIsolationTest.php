@@ -1,0 +1,92 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Modules\Access\Enums\SystemRole;
+use App\Modules\Checkout\Actions\UnblockCheckout;
+use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ViewPaymentLink;
+use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Payments\Models\PaymentAttempt;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Route;
+use Livewire\Livewire;
+use Tests\Support\ApiTestHelpers;
+use Tests\Support\CheckoutTestHelpers as Checkout;
+use Tests\Support\GatewayTestHelpers;
+
+use function Pest\Laravel\get;
+use function Pest\Laravel\withSession;
+
+/**
+ * Tenant isolation of the checkout (plan 6.6, rules.md rule 3): a tenant
+ * user never reaches another tenant's link detail nor its unblock action
+ * (404); a payer's session can only continue an attempt of the link it is
+ * on; and every pay-host route is reviewed below (a new one fails the
+ * coverage test until it is added).
+ */
+
+/**
+ * Pay-host routes, each reviewed for isolation: the link comes from its
+ * public token through the tenant-safe resolver (the same 404 for any
+ * invalid or foreign token), never from an ID in the URL.
+ *
+ * @var array<string, string>
+ */
+const REVIEWED_PAY_ROUTES = [
+    'checkout.show' => 'Public token through CheckoutLinkResolver; the tenant context comes from that link.',
+    'checkout.complete' => 'Public token through CheckoutLinkResolver.',
+    'checkout.status' => 'Public token through CheckoutLinkResolver; reads nothing else.',
+    'checkout.attempts.store' => 'Public token through CheckoutLinkResolver; the attempt is the link\'s own (claim under the link lock).',
+    'checkout.attempts.continue' => 'Public token; the attempt comes from this session for this link and must belong to it (tested below).',
+    'checkout.sandbox.next-action' => 'Sandbox only (local/testing); public token through CheckoutLinkResolver.',
+    'checkout.fallback' => 'The uniform 404 page.',
+];
+
+it('answers 404 for another tenant\'s link detail and never runs its unblock action', function (): void {
+    [, $link] = Checkout::scenario(static fn ($f) => $f->state(['checkout_blocked_until' => now()->addDay(), 'checkout_block_reason' => 'card_testing']));
+    $other = ApiTestHelpers::readyTenant();
+    $intruder = actingAsTenantUser(tenantUser($other, [SystemRole::Owner]));
+    GatewayTestHelpers::reauthenticated();
+
+    get(appUrl('/payment-links/'.$link->id))->assertNotFound();
+
+    Livewire::test(ViewPaymentLink::class, ['record' => $link->getRouteKey()])->assertNotFound();
+
+    // The action itself, reached directly: the foreign link is invisible in the intruder's tenant.
+    expect(fn () => Checkout::inTenant(ApiTestHelpers::link($other), static fn () => app(UnblockCheckout::class)->handleForUser($intruder, PaymentLink::query()->findOrFail($link->id))))
+        ->toThrow(ModelNotFoundException::class);
+
+    expect(Checkout::freshLink($link)->isCheckoutBlocked())->toBeTrue();
+});
+
+it('refuses to continue an attempt of another link or tenant from the session, without calling the gateway', function (string $whose): void {
+    [$tenant, $link, $fake] = Checkout::scenario();
+    $foreignLink = $whose === 'other link' ? ApiTestHelpers::link($tenant) : Checkout::scenario()[1];
+    $foreign = Checkout::inTenant($foreignLink, static fn (): PaymentAttempt => PaymentAttempt::factory()->createOne([
+        'payment_link_id' => $foreignLink->id,
+        'gateway_connection_id' => Checkout::connectionOf($foreignLink)->id,
+    ]));
+    $calls = count($fake->calls);
+
+    withSession(["checkout.{$link->id}.next_action" => $foreign->id]);
+
+    Checkout::continue($link)->assertJson(['outcome' => 'error']);
+
+    expect($fake->calls)->toHaveCount($calls);
+})->with(['other link', 'other tenant']);
+
+it('reviews every pay-host route for isolation', function (): void {
+    $payHost = config()->string('axispay.surfaces.pay');
+    $routes = [];
+
+    foreach (Route::getRoutes()->getRoutes() as $route) {
+        if ($route->getDomain() === $payHost) {
+            $routes[] = (string) $route->getName();
+        }
+    }
+
+    $unreviewed = array_values(array_diff($routes, array_keys(REVIEWED_PAY_ROUTES)));
+
+    expect($routes)->not->toBeEmpty()
+        ->and($unreviewed)->toBe([], 'Pay-host routes without an isolation review: '.implode(', ', $unreviewed));
+});

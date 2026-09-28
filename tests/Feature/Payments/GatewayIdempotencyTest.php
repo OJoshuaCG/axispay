@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
+use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
@@ -129,4 +130,18 @@ it('locks the link, then the attempt, only inside a transaction (Q6)', function 
     expect($lockedLink->id)->toBe($link->id)
         ->and($lockedAttempt->id)->toBe($attempt->id)
         ->and(Checkout::inTenant($link, static fn () => PaymentAttempt::query()->activeForLink($link->id)->pluck('id')->all()))->toBe([$attempt->id]);
+});
+
+it('answers like the Stripe adapter: a payment no longer capturable is returned as it is, unless asked to refuse (T6, T11)', function (): void {
+    [$link, $attempt, $fake] = idempotencyAuthorized();
+    $connection = Checkout::connectionOf($link);
+    $fake->setPaymentStatus((string) $attempt->provider_payment_id, ProviderPaymentStatus::Succeeded);
+
+    expect($fake->capturePayment($connection, (string) $attempt->provider_payment_id, 'k-1')->status)->toBe(ProviderPaymentStatus::Succeeded);
+
+    $fake->strictStates();
+
+    expect(fn () => $fake->capturePayment($connection, (string) $attempt->provider_payment_id, 'k-2'))
+        ->toThrow(GatewayRequestException::class)
+        ->and(thrownBy(GatewayRequestException::class, fn () => $fake->retrievePayment($connection, 'pi_Unknown'))->httpStatus)->toBe(404);
 });

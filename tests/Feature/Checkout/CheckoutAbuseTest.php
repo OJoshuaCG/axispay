@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Tests\Support\ApiTestHelpers;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 
+use function Pest\Laravel\freezeTime;
 use function Pest\Laravel\get;
 use function Pest\Laravel\getJson;
 use function Pest\Laravel\travel;
@@ -116,6 +117,7 @@ it('counts gateway failures while reading the token per link and client (M2)', f
 // M3 -----------------------------------------------------------------------
 
 it('gives status polling its own request limit, answered with a 429 the page can show (M3)', function (): void {
+    freezeTime();
     [, $link] = Checkout::scenario();
 
     foreach (range(1, 90) as $i) {
@@ -133,6 +135,7 @@ it('gives status polling its own request limit, answered with a 429 the page can
 });
 
 it('answers a short 429 page when the payment page is reloaded too often (M3)', function (): void {
+    freezeTime();
     [, $link] = Checkout::scenario();
 
     foreach (range(1, 60) as $i) {
@@ -145,6 +148,41 @@ it('answers a short 429 page when the payment page is reloaded too often (M3)', 
         ->assertSee(__('checkout.states.too_many_requests.heading'));
 
     getJson(payUrl('/l/'.$link->public_token.'/status'))->assertOk();
+});
+
+it('limits Pay and the 3D Secure continuation per minute, each with its own budget (M3)', function (string $group): void {
+    freezeTime();
+    [, $link] = Checkout::scenario();
+    $call = static fn () => $group === 'attempts' ? Checkout::pay($link, 'not-a-token') : Checkout::continue($link);
+
+    foreach (range(1, 30) as $i) {
+        expect($call()->status())->not->toBe(429);
+    }
+
+    $call()->assertStatus(429)->assertHeader('Retry-After')->assertJson(['outcome' => 'too_many_requests']);
+
+    // The other group keeps its whole budget.
+    expect(($group === 'attempts' ? Checkout::continue($link) : Checkout::pay($link, 'not-a-token'))->status())->not->toBe(429);
+
+    // A minute later the budget is back.
+    travel(61)->seconds();
+    expect($call()->status())->not->toBe(429);
+})->with(['attempts', 'continue']);
+
+it('limits the completion page on its own budget (M3)', function (): void {
+    freezeTime();
+    [, $link] = Checkout::scenario();
+
+    foreach (range(1, 60) as $i) {
+        get(payUrl('/l/'.$link->public_token.'/complete'), ['User-Agent' => 'Mozilla/5.0 (Test)'])->assertOk();
+    }
+
+    get(payUrl('/l/'.$link->public_token.'/complete'), ['User-Agent' => 'Mozilla/5.0 (Test)'])
+        ->assertStatus(429)
+        ->assertHeader('Retry-After')
+        ->assertSee(__('checkout.states.too_many_requests.heading'));
+
+    get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0 (Test)'])->assertOk();
 });
 
 // M4 -----------------------------------------------------------------------
