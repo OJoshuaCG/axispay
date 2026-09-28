@@ -8,6 +8,7 @@ use App\Modules\Checkout\Console\CheckoutDemoCommand;
 use App\Modules\Checkout\Http\CheckoutRateLimits;
 use App\Modules\Checkout\Listeners\BlockCheckoutAfterDeclines;
 use App\Modules\Checkout\Services\CheckoutFonts;
+use App\Modules\Checkout\Services\TurnstileVerifier;
 use App\Modules\Payments\Events\PaymentDeclined;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -41,7 +42,8 @@ final class CheckoutServiceProvider extends ServiceProvider
      */
     public static function assertTurnstileKeys(string $environment): void
     {
-        if ($environment !== 'production') {
+        // Switched off (ADR-0052): the keys are not needed in any environment.
+        if ($environment !== 'production' || ! TurnstileVerifier::enabled()) {
             return;
         }
 

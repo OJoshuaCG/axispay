@@ -130,7 +130,7 @@ final readonly class CheckoutPageBuilder
     }
 
     /**
-     * @return array{siteKey: string|null, required: bool}
+     * @return array{enabled: bool, siteKey: string|null, required: bool}
      */
     private function turnstileConfig(PaymentLink $link, int $sessionDeclines): array
     {
@@ -143,7 +143,7 @@ final readonly class CheckoutPageBuilder
             Log::error('Turnstile is required on a payment page but TURNSTILE_SITE_KEY is not configured.', ['payment_link_id' => $link->id]);
         }
 
-        return ['siteKey' => $siteKey, 'required' => $required];
+        return ['enabled' => TurnstileVerifier::enabled(), 'siteKey' => $siteKey, 'required' => $required];
     }
 
     /**

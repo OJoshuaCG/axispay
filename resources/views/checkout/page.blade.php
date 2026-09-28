@@ -63,7 +63,10 @@
 
                     <x-checkout.payment-element :sandbox="$page->sandbox" />
 
-                    <x-checkout.turnstile />
+                    {{-- Not even the slot while the bot check is switched off (ADR-0052). --}}
+                    @if ($page->client['turnstile']['enabled'] ?? true)
+                        <x-checkout.turnstile />
+                    @endif
 
                     <div class="flex flex-col gap-stack-sm">
                         <x-button

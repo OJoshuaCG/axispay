@@ -21,6 +21,11 @@ final readonly class LinkDeclineCounter
 {
     public function turnstileRequired(PaymentLink $link, int $sessionDeclines): bool
     {
+        // Switched off (ADR-0052): never required; the other limits still apply.
+        if (! TurnstileVerifier::enabled()) {
+            return false;
+        }
+
         $threshold = max(1, config()->integer('axispay.checkout.turnstile_after_failures'));
 
         return $sessionDeclines >= $threshold || $this->declinesOf($link) >= $threshold;

@@ -68,6 +68,9 @@ return [
     | documented test keys work in local and testing (docs/development.md).
     */
     'turnstile' => [
+        // Temporary switch (ADR-0052): false turns the bot check after a
+        // decline off (no keys needed); every other card-testing limit stays.
+        'enabled' => (bool) env('AXISPAY_TURNSTILE_ENABLED', true),
         'site_key' => env('TURNSTILE_SITE_KEY'),
         'secret_key' => env('TURNSTILE_SECRET_KEY'),
         'verify_url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',

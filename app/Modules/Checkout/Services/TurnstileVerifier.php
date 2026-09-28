@@ -27,6 +27,16 @@ final class TurnstileVerifier
 {
     public const string ACTION = 'checkout';
 
+    /**
+     * Whether the bot check is on (`AXISPAY_TURNSTILE_ENABLED`, default on).
+     * Off is a temporary measure until a Cloudflare account exists
+     * (ADR-0052): the check is then never required, rendered or verified.
+     */
+    public static function enabled(): bool
+    {
+        return config()->boolean('services.turnstile.enabled');
+    }
+
     public function siteKey(): ?string
     {
         $key = config('services.turnstile.site_key');

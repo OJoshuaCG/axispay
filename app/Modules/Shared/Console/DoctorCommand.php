@@ -223,6 +223,13 @@ final class DoctorCommand extends Command
     /** ADR-0051: without Turnstile a link stops taking payments after its first decline. */
     private function checkTurnstile(): void
     {
+        // Switched off (ADR-0052): a warning, never an error, in any environment.
+        if (! config()->boolean('services.turnstile.enabled')) {
+            $this->row('Turnstile', self::WARN, 'Turnstile disabled (AXISPAY_TURNSTILE_ENABLED=false): the bot check after a decline is off; the other card-testing limits still apply');
+
+            return;
+        }
+
         $missing = array_keys(array_filter([
             'TURNSTILE_SITE_KEY' => trim(self::string(config('services.turnstile.site_key'))) === '',
             'TURNSTILE_SECRET_KEY' => trim(self::string(config('services.turnstile.secret_key'))) === '',
