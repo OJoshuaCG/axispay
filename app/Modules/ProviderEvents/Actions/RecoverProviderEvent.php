@@ -109,8 +109,12 @@ final class RecoverProviderEvent
     {
         $after = max(1, config()->integer('axispay.gateways.stripe.provider_events.redispatch_after_seconds'));
 
-        // Its job may still be waiting for a retry (backoff): not lost.
-        if ($event->tenant_id === null || $event->received_at->greaterThan(now()->subSeconds($after)) || ProcessProviderEventJob::inFlight($event->id)) {
+        if ($event->tenant_id === null || $event->received_at->greaterThan(now()->subSeconds($after))) {
+            return self::SKIPPED;
+        }
+
+        // Its job may still be queued or waiting for a retry (backoff): not lost.
+        if (! ProcessProviderEventJob::dispatchIfIdle($event->id, $event->tenant_id, $event->livemode)) {
             return self::SKIPPED;
         }
 
@@ -120,8 +124,6 @@ final class RecoverProviderEvent
             ['type' => $event->type, 'from' => ProviderEventStatus::Received->value],
             actor: Actor::system(),
         ));
-
-        ProcessProviderEventJob::dispatch($event->id, $event->tenant_id, $event->livemode);
 
         return self::REQUEUED;
     }

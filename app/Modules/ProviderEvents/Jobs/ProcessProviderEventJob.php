@@ -11,6 +11,7 @@ use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\Middleware\RestoreTenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -55,18 +56,25 @@ final class ProcessProviderEventJob implements ShouldBeUnique, ShouldQueue, Tena
         return $this->providerEventId;
     }
 
-    /** Whether a job for this stored event is queued, running or waiting for its next try. */
-    public static function inFlight(string $providerEventId): bool
+    /**
+     * Queues the job unless one for this stored event is already queued,
+     * running or waiting for its next try. The unique lock is taken once,
+     * here, and handed to the queued job (which releases it at the end),
+     * so there is no moment in which a concurrent dispatch could be lost.
+     *
+     * @return bool whether a job was queued
+     */
+    public static function dispatchIfIdle(string $providerEventId, string $tenantId, bool $livemode): bool
     {
-        $lock = Cache::lock(UniqueLock::getKey(new self($providerEventId, '', false)), 1);
+        $job = new self($providerEventId, $tenantId, $livemode);
 
-        if (! $lock->get()) {
-            return true;
+        if (! (new UniqueLock(Cache::driver()))->acquire($job)) {
+            return false;
         }
 
-        $lock->release();
+        app(Dispatcher::class)->dispatch($job);
 
-        return false;
+        return true;
     }
 
     public function tenantId(): string
