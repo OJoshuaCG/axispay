@@ -60,8 +60,8 @@ Reconciliation remains a **safety net only**. It runs minutes or hours later, so
 Who configures what:
 
 - **Tenants configure nothing.**
-- **Create or connect with Stripe** (`platform_onboarding`, later `oauth`): the platform operator creates **one** Connect webhook destination per mode (test and live) in the platform's Stripe Dashboard, with the pinned API version and the list of events the platform uses. This is a required deployment step.
-- **Connect with API keys** (`api_key`): AxisPay creates the webhook endpoint on the merchant's own Stripe account when the connection is made, and removes it when the connection ends ([ADR-0047](0047-stripe-connection-phase-2-and-api-key-reordering.md)).
+- **Create or connect with Stripe** (creating a new Stripe account through the platform, and later connecting an existing one): the platform operator creates **one** Connect webhook destination per mode (test and live) in the platform's Stripe Dashboard, with the pinned API version and the list of events the platform uses. This is a required deployment step.
+- **Connect with API keys**: AxisPay creates the webhook endpoint on the merchant's own Stripe account when the connection is made, and removes it when the connection ends ([ADR-0047](0047-stripe-connection-phase-2-and-api-key-reordering.md)).
 
 ## Rationale
 
@@ -69,9 +69,9 @@ The merchant is only consulted when the payment can actually succeed, which remo
 
 ## Consequences
 
-- **Phase 4 (checkout)** creates payment intents with separate capture and implements steps 1, 2, 3 and 5, with the exact point where step 4 plugs in. Its technical spike must also verify, in Stripe test mode: separate capture with direct charges on Mexican connected accounts and with the `api_key` method, how voided authorizations appear and whether they cost anything, and the authorization lifetime for cards.
+- **Phase 4 (checkout)** creates payment intents with separate capture and implements steps 1, 2, 3 and 5, with the exact point where step 4 plugs in. The Stripe acceptance gate of [ADR-0051](0051-checkout-and-card-payments-phase-4.md) must also verify, in Stripe test mode: separate capture with direct charges on Mexican connected accounts and with the API-keys connection, how voided authorizations appear and whether they cost anything, and the authorization lifetime for cards.
 - **Phase 5** connects step 4 (pre-payment validation) and step 6 (outgoing webhooks).
 - The payment attempt states of section 9.2 gain an "authorized, waiting for capture" stage; the link stays `processing` during it, so no second attempt can start.
 - Integrator documentation must say: approve means "go ahead and charge"; confirm the sale only on `payment.succeeded`.
-- If the spike shows that separate capture is not available for a connection method or country, stop and report before building on it (plan section 27, Phase 4).
+- If the Stripe acceptance gate of ADR-0051 shows that separate capture is not available for a connection method or country, stop and report before building on it (plan section 27, Phase 4).
 - The deployment guides make the Connect webhook destination a required step, with a checklist per mode. The platform's diagnostics report an error when a mode is in use without its webhook signing secret, and a warning when connections that can charge receive no event for 7 days (configurable). The platform panel shows the last Stripe event of each connection and flags the silent ones.
