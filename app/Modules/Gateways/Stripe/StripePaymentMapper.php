@@ -81,6 +81,7 @@ final class StripePaymentMapper
             country: self::string($card['country'] ?? null),
             brand: self::string($card['brand'] ?? null),
             last4: self::string($card['last4'] ?? null),
+            fingerprint: self::string($card['fingerprint'] ?? null),
         );
     }
 

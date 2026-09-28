@@ -104,6 +104,7 @@ final readonly class StripeGateway implements PaymentGateway
             country: $card instanceof StripeObject && is_string($card->country ?? null) ? $card->country : null,
             brand: $card instanceof StripeObject && is_string($card->brand ?? null) ? $card->brand : null,
             last4: $card instanceof StripeObject && is_string($card->last4 ?? null) ? $card->last4 : null,
+            fingerprint: $card instanceof StripeObject && is_string($card->fingerprint ?? null) ? $card->fingerprint : null,
         );
     }
 

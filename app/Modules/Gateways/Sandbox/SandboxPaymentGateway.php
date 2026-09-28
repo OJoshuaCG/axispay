@@ -92,7 +92,7 @@ final class SandboxPaymentGateway implements PaymentGateway
 
         [$brand, $last4] = self::CARDS[self::scenario($confirmationToken)];
 
-        return new PaymentMethodPreview('MX', $brand, $last4);
+        return new PaymentMethodPreview('MX', $brand, $last4, 'fp_sandbox_'.$last4);
     }
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
@@ -332,7 +332,7 @@ final class SandboxPaymentGateway implements PaymentGateway
             currency: self::str($state['currency'] ?? null) ?? 'MXN',
             amountCapturableMinor: $status === ProviderPaymentStatus::RequiresCapture ? $amount : 0,
             clientSecret: $status === ProviderPaymentStatus::RequiresAction ? self::str($state['client_secret'] ?? null) : null,
-            cardPreview: $card !== null ? new PaymentMethodPreview(self::str($card['country'] ?? null), self::str($card['brand'] ?? null), self::str($card['last4'] ?? null)) : null,
+            cardPreview: $card !== null ? new PaymentMethodPreview(self::str($card['country'] ?? null), self::str($card['brand'] ?? null), self::str($card['last4'] ?? null), 'fp_sandbox_'.(self::str($card['last4'] ?? null) ?? '0000')) : null,
             failure: $failure !== null && $status === ProviderPaymentStatus::RequiresPaymentMethod
                 ? new ProviderPaymentFailure(self::str($failure['reference'] ?? null) ?? 'ch_sandbox', self::str($failure['code'] ?? null), self::str($failure['decline_code'] ?? null), self::str($failure['message'] ?? null))
                 : null,

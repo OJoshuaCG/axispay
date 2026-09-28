@@ -12,9 +12,12 @@ use App\Modules\Checkout\Services\ChargeAmount;
 use App\Modules\Checkout\Services\CheckoutUrls;
 use App\Modules\Checkout\Services\EffectivePayerFields;
 use App\Modules\Checkout\Services\TurnstileVerifier;
+use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
+use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayAccessFailures;
 use App\Modules\Gateways\Services\GatewayFactory;
@@ -34,6 +37,7 @@ use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\LinkReservation;
+use App\Modules\Payments\Services\ServerErrorRetry;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Shared\Money\Money;
 use App\Modules\Tenancy\Services\TenantAccess;
@@ -118,6 +122,15 @@ final readonly class StartCheckoutPayment
             return new CheckoutResult(CheckoutOutcome::TurnstileRequired, turnstileRequired: true);
         }
 
+        $result = $this->afterTurnstile($link, $input, $payer, $turnstileRequired);
+
+        // The verified token is spent (Cloudflare accepts a token once):
+        // whatever happened next, the page must ask for a fresh one.
+        return $turnstileRequired && ! $result->turnstileRequired ? $result->withTurnstileRequired() : $result;
+    }
+
+    private function afterTurnstile(PaymentLink $link, CheckoutPaymentInput $input, PayerData $payer, bool $turnstileRequired): CheckoutResult
+    {
         $connection = GatewayConnection::query()->current()->first();
 
         if ($connection === null || ! $connection->status->canCharge() || ! $connection->charges_enabled) {
@@ -133,17 +146,18 @@ final readonly class StartCheckoutPayment
         } catch (GatewayException $e) {
             Log::warning('The confirmation token could not be read.', ['payment_link_id' => $link->id, 'exception' => $e::class, 'provider_code' => $e->providerCode]);
 
-            if ($e instanceof GatewayRequestException) {
-                $this->guard->countUnrecognizedToken($link, $input->clientIp);
-            }
+            match (true) {
+                $e instanceof GatewayRequestException => $this->guard->countUnrecognizedToken($link, $input->clientIp),
+                // Unavailable or rate limited: counted too, so retries cannot hammer the gateway.
+                $e instanceof GatewayUnavailableException => $this->guard->countGatewayFailure($link, $input->clientIp),
+                default => null,
+            };
 
             return CheckoutResult::of(CheckoutOutcome::Error);
         }
 
-        $this->guard->countConfirmation($link, $input->clientIp);
-
         $amount = $this->amounts->for($link, $card);
-        $claimed = $this->claimAttempt($link, $connection, $amount, $payer, $input);
+        $claimed = $this->claimAttempt($link, $connection, $amount, $payer, $input, $card);
 
         if ($claimed instanceof CheckoutOutcome) {
             return CheckoutResult::of($claimed);
@@ -192,10 +206,10 @@ final readonly class StartCheckoutPayment
      *
      * @return array{0: PaymentAttempt, 1: string}|CheckoutOutcome the attempt and the lease token
      */
-    private function claimAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, PayerData $payer, CheckoutPaymentInput $input): array|CheckoutOutcome
+    private function claimAttempt(PaymentLink $link, GatewayConnection $connection, Money $amount, PayerData $payer, CheckoutPaymentInput $input, PaymentMethodPreview $card): array|CheckoutOutcome
     {
         try {
-            return DB::transaction(function () use ($link, $connection, $amount, $payer, $input): array|CheckoutOutcome {
+            return DB::transaction(function () use ($link, $connection, $amount, $payer, $input, $card): array|CheckoutOutcome {
                 $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
                 $reclaiming = $locked->status === PaymentLinkStatus::Processing;
 
@@ -236,6 +250,11 @@ final readonly class StartCheckoutPayment
                 }
 
                 $this->storePayer($attempt, $payer);
+
+                // Forensics only (card testing): never shown to payers (ADR-0051).
+                if ($card->fingerprint !== null) {
+                    $attempt->forceFill(['card_fingerprint' => substr($card->fingerprint, 0, 64)])->save();
+                }
 
                 if (! $reclaiming) {
                     $this->links->enterProcessing($locked);
@@ -329,11 +348,27 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of(CheckoutOutcome::InProgress);
         }
 
+        // Plan 11.7 rules 1-2: only a confirmation that goes on to the
+        // gateway counts, reserved atomically (a parallel burst cannot overshoot).
+        if (($minutes = $this->guard->reserveConfirmation($link, $input->clientIp)) !== null) {
+            return new CheckoutResult(CheckoutOutcome::RateLimited, minutes: $minutes);
+        }
+
         try {
             if ($attempt->provider_payment_id === null) {
                 // Always the attempt's STORED amount: a retry after a lost
                 // answer repeats the very same request under the same key.
-                $created = $this->failures->guard($connection, static fn () => $gateway->createOrUpdatePayment($connection, $request($attempt->money(), IdempotencyKeys::create($attempt->id))));
+                // A 5xx is stored under its key by the gateway: repeated under
+                // a derived key (an intent the failed call may have left is
+                // never confirmed, so it cannot charge; ADR-0051).
+                $failures = $this->failures;
+                $money = $attempt->money();
+                $created = ServerErrorRetry::run(
+                    IdempotencyKeys::create($attempt->id),
+                    static fn (string $key) => $failures->guard($connection, static fn () => $gateway->createOrUpdatePayment($connection, $request($money, $key))),
+                    static fn (): ?ProviderPayment => null,
+                    ['payment_attempt_id' => $attempt->id, 'operation' => 'create'],
+                );
                 $attempt = $this->apply->handle($attempt->id, $created, leaseToken: $leaseToken)->attempt;
             }
 
@@ -349,9 +384,10 @@ final readonly class StartCheckoutPayment
             }
 
             $providerPaymentId = (string) $attempt->provider_payment_id;
-            $confirmKey = IdempotencyKeys::confirm($attempt->id, $input->confirmationToken);
             $returnUrl = $this->urls->complete($link);
             $receiptEmail = $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null;
+            // The key covers every confirmation parameter that can vary.
+            $confirmKey = IdempotencyKeys::confirm($attempt->id, $input->confirmationToken, $receiptEmail, $returnUrl);
             $payment = $this->failures->guard($connection, static fn () => $gateway->confirmPayment($connection, $providerPaymentId, $input->confirmationToken, $confirmKey, $returnUrl, $receiptEmail));
         } catch (GatewayException $e) {
             // Unknown or refused: the payer may try again (same keys); the

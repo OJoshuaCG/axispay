@@ -26,6 +26,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string|null $message
  * @property string|null $card_country
  * @property string|null $card_brand
+ * @property string|null $card_fingerprint forensics only (ADR-0051)
  * @property string|null $client_ip
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at

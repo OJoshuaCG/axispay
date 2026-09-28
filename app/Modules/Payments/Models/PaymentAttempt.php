@@ -44,6 +44,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $card_country
  * @property string|null $card_brand
  * @property string|null $card_last4
+ * @property string|null $card_fingerprint forensics only (ADR-0051)
  * @property int $failure_count
  * @property string|null $last_failure_code
  * @property string|null $last_failure_message

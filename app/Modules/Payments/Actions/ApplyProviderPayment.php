@@ -157,6 +157,7 @@ final readonly class ApplyProviderPayment
             'card_country' => $card?->country !== null ? strtoupper(substr($card->country, 0, 2)) : null,
             'card_brand' => $card?->brand !== null ? substr($card->brand, 0, 32) : null,
             'card_last4' => $card?->last4 !== null ? substr($card->last4, 0, 4) : null,
+            'card_fingerprint' => $card?->fingerprint !== null ? substr($card->fingerprint, 0, 64) : null,
             'capture_before' => $payment->captureBefore !== null ? CarbonImmutable::parse($payment->captureBefore)->utc() : null,
         ], static fn (mixed $value): bool => $value !== null));
 
@@ -178,6 +179,7 @@ final readonly class ApplyProviderPayment
                     'message' => $failure->message,
                     'card_country' => $attempt->card_country,
                     'card_brand' => $attempt->card_brand,
+                    'card_fingerprint' => $attempt->card_fingerprint,
                     'client_ip' => $clientIp ?? $attempt->client_ip,
                 ])->save();
             });
