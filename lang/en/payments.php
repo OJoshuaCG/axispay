@@ -55,6 +55,7 @@ return [
     ],
 
     'checkout_block' => [
+        'reauthentication_required' => 'Confirm your password to continue.',
         'callout' => 'Payments paused for possible card testing until :date.',
         'callout_help' => 'The link received many declined cards in a short time. Unblock it only if you recognize the attempts.',
         'unblock' => 'Unblock payments',

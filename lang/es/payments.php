@@ -53,6 +53,7 @@ return [
     ],
 
     'checkout_block' => [
+        'reauthentication_required' => 'Confirme su contraseña para continuar.',
         'callout' => 'Pagos pausados por posible prueba de tarjetas hasta el :date.',
         'callout_help' => 'El link recibió muchas tarjetas rechazadas en poco tiempo. Desbloquéelo solo si reconoce los intentos.',
         'unblock' => 'Desbloquear pagos',

@@ -39,6 +39,12 @@ async function postJson(url, body) {
         data = { outcome: 'error' };
     }
 
+    // The pay host's request limit (429): the server's message and wait time.
+    if (response.status === 429) {
+        const seconds = Number(data.retry_after_seconds ?? response.headers.get('Retry-After') ?? 60);
+        data = { ...data, outcome: 'too_many_requests', retry_after_seconds: Number.isFinite(seconds) && seconds > 0 ? seconds : 60 };
+    }
+
     return { status: response.status, data };
 }
 
@@ -69,6 +75,15 @@ function initPolling() {
 
         try {
             const response = await fetch(poll.status, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+
+            // Over the request limit: wait as the server asks, then keep polling.
+            if (response.status === 429) {
+                const seconds = Number(response.headers.get('Retry-After') ?? 5);
+                window.setTimeout(tick, Math.max(poll.intervalMs, (Number.isFinite(seconds) ? seconds : 5) * 1000));
+
+                return;
+            }
+
             const data = await response.json();
 
             if (data.state && data.state !== 'processing') {
@@ -404,6 +419,15 @@ function initCheckout() {
                 setBusy(false);
                 button.setAttribute('aria-disabled', 'true');
                 showAlert(data.message, 'warning');
+
+                return;
+            case 'too_many_requests':
+                setBusy(false);
+                button.setAttribute('aria-disabled', 'true');
+                showAlert(data.message ?? strings.errorMessage, 'warning');
+                window.setTimeout(() => {
+                    button.removeAttribute('aria-disabled');
+                }, data.retry_after_seconds * 1000);
 
                 return;
             case 'blocked':

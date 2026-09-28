@@ -6,6 +6,8 @@ namespace App\Modules\PaymentLinks\Filament\Resources\PaymentLinks;
 
 use App\Modules\Checkout\Actions\UnblockCheckout;
 use App\Modules\Checkout\Services\EffectivePayerFields;
+use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
+use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Filament\Concerns\TenantPanel;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
@@ -372,8 +374,14 @@ final class PaymentLinkResource extends Resource
             ->modalHeading(__('payments.checkout_block.unblock_heading'))
             ->modalDescription(__('payments.checkout_block.unblock_help'))
             ->modalSubmitActionLabel(__('payments.checkout_block.unblock'))
-            ->action(static function (PaymentLink $record): void {
-                app(UnblockCheckout::class)->handleForUser(TenantPanel::user(), $record);
+            ->schema([Reauthentication::field()])
+            ->action(static function (array $data, PaymentLink $record): void {
+                try {
+                    Reauthentication::confirm($data);
+                    app(UnblockCheckout::class)->handleForUser(TenantPanel::user(), $record);
+                } catch (ReauthenticationRequiredException) {
+                    DomainErrors::stop(__('payments.checkout_block.reauthentication_required'));
+                }
 
                 Notification::make()->success()->title(__('payments.checkout_block.unblocked'))->send();
             });

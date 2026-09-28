@@ -10,6 +10,7 @@ declare(strict_types=1);
 return [
     'title' => [
         'pay' => 'Pay :merchant',
+        'too_many_requests' => 'Too many requests',
         'not_found' => 'Link not found',
     ],
 
@@ -66,6 +67,8 @@ return [
         'rate_limited' => 'For security, payments are paused. Try again in :minutes minutes.',
         'error' => "We couldn't process the payment. No charge was made. Please try again.",
         'unavailable' => "This link isn't accepting payments right now. Contact :merchant.",
+        'too_many_requests' => 'Too many requests. Try again in :seconds seconds.',
+        'security_unavailable' => 'Payments on this page are unavailable right now. Please try again later.',
         'fix_fields' => 'Check the highlighted fields.',
     ],
 
@@ -109,6 +112,10 @@ return [
             'fallback' => 'Contact :merchant for more information.',
         ],
         'voided' => 'You were not charged. Your bank may show a pending charge for a few days; it will be released automatically.',
+        'too_many_requests' => [
+            'heading' => 'Too many requests',
+            'body' => 'Please wait a moment and reload this page.',
+        ],
         'not_found' => [
             'heading' => "We couldn't find this link",
             'body' => "We couldn't find this link. Check that the address is complete.",

@@ -137,6 +137,9 @@ return [
             // 10 confirmations per client IP per hour, across links.
             'ip_attempts' => 10,
             'ip_window_minutes' => 60,
+            // Unrecognized confirmation tokens per client network per
+            // `ip_window_minutes`, across links (ADR-0051).
+            'ip_bogus_attempts' => 20,
         ],
         // Turnstile is required once the link (or the payer's session) has
         // this many declines (plan 11.7 rule 3, case 16).

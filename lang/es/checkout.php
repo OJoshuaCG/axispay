@@ -10,6 +10,7 @@ declare(strict_types=1);
 return [
     'title' => [
         'pay' => 'Pagar a :merchant',
+        'too_many_requests' => 'Demasiadas solicitudes',
         'not_found' => 'Enlace no encontrado',
     ],
 
@@ -66,6 +67,8 @@ return [
         'rate_limited' => 'Por seguridad, pausamos los pagos por un momento. Intenta de nuevo en :minutes minutos.',
         'error' => 'No pudimos procesar el pago. No se hizo ningún cargo. Intenta de nuevo.',
         'unavailable' => 'Este enlace no acepta pagos por ahora. Contacta a :merchant.',
+        'too_many_requests' => 'Demasiadas solicitudes. Vuelve a intentarlo en :seconds segundos.',
+        'security_unavailable' => 'Los pagos en esta página no están disponibles en este momento. Vuelve a intentarlo más tarde.',
         'fix_fields' => 'Revisa los campos marcados.',
     ],
 
@@ -109,6 +112,10 @@ return [
             'fallback' => 'Contacta a :merchant para más información.',
         ],
         'voided' => 'No se hizo ningún cargo. Tu banco puede mostrar un cargo pendiente por unos días; se liberará sin que hagas nada.',
+        'too_many_requests' => [
+            'heading' => 'Demasiadas solicitudes',
+            'body' => 'Espera un momento y vuelve a cargar esta página.',
+        ],
         'not_found' => [
             'heading' => 'No encontramos este enlace',
             'body' => 'No encontramos este enlace. Revisa que la dirección esté completa.',
