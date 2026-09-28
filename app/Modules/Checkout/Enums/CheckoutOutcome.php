@@ -6,7 +6,7 @@ namespace App\Modules\Checkout\Enums;
 
 /**
  * What the payment page is told after a payment request (plan 11.4, 11.5).
- * The page shows the matching copy (DESIGN.md states); the detailed reason
+ * The page shows the matching copy (docs/frontend/checkout-design.md states); the detailed reason
  * of a decline stays in the tenant panel (plan 11.7 rule 7).
  */
 enum CheckoutOutcome: string

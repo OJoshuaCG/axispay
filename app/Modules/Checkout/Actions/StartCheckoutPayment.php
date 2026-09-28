@@ -33,9 +33,12 @@ use App\Modules\Payments\Actions\ConfirmAttemptPayment;
 use App\Modules\Payments\Actions\ReleaseLinkAfterAttempt;
 use App\Modules\Payments\Data\AttemptClaim;
 use App\Modules\Payments\Data\AttemptClaimRequest;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\ConfirmationRequest;
 use App\Modules\Payments\Enums\ClaimRefusal;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Exceptions\CallBudgetExhausted;
+use App\Modules\Payments\Exceptions\PaymentOutcomeUnknownException;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\LinkReservation;
 use App\Modules\Shared\Database\ConcurrencyErrors;
@@ -102,6 +105,9 @@ final readonly class StartCheckoutPayment
             throw new LogicException('The checkout calls the gateway: never inside a transaction.');
         }
 
+        // The request answers before the web server gives up (ADR-0051).
+        $budget = CallBudget::forPayerRequest();
+
         if (($closed = $this->closedOutcome($link)) !== null) {
             return CheckoutResult::of($closed);
         }
@@ -122,14 +128,14 @@ final readonly class StartCheckoutPayment
             return new CheckoutResult(CheckoutOutcome::TurnstileRequired, turnstileRequired: true);
         }
 
-        $result = $this->afterTurnstile($link, $input, $payer, $turnstileRequired);
+        $result = $this->afterTurnstile($link, $input, $payer, $turnstileRequired, $budget);
 
         // The verified token is spent (Cloudflare accepts a token once):
         // whatever happened next, the page must ask for a fresh one.
         return $turnstileRequired && ! $result->turnstileRequired ? $result->withTurnstileRequired() : $result;
     }
 
-    private function afterTurnstile(PaymentLink $link, CheckoutPaymentInput $input, PayerData $payer, bool $turnstileRequired): CheckoutResult
+    private function afterTurnstile(PaymentLink $link, CheckoutPaymentInput $input, PayerData $payer, bool $turnstileRequired, CallBudget $budget): CheckoutResult
     {
         $connection = $this->connection->chargeable();
 
@@ -139,7 +145,7 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of(CheckoutOutcome::Unavailable);
         }
 
-        $card = $this->readCard($link, $connection, $input);
+        $card = $budget->affords() ? $this->readCard($link, $connection, $input) : null;
 
         if ($card === null) {
             return CheckoutResult::of(CheckoutOutcome::Error);
@@ -157,7 +163,7 @@ final readonly class StartCheckoutPayment
         }
 
         try {
-            return $this->confirm($link, $claim, $amount, $payer, $input, $turnstileRequired);
+            return $this->confirm($link, $claim, $amount, $payer, $input, $turnstileRequired, $budget);
         } finally {
             $this->releaseClaim($claim);
         }
@@ -230,7 +236,7 @@ final readonly class StartCheckoutPayment
     }
 
     /** Steps 7 and 8, holding the attempt's lease. */
-    private function confirm(PaymentLink $link, AttemptClaim $claim, Money $amount, PayerData $payer, CheckoutPaymentInput $input, bool $turnstileRequired): CheckoutResult
+    private function confirm(PaymentLink $link, AttemptClaim $claim, Money $amount, PayerData $payer, CheckoutPaymentInput $input, bool $turnstileRequired, CallBudget $budget): CheckoutResult
     {
         $attempt = $claim->attempt;
 
@@ -251,7 +257,19 @@ final readonly class StartCheckoutPayment
                 returnUrl: $this->urls->complete($link),
                 receiptEmail: $this->access->settings($link->tenant_id)->sendStripeReceipts ? $payer->email() : null,
                 clientIp: $input->clientIp,
+                budget: $budget,
             ));
+        } catch (CallBudgetExhausted $e) {
+            // Stopped before the confirmation reached the gateway: nothing was charged.
+            Log::warning('The checkout ran out of time before confirming a payment.', ['payment_attempt_id' => $attempt->id]);
+
+            return new CheckoutResult(CheckoutOutcome::Error, turnstileRequired: $turnstileRequired);
+        } catch (PaymentOutcomeUnknownException $e) {
+            // The confirmation may have gone through: never an error for a
+            // charge that may be under way; events and the reconciliation settle it.
+            Log::warning('The confirmation answer was lost; the payment is left to events and the reconciliation.', ['payment_attempt_id' => $attempt->id]);
+
+            return CheckoutResult::of(CheckoutOutcome::Processing);
         } catch (GatewayException $e) {
             // Unknown or refused: the payer may try again (same keys); the
             // webhook and the reconciliation settle any payment that did go through.
@@ -284,7 +302,7 @@ final readonly class StartCheckoutPayment
         }
 
         if ($status === PaymentAttemptStatus::RequiresCapture) {
-            return CompleteCheckoutAuthorization::complete($this->capture, $attempt->id, $claim->leaseToken);
+            return CompleteCheckoutAuthorization::complete($this->capture, $attempt->id, $claim->leaseToken, $budget);
         }
 
         return CheckoutResult::of(match ($status) {

@@ -11,7 +11,8 @@ use SensitiveParameter;
  * The payer's confirmation of an attempt (ConfirmAttemptPayment): the
  * gateway's confirmation token, the amount to charge now, where the gateway
  * sends the payer back after 3D Secure, the receipt e-mail (only when the
- * tenant sends gateway receipts) and the payer's IP (declines, plan 11.7).
+ * tenant sends gateway receipts), the payer's IP (declines, plan 11.7) and
+ * the time left in the payer's request (CallBudget).
  */
 final readonly class ConfirmationRequest
 {
@@ -21,5 +22,6 @@ final readonly class ConfirmationRequest
         public string $returnUrl,
         #[SensitiveParameter] public ?string $receiptEmail,
         public ?string $clientIp,
+        public ?CallBudget $budget = null,
     ) {}
 }

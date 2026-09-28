@@ -170,6 +170,13 @@ return [
         // reconciliation) voids it, and a late capture never happens. If the
         // gateway already reports it succeeded, the payment wins (ADR-0051).
         'capture_window_minutes' => 15,
+        // A payer's Pay or 3D Secure continuation request answers within
+        // this many seconds, below the web server's 60 s: a gateway call only
+        // starts when its worst case still fits; otherwise the page says the
+        // payment is processing (ADR-0051).
+        'request_budget_seconds' => 50,
+        // Worst case of the merchant's pre-payment validation (Phase 5).
+        'pre_payment_validation_seconds' => 5,
         // The status polled by the page is re-read from the gateway when the
         // attempt has not changed for this long (webhooks stay the source of
         // truth; this only speeds the page up).

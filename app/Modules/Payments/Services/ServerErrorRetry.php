@@ -6,6 +6,7 @@ namespace App\Modules\Payments\Services;
 
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
+use App\Modules\Payments\Data\CallBudget;
 use Closure;
 use Illuminate\Support\Facades\Log;
 
@@ -33,9 +34,10 @@ final class ServerErrorRetry
      * @param  Closure(string): T  $call  the gateway call under the given key
      * @param  Closure(): (ProviderPayment|null)  $reread  the payment if it moved on, null if the call is still due
      * @param  array<string, mixed>  $context  log context (our identifiers only)
+     * @param  CallBudget|null  $budget  a repetition only starts while it fits (payer requests)
      * @return T|ProviderPayment
      */
-    public static function run(string $key, Closure $call, Closure $reread, array $context): mixed
+    public static function run(string $key, Closure $call, Closure $reread, array $context, ?CallBudget $budget = null): mixed
     {
         $current = $key;
 
@@ -43,7 +45,7 @@ final class ServerErrorRetry
             try {
                 return $call($current);
             } catch (GatewayUnavailableException $e) {
-                if (($e->httpStatus ?? 0) < 500 || $retry > self::MAX_RETRIES) {
+                if (($e->httpStatus ?? 0) < 500 || $retry > self::MAX_RETRIES || ($budget !== null && ! $budget->affords())) {
                     throw $e;
                 }
 

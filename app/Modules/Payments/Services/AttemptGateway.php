@@ -10,6 +10,7 @@ use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayAccessFailures;
 use App\Modules\Gateways\Services\GatewayFactory;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Models\PaymentAttempt;
 use Closure;
 
@@ -61,9 +62,9 @@ final readonly class AttemptGateway
      * @param  array<string, mixed>  $context  log context (our identifiers only)
      * @return T|ProviderPayment
      */
-    public function retryingCall(GatewayConnection $connection, string $key, Closure $call, Closure $moved, array $context): mixed
+    public function retryingCall(GatewayConnection $connection, string $key, Closure $call, Closure $moved, array $context, ?CallBudget $budget = null): mixed
     {
-        return ServerErrorRetry::run($key, fn (string $current): mixed => $this->guard($connection, static fn (): mixed => $call($current)), $moved, $context);
+        return ServerErrorRetry::run($key, fn (string $current): mixed => $this->guard($connection, static fn (): mixed => $call($current)), $moved, $context, $budget);
     }
 
     /**

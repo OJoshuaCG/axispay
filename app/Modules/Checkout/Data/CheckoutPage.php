@@ -10,7 +10,7 @@ use App\Modules\Shared\Money\Money;
 use Carbon\CarbonImmutable;
 
 /**
- * Everything the payment page renders (plan 11.2, 11.3, DESIGN.md). Built by
+ * Everything the payment page renders (plan 11.2, 11.3, docs/frontend/checkout-design.md). Built by
  * CheckoutPageBuilder; views only present it. Never carries the link's
  * metadata, client reference or any secret (plan 11.3).
  */

@@ -13,6 +13,7 @@ use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\CaptureResult;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
@@ -42,6 +43,8 @@ final readonly class CompleteCheckoutAuthorization
      */
     public function handle(PaymentLink $link, string $attemptId): CheckoutResult
     {
+        $budget = CallBudget::forPayerRequest();
+
         $attempt = PaymentAttempt::query()->where('payment_link_id', $link->id)->whereKey($attemptId)->first();
 
         if ($attempt === null) {
@@ -63,7 +66,7 @@ final readonly class CompleteCheckoutAuthorization
         }
 
         if ($attempt->status === PaymentAttemptStatus::RequiresCapture) {
-            return self::complete($this->capture, $attempt->id);
+            return self::complete($this->capture, $attempt->id, budget: $budget);
         }
 
         return CheckoutResult::of(match ($attempt->status) {
@@ -79,10 +82,19 @@ final readonly class CompleteCheckoutAuthorization
     /**
      * Completes an authorization for the page. Never an error page: anything
      * unexpected answers "processing", and the webhook or the reconciliation
-     * finishes the payment with the merchant's kept decision.
+     * finishes the payment with the merchant's kept decision. So does a
+     * request with no time left for the merchant's validation and the
+     * capture (Stripe slow): the payment is authorized, and completing it is
+     * left to them.
      */
-    public static function complete(CaptureAuthorizedPayment $capture, string $attemptId, ?string $leaseToken = null): CheckoutResult
+    public static function complete(CaptureAuthorizedPayment $capture, string $attemptId, ?string $leaseToken = null, ?CallBudget $budget = null): CheckoutResult
     {
+        if ($budget !== null && ! $budget->affords(1, max(0, config()->integer('axispay.checkout.pre_payment_validation_seconds')))) {
+            Log::warning('The checkout ran out of time before capturing; the authorization is left to events and the reconciliation.', ['payment_attempt_id' => $attemptId]);
+
+            return CheckoutResult::of(CheckoutOutcome::Processing);
+        }
+
         try {
             return self::toResult($capture->handle($attemptId, $leaseToken));
         } catch (GatewayException|GatewayConfigurationException|AttemptBusyException $e) {
