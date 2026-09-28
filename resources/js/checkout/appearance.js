@@ -47,9 +47,10 @@ export function appearance() {
             fontSizeBase: '16px',
             spacingUnit: '4px',
             borderRadius: '8px',
+            // Only the weights sent to Stripe (CheckoutFonts::STRIPE_WEIGHTS).
             fontWeightNormal: '400',
             fontWeightMedium: '500',
-            fontWeightBold: '600',
+            fontWeightBold: '500',
         },
         rules: {
             '.Input': { border: `1px solid ${lineStrong}`, padding: '9px 12px', boxShadow: 'none' },

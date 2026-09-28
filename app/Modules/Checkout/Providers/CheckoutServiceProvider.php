@@ -7,6 +7,7 @@ namespace App\Modules\Checkout\Providers;
 use App\Modules\Checkout\Console\CheckoutDemoCommand;
 use App\Modules\Checkout\Http\CheckoutRateLimits;
 use App\Modules\Checkout\Listeners\BlockCheckoutAfterDeclines;
+use App\Modules\Checkout\Services\CheckoutFonts;
 use App\Modules\Payments\Events\PaymentDeclined;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -14,6 +15,12 @@ use RuntimeException;
 
 final class CheckoutServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        // Reads the fonts manifest once per request or job.
+        $this->app->scoped(CheckoutFonts::class);
+    }
+
     public function boot(): void
     {
         self::assertTurnstileKeys((string) $this->app->environment());

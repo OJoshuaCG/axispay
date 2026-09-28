@@ -5,7 +5,7 @@
         - no theme pre-paint script and no data-theme: the page follows the
           OS (prefers-color-scheme); the payer never gets a theme toggle;
         - robots noindex (also sent as X-Robots-Tag), CSRF meta for the
-          page script, preconnect to Stripe, Geist Mono 600 preloaded (the
+          page script, preconnect to Stripe's API, Geist Mono 600 preloaded (the
           total);
         - Stripe.js is loaded from js.stripe.com (never bundled, PCI) only
           when the page takes payments; in the sandbox the local stub
@@ -50,7 +50,8 @@
         <title>{{ $title }}</title>
 
         @if ($loadStripe && ! $sandbox)
-            <link rel="preconnect" href="https://js.stripe.com">
+            {{-- Stripe.js itself is fetched right away below; its first API calls go to api.stripe.com. --}}
+            <link rel="preconnect" href="https://api.stripe.com" crossorigin>
         @endif
 
         @fonts
@@ -59,8 +60,9 @@
         @endif
 
         @if ($loadStripe && ! $sandbox)
-            {{-- Stripe.js, versioned like the pinned API version (dahlia); always from js.stripe.com. --}}
-            <script src="https://js.stripe.com/dahlia/stripe.js" @if ($cspNonce) nonce="{{ $cspNonce }}" @endif></script>
+            {{-- Stripe.js, versioned like the pinned API version (dahlia); always from js.stripe.com.
+                 Deferred: it runs after parsing, before the page's module script (document order). --}}
+            <script src="https://js.stripe.com/dahlia/stripe.js" defer @if ($cspNonce) nonce="{{ $cspNonce }}" @endif></script>
         @endif
 
         @vite($entries)

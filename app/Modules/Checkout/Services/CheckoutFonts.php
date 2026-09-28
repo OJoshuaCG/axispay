@@ -25,13 +25,20 @@ final class CheckoutFonts
     private ?array $manifest = null;
 
     /**
+     * Mukta weights the card form's Appearance uses (resources/js/checkout/
+     * appearance.js: normal 400, medium and bold 500). No other weight is
+     * sent to Stripe, so the iframe downloads nothing it does not render.
+     */
+    public const array STRIPE_WEIGHTS = [400, 500];
+
+    /**
      * @return list<array{family: string, src: string, weight: string}>
      */
     public function stripeFonts(): array
     {
         $fonts = [];
 
-        foreach ([400, 500, 600] as $weight) {
+        foreach (self::STRIPE_WEIGHTS as $weight) {
             $url = $this->fileUrl('mukta', $weight);
 
             if ($url !== null) {
