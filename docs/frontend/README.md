@@ -55,7 +55,7 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Invalid-input policy for components | `app/Support/ComponentMisuse.php` |
 | A component's markup, variants or props | `resources/views/components/<name>.blade.php` |
 | Payment status badge variant or icon | `app/Enums/PaymentStatus.php` (labels: `lang/*/payments.php`) |
-| Theme persistence, toggle keyboard behavior, browser `theme-color` | `resources/js/theme.js` (keep the pre-paint script in `components/layouts/app.blade.php` in sync) |
+| Theme persistence, toggle keyboard behavior, browser `theme-color` | `resources/js/theme.js` (keep the pre-paint script in `components/layouts/app.blade.php` in sync); the `theme-color` hexes: `components/theme-color-meta.blade.php` |
 | Double-submit guard, loading buttons | `resources/js/forms.js` |
 | Password policy (minimum length, data-leak check) and its checklist items | `config/axispay.php` → `passwords`, `app/Modules/Identity/Support/PasswordPolicy.php` |
 | Password field markup and behavior (reveal button, checklist, mismatch hint) | `resources/views/components/password-input.blade.php`, `resources/views/components/password/*`, `resources/js/password-input.js`, `app/Support/Filament/Forms/PasswordField.php` |

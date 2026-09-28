@@ -122,7 +122,7 @@ The browser chrome follows the **effective** theme, manual choice included.
 <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)" data-theme-color="dark">
 ```
 
-The two hexes are the only copy of `page` outside the tokens: they are needed before any CSS loads. If `page` changes in `primitives.css` / `semantic.css`, update them in `components/layouts/app.blade.php`. `theme.js` hardcodes no color.
+The two hexes are the only copy of `page` outside the tokens: they are needed before any CSS loads. They live in one component, `<x-theme-color-meta />` (`components/theme-color-meta.blade.php`), which every layout (the app layout and the checkout layout) includes. If `page` changes in `primitives.css` / `semantic.css`, update them there. `theme.js` hardcodes no color.
 
 ## Theme toggle labels
 

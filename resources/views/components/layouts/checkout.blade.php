@@ -44,8 +44,7 @@
         <meta name="referrer" content="no-referrer">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         {{-- Page background per scheme (--color-page: neutral-0 / neutral-900), before CSS loads. --}}
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-        <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
+        <x-theme-color-meta />
 
         <title>{{ $title }}</title>
 

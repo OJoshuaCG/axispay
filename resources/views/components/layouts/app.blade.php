@@ -37,8 +37,7 @@
             the pre-paint script below copies the chosen scheme's value into both
             tags, and resources/js/theme.js then writes the computed --color-page.
         --}}
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" data-theme-color="light">
-        <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)" data-theme-color="dark">
+        <x-theme-color-meta />
 
         <title>{{ filled($title) ? $title.' · '.$appName : $appName }}</title>
 
