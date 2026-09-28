@@ -101,6 +101,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     within the attempt's window. Queue `retry_after` is 150 s, the workers'
     default timeout 120 s and every job has its own limit below it (see the
     deployment guides for the new stop grace periods).
+  - Card testing and abuse: confirmations are counted atomically when they
+    reach Stripe (in-progress answers never count), unrecognized tokens are
+    also limited per client network across links and Stripe failures while
+    reading a token count per client; each group of pay-host pages has its
+    own request limit, with a "too many requests" message; production
+    refuses to start without the Turnstile keys (and the doctor reports
+    them); a spent Turnstile token is always replaced; the card fingerprint
+    is kept for forensics; lifting a block needs re-authentication.
+  - Stripe API correctness: `allowed_payment_method_types` replaces
+    `payment_method_types`; Link is hidden in the payment form; a creation,
+    capture or void that answered a stored server error is repeated under a
+    derived key (bounded) when the payment has not moved; the confirmation
+    key covers the receipt e-mail and return URL; a capture that finds the
+    payment no longer capturable applies Stripe's current state.
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after

@@ -139,6 +139,7 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `CACHE_STORE` | yes | `database` | |
 | `QUEUE_CONNECTION` | yes | `database` | ADR-0016 |
 | `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). Required: the application refuses to start in production without it, and `axispay:doctor` fails on `*` (ADR-0051). |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | yes | Cloudflare Turnstile keys of the pay host | Required: the application refuses to start in production without both, and `axispay:doctor` fails without them. Without Turnstile a link stops taking payments after its first decline (ADR-0051). |
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5). `smtp` on 587 upgrades with STARTTLS; implicit TLS on 465 is `smtps`. `MAIL_ENCRYPTION` is **ignored** (Laravel 13 reads `MAIL_SCHEME` only). Example: [Outgoing mail](#outgoing-mail) |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | For a mailbox account, the username is the full address |
@@ -633,7 +634,7 @@ Tenants configure nothing. The platform needs **one destination per mode**. In t
 - [ ] URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode. The mode in the URL must match the Dashboard mode.
 - [ ] API version `2026-08-26.dahlia`, the version pinned in the application (`config/services.php`, `stripe.api_version`).
 - [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
-- [ ] After deploying Phase 4: `php artisan axispay:stripe-sync-webhook-endpoints` (payment events on the merchants' own endpoints), `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set, `AXISPAY_CHECKOUT_SANDBOX` unset (the application refuses to boot with it outside local/testing).
+- [ ] After deploying Phase 4: `php artisan axispay:stripe-sync-webhook-endpoints` (payment events on the merchants' own endpoints), `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set (required: the application refuses to start in production without them), `AXISPAY_CHECKOUT_SANDBOX` unset (the application refuses to boot with it outside local/testing).
 - [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` or `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET`, never the other mode's variable.
 
 `php artisan axispay:doctor` prints the pinned API version and the event list, so you can compare them with the Dashboard.
