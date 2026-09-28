@@ -123,6 +123,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Stripe.js loads deferred with an early connection to Stripe's API; a page
     load reads the tenant and its connection once; the card form loads two
     font weights instead of three.
+  - Tests and flakiness: claiming a link's attempt no longer fails under
+    MariaDB's snapshot isolation (the attempt is found before locking and
+    checked again under the locks; conflicts are retried with a short pause
+    and answered "in progress"), and a lock conflict while freeing the link
+    never replaces the payer's answer. The concurrency tests order their
+    processes with signal files instead of timing (a payer held inside the
+    gateway, cancellations before or during a payment), cover both the void
+    and the capture race (exactly one capture call), and reproduce the
+    snapshot conflict deterministically. New tests: the Pay, 3D Secure
+    continuation and completion request limits, isolation of the link detail
+    and its unblock action, continuation of another link's attempt, and a
+    reviewed list of pay-host routes. A gateway event's job is queued without
+    a window in which a concurrent delivery could be lost.
   - Stripe API correctness: `allowed_payment_method_types` replaces
     `payment_method_types`; Link is hidden in the payment form; a creation,
     capture or void that answered a stored server error is repeated under a
