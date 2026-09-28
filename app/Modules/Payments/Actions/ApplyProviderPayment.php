@@ -15,10 +15,13 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Data\AppliedPayment;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Events\PaymentDeclined;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
 use App\Modules\Payments\Services\AttemptLease;
+use App\Modules\Payments\Services\AttemptLocks;
+use App\Modules\Payments\Services\FlagAttemptForReview;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
 use App\Modules\Payments\Services\PaymentSnapshot;
 use App\Modules\Webhooks\Enums\DomainEventType;
@@ -54,13 +57,12 @@ use LogicException;
  */
 final readonly class ApplyProviderPayment
 {
-    public const string SUCCEEDED_AFTER_CLOSE = 'succeeded_after_close';
-
     public function __construct(
         private PaymentAttemptStateMachine $attempts,
         private PaymentLinkStateMachine $links,
         private DomainEventRecorder $events,
         private AuditLogger $audit,
+        private FlagAttemptForReview $review,
     ) {}
 
     /**
@@ -70,10 +72,10 @@ final readonly class ApplyProviderPayment
      */
     public function handle(string $attemptId, ProviderPayment $payment, ?string $clientIp = null, ?string $leaseToken = null): AppliedPayment
     {
-        $result = DB::transaction(function () use ($attemptId, $payment, $clientIp, $leaseToken): AppliedPayment {
-            $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
-            $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->firstOrFail();
-            $attempt = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
+        $linkId = AttemptLocks::linkIdOf($attemptId);
+
+        $result = DB::transaction(function () use ($linkId, $attemptId, $payment, $clientIp, $leaseToken): AppliedPayment {
+            [$link, $attempt] = AttemptLocks::lockLinkThenAttemptOrFail($linkId, $attemptId);
 
             if ($attempt->provider_payment_id !== null && $attempt->provider_payment_id !== $payment->providerPaymentId) {
                 throw new LogicException('The gateway payment does not belong to this attempt.');
@@ -99,7 +101,7 @@ final readonly class ApplyProviderPayment
 
             $freshDecline = $payment->failure !== null && ! PaymentAttemptFailure::query()
                 ->where('payment_attempt_id', $attempt->id)
-                ->where('provider_reference', substr($payment->failure->reference, 0, 255))
+                ->where('provider_reference', substr($payment->failure->reference, 0, PaymentAttemptFailure::PROVIDER_REFERENCE_MAX))
                 ->exists();
             $stale = PaymentAttemptStateMachine::isBackward($attempt->status, $target)
                 || (PaymentAttemptStateMachine::needsFreshDecline($attempt->status, $target) && ! $freshDecline);
@@ -126,7 +128,7 @@ final readonly class ApplyProviderPayment
                 $this->events->record(DomainEventType::PaymentFailed, 'payment', $attempt->id, [
                     'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
                     'failure_count' => $attempt->failure_count,
-                    'failure_code' => PaymentSnapshot::genericFailureCode($attempt->last_failure_code, $attempt->last_decline_code),
+                    'failure_code' => PaymentSnapshot::genericFailureCode($attempt),
                 ]);
             }
 
@@ -155,9 +157,9 @@ final readonly class ApplyProviderPayment
         $attempt->forceFill(array_filter([
             'provider_payment_id' => $attempt->provider_payment_id ?? $payment->providerPaymentId,
             'card_country' => $card?->country !== null ? strtoupper(substr($card->country, 0, 2)) : null,
-            'card_brand' => $card?->brand !== null ? substr($card->brand, 0, 32) : null,
+            'card_brand' => $card?->brand !== null ? substr($card->brand, 0, PaymentAttempt::CARD_BRAND_MAX) : null,
             'card_last4' => $card?->last4 !== null ? substr($card->last4, 0, 4) : null,
-            'card_fingerprint' => $card?->fingerprint !== null ? substr($card->fingerprint, 0, 64) : null,
+            'card_fingerprint' => $card?->fingerprint !== null ? substr($card->fingerprint, 0, PaymentAttempt::CARD_FINGERPRINT_MAX) : null,
             'capture_before' => $payment->captureBefore !== null ? CarbonImmutable::parse($payment->captureBefore)->utc() : null,
         ], static fn (mixed $value): bool => $value !== null));
 
@@ -173,9 +175,10 @@ final readonly class ApplyProviderPayment
                 $row = new PaymentAttemptFailure;
                 $row->forceFill([
                     'payment_attempt_id' => $attempt->id,
-                    'provider_reference' => substr($failure->reference, 0, 255),
-                    'code' => $failure->code !== null ? substr($failure->code, 0, 64) : null,
-                    'decline_code' => $failure->declineCode !== null ? substr($failure->declineCode, 0, 64) : null,
+                    'provider_reference' => substr($failure->reference, 0, PaymentAttemptFailure::PROVIDER_REFERENCE_MAX),
+                    'code' => $failure->code !== null ? substr($failure->code, 0, PaymentAttempt::CODE_MAX) : null,
+                    'decline_code' => $failure->declineCode !== null ? substr($failure->declineCode, 0, PaymentAttempt::CODE_MAX) : null,
+                    'kind' => $failure->kind,
                     'message' => $failure->message,
                     'card_country' => $attempt->card_country,
                     'card_brand' => $attempt->card_brand,
@@ -189,8 +192,9 @@ final readonly class ApplyProviderPayment
 
         $attempt->forceFill([
             'failure_count' => $attempt->failure_count + 1,
-            'last_failure_code' => $failure->code !== null ? substr($failure->code, 0, 64) : null,
-            'last_decline_code' => $failure->declineCode !== null ? substr($failure->declineCode, 0, 64) : null,
+            'last_failure_code' => $failure->code !== null ? substr($failure->code, 0, PaymentAttempt::CODE_MAX) : null,
+            'last_decline_code' => $failure->declineCode !== null ? substr($failure->declineCode, 0, PaymentAttempt::CODE_MAX) : null,
+            'last_failure_kind' => $failure->kind,
             'last_failure_message' => $failure->message,
         ])->save();
 
@@ -267,16 +271,6 @@ final readonly class ApplyProviderPayment
     {
         Log::critical('A closed payment attempt succeeded at the gateway.', ['payment_attempt_id' => $attempt->id, 'status' => $attempt->status->value]);
 
-        if ($attempt->needs_review) {
-            return;
-        }
-
-        $attempt->forceFill(['needs_review' => true, 'review_reason' => self::SUCCEEDED_AFTER_CLOSE])->save();
-
-        $this->audit->record(AuditAction::PaymentNeedsReview, $attempt, [
-            'reason' => self::SUCCEEDED_AFTER_CLOSE,
-            'status' => $attempt->status->value,
-            'livemode' => $attempt->livemode,
-        ], actor: Actor::system());
+        $this->review->handle($attempt, ReviewReason::SucceededAfterClose);
     }
 }

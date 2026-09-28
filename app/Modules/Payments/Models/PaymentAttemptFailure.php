@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Models;
 
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
 use App\Modules\Tenancy\Concerns\BelongsToMode;
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $provider_reference
  * @property string|null $code
  * @property string|null $decline_code
+ * @property ProviderFailureKind|null $kind
  * @property string|null $message
  * @property string|null $card_country
  * @property string|null $card_brand
@@ -38,6 +40,8 @@ final class PaymentAttemptFailure extends Model
     use HasUlidPrimaryKey;
     use UsesMicrosecondDates;
 
+    public const int PROVIDER_REFERENCE_MAX = 255;
+
     protected $guarded = ['*'];
 
     protected $hidden = ['client_ip'];
@@ -45,6 +49,7 @@ final class PaymentAttemptFailure extends Model
     protected function casts(): array
     {
         return [
+            'kind' => ProviderFailureKind::class,
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

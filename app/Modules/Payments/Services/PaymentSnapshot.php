@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Services;
 
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Shared\Time\IsoDateTime;
 
@@ -22,7 +23,7 @@ final class PaymentSnapshot
     public static function of(PaymentAttempt $attempt, string $linkPrefixedId): array
     {
         $money = $attempt->money();
-        $failure = self::genericFailureCode($attempt->last_failure_code, $attempt->last_decline_code);
+        $failure = self::genericFailureCode($attempt);
 
         return [
             'id' => $attempt->prefixedId(),
@@ -41,31 +42,11 @@ final class PaymentSnapshot
     }
 
     /**
-     * Plan 15.2: `payment.failed` carries a generic code. Anything not listed
-     * (fraud, lost or stolen card, issuer-specific codes) is `card_declined`.
+     * Plan 15.2: `payment.failed` carries a generic code, the provider-neutral
+     * kind the gateway adapter mapped (never the raw decline code).
      */
-    public static function genericFailureCode(?string $code, ?string $declineCode): ?string
+    public static function genericFailureCode(PaymentAttempt $attempt): ?string
     {
-        if ($code === null && $declineCode === null) {
-            return null;
-        }
-
-        // The decline code is the more specific of the two.
-        foreach ([$declineCode, $code] as $c) {
-            $generic = match ($c) {
-                'insufficient_funds' => 'insufficient_funds',
-                'expired_card' => 'expired_card',
-                'incorrect_cvc', 'invalid_cvc', 'incorrect_number', 'invalid_number', 'invalid_expiry_month', 'invalid_expiry_year', 'incorrect_zip' => 'incorrect_card_details',
-                'payment_intent_authentication_failure', 'authentication_required' => 'authentication_failed',
-                'processing_error' => 'processing_error',
-                default => null,
-            };
-
-            if ($generic !== null) {
-                return $generic;
-            }
-        }
-
-        return 'card_declined';
+        return $attempt->last_failure_kind->value ?? ($attempt->failure_count > 0 ? ProviderFailureKind::CardDeclined->value : null);
     }
 }

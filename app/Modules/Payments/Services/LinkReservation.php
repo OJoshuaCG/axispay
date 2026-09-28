@@ -6,7 +6,6 @@ namespace App\Modules\Payments\Services;
 
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
 
 /**
@@ -18,16 +17,18 @@ use App\Modules\Payments\Models\PaymentAttempt;
  */
 final class LinkReservation
 {
-    public static function isAbandoned(PaymentLink $link): bool
+    /**
+     * @param  PaymentAttempt|null  $attempt  the link's active attempt when the caller already read it
+     */
+    public static function isAbandoned(PaymentLink $link, ?PaymentAttempt $attempt = null): bool
     {
         if ($link->status !== PaymentLinkStatus::Processing) {
             return false;
         }
 
-        $attempt = PaymentAttempt::query()
-            ->where('payment_link_id', $link->id)
-            ->whereIn('status', PaymentAttemptStatus::activeValues())
-            ->first();
+        if ($attempt === null || $attempt->status->isTerminal() || $attempt->payment_link_id !== $link->id) {
+            $attempt = PaymentAttempt::query()->activeForLink($link->id)->first();
+        }
 
         return $attempt !== null && ! $attempt->status->isInFlight() && ! $attempt->leaseHeld();
     }

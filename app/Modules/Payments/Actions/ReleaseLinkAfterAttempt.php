@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Actions;
 
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
-use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Jobs\CloseAttemptOfClosedLinkJob;
-use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLease;
+use App\Modules\Payments\Services\AttemptLocks;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -30,10 +29,10 @@ final readonly class ReleaseLinkAfterAttempt
 
     public function handle(string $attemptId, string $leaseToken): void
     {
-        $closed = DB::transaction(function () use ($attemptId): bool {
-            $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
-            $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->first();
-            $attempt = PaymentAttempt::query()->lockForUpdate()->find($attemptId);
+        $linkId = AttemptLocks::linkIdOf($attemptId);
+
+        $closed = DB::transaction(function () use ($linkId, $attemptId): bool {
+            [$link, $attempt] = AttemptLocks::lockLinkThenAttempt($linkId, $attemptId);
 
             if ($link === null || $attempt === null) {
                 return false;

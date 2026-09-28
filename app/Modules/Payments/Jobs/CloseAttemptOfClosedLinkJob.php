@@ -7,6 +7,7 @@ namespace App\Modules\Payments\Jobs;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Payments\Actions\VoidAuthorization;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
@@ -49,7 +50,7 @@ final class CloseAttemptOfClosedLinkJob implements ShouldQueue, TenantAware
     public function handle(VoidAuthorization $void): void
     {
         try {
-            $void->handle($this->paymentAttemptId, 'link_closed');
+            $void->handle($this->paymentAttemptId, VoidReason::LinkClosed);
         } catch (GatewayAuthenticationException|GatewayRequestException $e) {
             $this->fail($e); // plan 12.6: never retried
         } catch (AttemptBusyException) {

@@ -8,6 +8,7 @@ use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
@@ -91,7 +92,7 @@ final readonly class SyncPaymentAttempt
         // payable again (or expires) through the usual path.
         if ($reason === SyncReason::Reconciliation && $attempt->status === PaymentAttemptStatus::RequiresAction
             && $idleSince->lessThanOrEqualTo(CarbonImmutable::now()->subMinutes(max(1, config()->integer('axispay.checkout.abandon_action_after_minutes'))))) {
-            return $this->void->handle($attempt->id, 'abandoned_action');
+            return $this->void->handle($attempt->id, VoidReason::AbandonedAction);
         }
 
         if ($attempt->status !== PaymentAttemptStatus::RequiresCapture || ! $complete) {

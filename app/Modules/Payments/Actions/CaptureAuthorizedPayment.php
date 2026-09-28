@@ -14,12 +14,13 @@ use App\Modules\Payments\Contracts\PrePaymentValidator;
 use App\Modules\Payments\Data\CaptureResult;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
+use App\Modules\Payments\Services\AttemptLocks;
 use App\Modules\Payments\Services\CaptureWindow;
 use App\Modules\Payments\Services\IdempotencyKeys;
-use App\Modules\Payments\Services\ServerErrorRetry;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
@@ -98,7 +99,7 @@ final readonly class CaptureAuthorizedPayment
 
             PaymentAttempt::query()->whereKey($attempt->id)->whereNull('validation_outcome')->update([
                 'validation_outcome' => $outcome->value,
-                'validation_payer_message' => $payerMessage !== null ? mb_substr($payerMessage, 0, 500) : null,
+                'validation_payer_message' => $payerMessage !== null ? mb_substr($payerMessage, 0, PaymentAttempt::PAYER_MESSAGE_MAX) : null,
             ]);
 
             // Another actor may have stored its decision first: the stored one wins.
@@ -109,8 +110,7 @@ final readonly class CaptureAuthorizedPayment
 
         // Re-verify after the (possibly slow) merchant call: link first, then attempt.
         [$current, $linkClosed] = DB::transaction(static function () use ($attempt): array {
-            $link = PaymentLink::query()->lockForUpdate()->findOrFail($attempt->payment_link_id);
-            $locked = PaymentAttempt::query()->lockForUpdate()->findOrFail($attempt->id);
+            [$link, $locked] = AttemptLocks::lockLinkThenAttemptOrFail($attempt->payment_link_id, $attempt->id);
             $tenantClosed = Tenant::query()->find($link->tenant_id)?->status === TenantStatus::Closed;
 
             return [$locked, $tenantClosed || in_array($link->status, [PaymentLinkStatus::Expired, PaymentLinkStatus::Canceled], true)];
@@ -130,9 +130,9 @@ final readonly class CaptureAuthorizedPayment
 
         if ($linkClosed || $windowElapsed || $outcome === null || ! $outcome->allowsCapture()) {
             $reason = match (true) {
-                $linkClosed => 'link_closed',
-                $windowElapsed => 'capture_window_elapsed',
-                default => 'merchant_rejected',
+                $linkClosed => VoidReason::LinkClosed,
+                $windowElapsed => VoidReason::CaptureWindowElapsed,
+                default => VoidReason::MerchantRejected,
             };
 
             try {
@@ -147,7 +147,7 @@ final readonly class CaptureAuthorizedPayment
                 return new CaptureResult(CaptureOutcome::Captured, $voided);
             }
 
-            return new CaptureResult($reason === 'merchant_rejected' ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
+            return new CaptureResult($reason === VoidReason::MerchantRejected ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
         }
 
         [$gateway, $connection] = $this->gateways->for($current);
@@ -156,15 +156,12 @@ final readonly class CaptureAuthorizedPayment
             $providerPaymentId = (string) $current->provider_payment_id;
 
             try {
-                $guard = $this->gateways;
-                $payment = ServerErrorRetry::run(
+                $gateways = $this->gateways;
+                $payment = $gateways->retryingCall(
+                    $connection,
                     IdempotencyKeys::capture($current->id),
-                    static fn (string $key) => $guard->guard($connection, static fn () => $gateway->capturePayment($connection, $providerPaymentId, $key)),
-                    static function () use ($guard, $connection, $gateway, $providerPaymentId): ?ProviderPayment {
-                        $now = $guard->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
-
-                        return $now->status === ProviderPaymentStatus::RequiresCapture ? null : $now;
-                    },
+                    static fn (string $key): ProviderPayment => $gateway->capturePayment($connection, $providerPaymentId, $key),
+                    static fn (): ?ProviderPayment => $gateways->movedOn($gateway, $connection, $providerPaymentId, [ProviderPaymentStatus::RequiresCapture]),
                     ['payment_attempt_id' => $current->id, 'operation' => 'capture'],
                 );
             } catch (GatewayRequestException $e) {

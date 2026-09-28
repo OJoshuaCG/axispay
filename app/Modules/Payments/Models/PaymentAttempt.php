@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Models;
 
 use App\Modules\Gateways\Enums\GatewayProvider;
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\ValidationOutcome;
 use App\Modules\Shared\Database\HasPrefixedId;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
@@ -17,6 +19,7 @@ use App\Modules\Tenancy\Concerns\BelongsToMode;
 use App\Modules\Tenancy\Concerns\BelongsToTenant;
 use Carbon\CarbonImmutable;
 use Database\Factories\PaymentAttemptFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -49,6 +52,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $last_failure_code
  * @property string|null $last_failure_message
  * @property string|null $last_decline_code
+ * @property ProviderFailureKind|null $last_failure_kind provider-neutral kind of the last failed try
  * @property string|null $client_ip
  * @property string|null $user_agent
  * @property CarbonImmutable|null $confirmation_lease_until
@@ -64,7 +68,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $amount_refunded_minor
  * @property bool $late_payment
  * @property bool $needs_review
- * @property string|null $review_reason
+ * @property ReviewReason|null $review_reason
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  */
@@ -79,6 +83,17 @@ final class PaymentAttempt extends Model
     use HasPrefixedId;
     use HasUlidPrimaryKey;
     use UsesMicrosecondDates;
+
+    /** Column limits of the stored gateway details (plan 7.5). */
+    public const int CODE_MAX = 64;
+
+    public const int CARD_BRAND_MAX = 32;
+
+    public const int CARD_FINGERPRINT_MAX = 64;
+
+    public const int USER_AGENT_MAX = 512;
+
+    public const int PAYER_MESSAGE_MAX = 500;
 
     protected $guarded = ['*'];
 
@@ -101,6 +116,17 @@ final class PaymentAttempt extends Model
     public function money(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
+    }
+
+    /**
+     * The link's active attempt (at most one, rules.md rule 9): not final yet.
+     *
+     * @param  Builder<self>  $query
+     * @return Builder<self>
+     */
+    public function scopeActiveForLink(Builder $query, string $paymentLinkId): Builder
+    {
+        return $query->where('payment_link_id', $paymentLinkId)->whereIn('status', PaymentAttemptStatus::activeValues());
     }
 
     public function leaseHeld(): bool
@@ -142,6 +168,8 @@ final class PaymentAttempt extends Model
             'amount_refunded_minor' => 'integer',
             'late_payment' => 'boolean',
             'needs_review' => 'boolean',
+            'review_reason' => ReviewReason::class,
+            'last_failure_kind' => ProviderFailureKind::class,
             'created_at' => 'immutable_datetime',
             'updated_at' => 'immutable_datetime',
         ];

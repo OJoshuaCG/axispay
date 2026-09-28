@@ -12,17 +12,20 @@ use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
-use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ReviewReason;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
+use App\Modules\Payments\Services\AttemptLocks;
+use App\Modules\Payments\Services\FlagAttemptForReview;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
-use App\Modules\Payments\Services\ServerErrorRetry;
 use App\Modules\Shared\Database\Transactions;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use LogicException;
@@ -46,16 +49,16 @@ final readonly class VoidAuthorization
         private PaymentAttemptStateMachine $machine,
         private AttemptLease $lease,
         private PaymentLinkStateMachine $links,
+        private FlagAttemptForReview $review,
     ) {}
 
     /**
-     * @param  string  $reason  merchant_rejected | capture_window_elapsed | link_closed | abandoned_action
      * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
      *
      * @throws AttemptBusyException when another process holds the attempt
      * @throws GatewayException when the gateway could not be reached or refused (retry)
      */
-    public function handle(string $attemptId, string $reason, ?string $leaseToken = null): PaymentAttempt
+    public function handle(string $attemptId, VoidReason $reason, ?string $leaseToken = null): PaymentAttempt
     {
         if (Transactions::open()) {
             throw new LogicException('Voiding calls the gateway: never inside a transaction.');
@@ -78,7 +81,7 @@ final readonly class VoidAuthorization
         }
     }
 
-    private function void(PaymentAttempt $attempt, string $reason, string $token): PaymentAttempt
+    private function void(PaymentAttempt $attempt, VoidReason $reason, string $token): PaymentAttempt
     {
         if ($attempt->status->isTerminal()) {
             return $attempt;
@@ -100,15 +103,15 @@ final readonly class VoidAuthorization
 
         try {
             $providerPaymentId = $attempt->provider_payment_id;
-            $guard = $this->gateways;
-            $payment = ServerErrorRetry::run(
+            $gateways = $this->gateways;
+            $payment = $gateways->retryingCall(
+                $connection,
                 IdempotencyKeys::cancel($attempt->id),
-                static fn (string $key) => $guard->guard($connection, static fn () => $gateway->cancelPayment($connection, $providerPaymentId, $key)),
-                static function () use ($guard, $connection, $gateway, $providerPaymentId): ?ProviderPayment {
-                    $now = $guard->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
-
-                    return in_array($now->status, [ProviderPaymentStatus::Canceled, ProviderPaymentStatus::Succeeded, ProviderPaymentStatus::Processing], true) ? $now : null;
-                },
+                static fn (string $key): ProviderPayment => $gateway->cancelPayment($connection, $providerPaymentId, $key),
+                // Still cancelable: repeat; canceled, captured or processing: take it as it is.
+                static fn (): ?ProviderPayment => $gateways->movedOn($gateway, $connection, $providerPaymentId, [
+                    ProviderPaymentStatus::RequiresPaymentMethod, ProviderPaymentStatus::RequiresConfirmation, ProviderPaymentStatus::RequiresAction, ProviderPaymentStatus::RequiresCapture,
+                ]),
                 ['payment_attempt_id' => $attempt->id, 'operation' => 'cancel'],
             );
         } catch (GatewayConfigurationException $e) {
@@ -129,7 +132,7 @@ final readonly class VoidAuthorization
 
         if ($wasAuthorized && $applied->attempt->status->isTerminal() && $applied->attempt->status !== PaymentAttemptStatus::Succeeded) {
             DB::transaction(fn () => $this->audit->record(AuditAction::PaymentAuthorizationVoided, $applied->attempt, [
-                'reason' => $reason,
+                'reason' => $reason->value,
                 'payment_link_id' => $applied->attempt->payment_link_id,
                 'livemode' => $applied->attempt->livemode,
             ], actor: Actor::system()));
@@ -140,22 +143,21 @@ final readonly class VoidAuthorization
 
     private function closeLocally(string $attemptId, bool $needsReview = false): PaymentAttempt
     {
-        return DB::transaction(function () use ($attemptId, $needsReview): PaymentAttempt {
-            $linkId = PaymentAttempt::query()->whereKey($attemptId)->value('payment_link_id');
-            $link = PaymentLink::query()->whereKey(is_string($linkId) ? $linkId : '')->lockForUpdate()->first();
-            $locked = PaymentAttempt::query()->lockForUpdate()->findOrFail($attemptId);
+        $linkId = AttemptLocks::linkIdOf($attemptId);
+
+        return DB::transaction(function () use ($linkId, $attemptId, $needsReview): PaymentAttempt {
+            [$link, $locked] = AttemptLocks::lockLinkThenAttempt($linkId, $attemptId);
+
+            if ($locked === null) {
+                throw (new ModelNotFoundException)->setModel(PaymentAttempt::class, [$attemptId]);
+            }
 
             if (! $locked->status->isTerminal()) {
                 $this->machine->transition($locked, $locked->failure_count > 0 ? PaymentAttemptStatus::Failed : PaymentAttemptStatus::Canceled);
             }
 
             if ($needsReview) {
-                $locked->forceFill(['needs_review' => true, 'review_reason' => 'closed_without_gateway'])->save();
-                $this->audit->record(AuditAction::PaymentNeedsReview, $locked, [
-                    'reason' => 'closed_without_gateway',
-                    'payment_link_id' => $locked->payment_link_id,
-                    'livemode' => $locked->livemode,
-                ], actor: Actor::system());
+                $this->review->handle($locked, ReviewReason::ClosedWithoutGateway);
                 Log::warning('A payment attempt was closed without the gateway; a card hold may remain.', ['payment_attempt_id' => $locked->id]);
             }
 
