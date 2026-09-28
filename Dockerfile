@@ -28,8 +28,9 @@ COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /u
 
 # pdo_mysql: MariaDB. intl: Filament, number/date formatting. bcmath + gmp:
 # fast paths for brick/math (money). zip: Filament exports. pcntl: graceful
-# SIGTERM handling and job timeouts in queue:work. OPcache ships enabled.
-RUN install-php-extensions pdo_mysql intl bcmath gmp zip pcntl \
+# SIGTERM handling and job timeouts in queue:work. gd: checks and re-encodes
+# uploaded logos (PNG, JPEG, WebP; ADR-0053). OPcache ships enabled.
+RUN install-php-extensions pdo_mysql intl bcmath gmp zip pcntl gd \
     && apt-get update \
     && apt-get install --yes --no-install-recommends nginx tini procps \
     && rm -rf /var/lib/apt/lists/* \
