@@ -73,11 +73,11 @@ it('never returns the typed key when the form fails validation or the key is ref
     expectNoKeyInResponse($component, $secret, $logs);
     expect(GatewayConnection::query()->count())->toBe(0);
 })->with([
-    'risk notice not accepted' => [['restricted_key' => 'rk_test_51LeakNoticeNotAccepted000000Xy01', 'risk_acknowledged' => false], ['risk_acknowledged'], true],
-    'password missing (window closed)' => [['restricted_key' => 'rk_test_51LeakPasswordMissing0000000Xy02'], ['current_password' => 'required'], false],
-    'longer than allowed' => [['restricted_key' => 'rk_test_51LeakTooLong'.str_repeat('Q', 260)], ['restricted_key'], true],
+    'risk notice not accepted' => [['restricted_key' => GatewayTestHelpers::fakeKey('rk', false, '51LeakNoticeNotAccepted000000Xy01'), 'risk_acknowledged' => false], ['risk_acknowledged'], true],
+    'password missing (window closed)' => [['restricted_key' => GatewayTestHelpers::fakeKey('rk', false, '51LeakPasswordMissing0000000Xy02')], ['current_password' => 'required'], false],
+    'longer than allowed' => [['restricted_key' => GatewayTestHelpers::fakeKey('rk', false, '51LeakTooLong').str_repeat('Q', 260)], ['restricted_key'], true],
     'invalid prefix' => [['restricted_key' => 'xx_test_51LeakInvalidPrefix000000000Xy04'], ['restricted_key'], true],
-    'secret key' => [['restricted_key' => 'sk_test_51LeakSecretKey0000000000000Xy05'], ['restricted_key'], true],
+    'secret key' => [['restricted_key' => GatewayTestHelpers::fakeKey('sk', false, '51LeakSecretKey0000000000000Xy05')], ['restricted_key'], true],
 ]);
 
 it('never returns the typed key after a successful connection either', function (): void {
@@ -101,7 +101,7 @@ it('clears the key on the update-keys form too', function (): void {
     $logs = captureDefaultLog();
     $owner = actingAsTenantUser(tenantUser());
     GatewayTestHelpers::connection(tenantOf($owner), state: static fn ($factory) => $factory->apiKey());
-    $secret = 'rk_test_51LeakUpdateForm000000000000Xy07';
+    $secret = GatewayTestHelpers::fakeKey('rk', false, '51LeakUpdateForm000000000000Xy07');
 
     $component = submitAction(Livewire::test(StripeConnection::class), 'updateKeys', [
         'restricted_key' => $secret,

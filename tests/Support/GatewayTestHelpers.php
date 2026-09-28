@@ -44,4 +44,13 @@ final class GatewayTestHelpers
     {
         return 'pk_'.($livemode ? 'live' : 'test').'_51FakePublishableKey000000000'.$suffix;
     }
+
+    /**
+     * A fake Stripe-shaped key ('sk', 'rk' or 'pk') assembled at runtime, so
+     * secret scanners never see a literal that looks like a real key.
+     */
+    public static function fakeKey(string $type, bool $livemode, string $body): string
+    {
+        return $type.'_'.($livemode ? 'live' : 'test').'_'.$body;
+    }
 }

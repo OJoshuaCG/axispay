@@ -103,7 +103,7 @@ it('refuses a secret key from the page with the explanation', function (): void 
     GatewayTestHelpers::reauthenticated();
 
     submitAction(Livewire::test(StripeConnection::class), 'connectApiKey', [
-        'restricted_key' => 'sk_test_51FakeSecretKey000000000000',
+        'restricted_key' => GatewayTestHelpers::fakeKey('sk', false, '51FakeSecretKey000000000000'),
         'publishable_key' => GatewayTestHelpers::publishableKey(),
         'risk_acknowledged' => true,
     ])

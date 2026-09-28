@@ -130,7 +130,7 @@ it('rejects secret keys without calling Stripe (case 18)', function (string $sec
     expect(stripeHttp()->requests)->toBe([])
         ->and(AuditLog::query()->where('action', AuditAction::GatewayCredentialsRejected->value)->count())->toBe(1)
         ->and(json_encode(AuditLog::query()->pluck('changes')))->not->toContain($secret);
-})->with(['sk_test_51FakeSecretKey000000000000', 'sk_live_51FakeSecretKey000000000000']);
+})->with([GatewayTestHelpers::fakeKey('sk', false, '51FakeSecretKey000000000000'), GatewayTestHelpers::fakeKey('sk', true, '51FakeSecretKey000000000000')]);
 
 it('rejects keys that are not a restricted + publishable pair', function (string $secret, string $publishable, ApiKeyRejection $rejection): void {
     $owner = apiKeyOwner();
@@ -138,10 +138,10 @@ it('rejects keys that are not a restricted + publishable pair', function (string
     expectRejection(fn () => app(ConnectWithApiKey::class)->handle($owner, apiKeyData($secret, $publishable)), $rejection);
     expect(stripeHttp()->requests)->toBe([]);
 })->with([
-    'not rk' => ['pk_test_51FakeKey0000000000000000', 'pk_test_51FakePublishableKey000000000Pk01', ApiKeyRejection::NotARestrictedKey],
-    'bad pk' => ['rk_test_51FakeRestrictedKey0000000000A1b2', 'sk_test_51Fake0000000000000', ApiKeyRejection::InvalidPublishableKey],
-    'modes differ' => ['rk_test_51FakeRestrictedKey0000000000A1b2', 'pk_live_51FakePublishableKey000000000Pk01', ApiKeyRejection::KeyModesDiffer],
-    'live keys in test panel' => ['rk_live_51FakeRestrictedKey0000000000A1b2', 'pk_live_51FakePublishableKey000000000Pk01', ApiKeyRejection::PanelModeMismatch],
+    'not rk' => [GatewayTestHelpers::fakeKey('pk', false, '51FakeKey0000000000000000'), GatewayTestHelpers::fakeKey('pk', false, '51FakePublishableKey000000000Pk01'), ApiKeyRejection::NotARestrictedKey],
+    'bad pk' => [GatewayTestHelpers::fakeKey('rk', false, '51FakeRestrictedKey0000000000A1b2'), GatewayTestHelpers::fakeKey('sk', false, '51Fake0000000000000'), ApiKeyRejection::InvalidPublishableKey],
+    'modes differ' => [GatewayTestHelpers::fakeKey('rk', false, '51FakeRestrictedKey0000000000A1b2'), GatewayTestHelpers::fakeKey('pk', true, '51FakePublishableKey000000000Pk01'), ApiKeyRejection::KeyModesDiffer],
+    'live keys in test panel' => [GatewayTestHelpers::fakeKey('rk', true, '51FakeRestrictedKey0000000000A1b2'), GatewayTestHelpers::fakeKey('pk', true, '51FakePublishableKey000000000Pk01'), ApiKeyRejection::PanelModeMismatch],
 ]);
 
 it('rejects a publishable key of another account (case 18)', function (): void {

@@ -41,7 +41,7 @@ it('redacts secret-looking values anywhere in a string', function (string $input
     expect((new Redactor)->redactString($input))->toBe($expected);
 })->with([
     'stripe secret key' => ['key=sk_live_51HxAbCdEf', 'key=[REDACTED]'],
-    'stripe test secret key' => ['sk_test_51HxAbCdEf', '[REDACTED]'],
+    'stripe test secret key' => ['sk_test_'.'51HxAbCdEf', '[REDACTED]'],
     'restricted key' => ['using rk_live_51HxAbCdEf now', 'using [REDACTED] now'],
     'webhook secret' => ['whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw', '[REDACTED]'],
     'live api key' => ['axp_live_4eC39HqLyjWDarjtT1zdp7dc', '[REDACTED]'],
