@@ -34,7 +34,7 @@ Order summary `<dl>`: "Pago a {merchant}" (fg-secondary); description (escaped, 
 Logo slot (Phase 8) `h-10 max-w-40 object-contain`, alt = merchant name, name still shown.
 Payer fields before card; labels above; "(opcional)". Email `type=email autocomplete=email`; name `autocomplete=name`; phone new `<x-phone-input>` (native country select default +52, `type=tel autocomplete=tel-national`). When payer data collected, under fields: "{merchant} recibirá estos datos. Consulta su [aviso de privacidad]."
 Trust line under button: lock icon + "Pago seguro: los datos de tu tarjeta van cifrados directamente a Stripe." / "Secure payment: your card details go encrypted straight to Stripe." (text-sm fg-secondary).
-Footer (every state, ADR-0038) text-sm fg-secondary: "Con la tecnología de AxisPay"/"Powered by AxisPay" (platform name from Brand::displayName()), "Procesado por Stripe"/"Processed by Stripe", privacy link when fields collected, mailto support email when exists; links min-h-touch.
+Footer (every state, ADR-0038) text-sm fg-secondary: "Con la tecnología de AxisPay"/"Powered by AxisPay" (platform brand per ADR-0053: logo, name or both as the superadmin set it, name alone without a logo; `components/checkout/platform-brand.blade.php`, logo `h-5 max-w-32`, dark variant swapped with `dark:`), "Procesado por Stripe"/"Processed by Stripe", privacy link when fields collected, mailto support email when exists; links min-h-touch.
 
 ## States & copy (ES tú / EN)
 One page-level `<div id="checkout-live" role="status" class="sr-only">` announces each phase once (never per poll). Terminal state replaces the form with `<x-checkout.status-panel>` whose `<h1 tabindex="-1">` gets focus. `<title>` = "{state heading} · {merchant}".

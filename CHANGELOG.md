@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Platform logo** (ADR-0053, brought forward from Phase 8): a "Branding"
+  page in the platform panel, for superadmins only (new platform permission
+  "manage branding"), to upload the platform logo and an optional dark mode
+  logo, remove them, and choose what the brand shows (logo and name, logo
+  only, name only). Both panels (including sign-in, two-factor and invitation
+  pages) and the payment page's "Powered by" line follow it; without a logo
+  the name is shown, and e-mails keep the name only. Uploads: PNG, JPEG or
+  WebP (SVG refused, real type checked), at most 1 MB and 2000 × 2000,
+  converted to a clean PNG without hidden data. Every change needs the
+  password again and is audited. The server image now includes the image
+  library the conversion needs.
+
 - **Phase 4 — Checkout and card payments** (ADR-0051; acceptance conditional
   on the Stripe acceptance gate with real test-mode keys):
   - Payment page on the pay host in every state of plan 11.2, following the

@@ -72,7 +72,8 @@ Code lives in `app/Modules/<Module>/`. The full map and the entry points are in 
 | `Tenancy` | Phase 1 | `Tenant`, `TenantContext`, `BelongsToTenant` / `BelongsToMode`, tenant states, test/live selector, `TenantLock` |
 | `Identity` | Phase 1 | Tenant users, sign-in, TOTP 2FA, invitations, re-authentication, deactivation |
 | `Access` | Phase 1 | Permission catalog (`TenantPermission`), system roles (`SystemRole`), policies, `RoleGrantGuard`, `OwnerGuard` |
-| `PlatformAdmin` | Phase 1 | `PlatformAdmin`, tenant management, audited impersonation |
+| `PlatformAdmin` | Phase 1 | `PlatformAdmin`, tenant management, audited impersonation, platform permission catalog (`PlatformPermission`, derived from `PlatformRole`) |
+| `Branding` | Phase 4 (ADR-0053) / 8 | Platform logo (`platform_logos`, PNG bytes in the DB) and display mode (`platform_settings`), `PlatformBrand` (cached state), `ImageNormalizer` (GD re-encoding, shared with Phase 8 tenant logos), same-origin logo route on the admin/app/pay hosts without session middleware |
 | `Audit` | Phase 1 | Append-only `audit_logs`; `AuditLogger` is the only writer |
 | `Gateways`, `ProviderEvents` | Phase 2 | Stripe port/adapter, connections, incoming webhooks |
 | `ApiKeys`, `PaymentLinks` | Phase 3 | API access (keys, authentication, scopes, rate limit, idempotency); payment links, their state machine and expiration |

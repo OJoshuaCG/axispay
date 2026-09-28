@@ -40,5 +40,5 @@ The merchant keeps a white-label header, so payers trust that the page belongs t
 - Plan section 18 is updated: "the platform name can be hidden" is replaced by this decision.
 - **Phase 4 (checkout):** the page layout includes the header (tenant name; logo when available) and the footer ("Powered by" with the platform name and, once it exists, the logo).
 - **Phase 8 (branding):** the platform-logo setting and upload in the superadmin panel are built together with tenant logos, sharing the same upload service; `platform_badge_style` is added.
-- Until Phase 8, the checkout footer shows the platform name only.
+- Until Phase 8, the checkout footer shows the platform name only. *Superseded for the platform logo by [ADR-0053](0053-platform-logo-brought-forward.md) (2026-09-28): the platform logo, its dark variant and the choice of logo, name or both were brought forward and are managed by a superadmin; tenant logos stay in Phase 8.*
 - Pricing plans can no longer sell "fully hidden platform branding"; at most a subtle badge.

@@ -114,7 +114,7 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 | `accent-subtle` | green-50 | `rgb(34 181 115 / 0.15)` | Tinted background |
 | `feature` | blue-600 | green-500 | Decorative brand color only |
 | `feature-subtle` | blue-50 | `rgb(34 181 115 / 0.12)` | Decorative background |
-| `brand-mark` | green-500 | same | Brand mark tile (panel logo stand-in, `fill-brand-mark`) until the ADR-0038 logo exists |
+| `brand-mark` | green-500 | same | Brand mark tile (`fill-brand-mark`): the panel stand-in shown when there is no platform logo or the display is "name only" (ADR-0053) |
 | `brand-mark-fg` | neutral-900 | same | Glyph on the brand mark tile (`stroke-brand-mark-fg`, 7.2:1). Decorative |
 
 ### Status

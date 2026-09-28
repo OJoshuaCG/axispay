@@ -476,3 +476,22 @@ The payer-facing payment page (ADR-0051, the approved checkout design). They are
 | `<x-checkout.footer>` | "Powered by {platform}", "Processed by Stripe", privacy notice (when payer data is collected) and support e-mail | On every state; links are 44px targets |
 
 The states and their exact copy are in [payments-ui.md](payments-ui.md#checkout).
+
+## Platform brand (logo and name)
+
+The platform brand (ADR-0053) is rendered in two places only. Never hand-write a logo `<img>` or the platform name next to one elsewhere.
+
+| Where | File | Notes |
+|---|---|---|
+| Both panels (topbar, mobile sidebar, sign-in, 2FA, invitation) | `resources/views/filament/partials/brand.blade.php`, wired in `PanelDefaults` via `brandLogo()`, `darkModeBrandLogo()` (only when a dark variant exists) and `brandLogoHeight('1.75rem')` | Filament swaps the light and dark renders itself |
+| Checkout "Powered by" | `resources/views/components/checkout/platform-brand.blade.php`, placed in the translated sentence by `components/checkout/footer.blade.php` | The sentence is escaped; only the brand markup replaces its placeholder. Dark variant via `dark:hidden` / `dark:inline-block` |
+
+Rules both follow, from `App\Modules\Branding\Services\PlatformBrand`:
+
+- `mode()` is the effective mode: `name_only` whenever there is no light logo.
+- The logo's `alt` is always `Brand::displayName()`. When the visible name is shown next to it, the name is `aria-hidden="true"` so it is not read twice; in `logo_only` the alt carries the name.
+- No logo, or `name_only`: the stand-in mark tile (decorative) plus the name.
+- Logo URLs are relative (`/branding/platform-logo/{variant}/{version}.png`), served same-origin on the admin, app and pay hosts, so the checkout CSP (`img-src 'self'`) holds.
+- E-mails, page titles and the 2FA issuer use `Brand::displayName()` only.
+- The Branding settings page previews each variant on fixed `bg-neutral-0` / `bg-neutral-900` (`resources/views/filament/branding/logo-preview.blade.php`), so the preview is the same in either theme.
+
