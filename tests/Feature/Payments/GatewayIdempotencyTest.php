@@ -8,15 +8,21 @@ use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
+use App\Modules\Payments\Actions\SyncPaymentAttempt;
 use App\Modules\Payments\Actions\VoidAuthorization;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\PrePaymentDecision;
+use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\AttemptLocks;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\ServerErrorRetry;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\CheckoutTestHelpers as Checkout;
@@ -218,4 +224,51 @@ it('bounds the status re-read by its own request budget: a void past the capture
     // Past the window: voided, never captured.
     expect(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Canceled)
         ->and($fake->callsTo('capturePayment'))->toHaveCount($captures);
+});
+
+// Judgment Day round 2 ------------------------------------------------------
+
+it('never lets a background capture retry past the attempt lease: it stops and leaves the attempt for the next check (W1)', function (): void {
+    [$link, $attempt, $fake] = idempotencyAuthorized();
+    $fake->serverErrorOnNext('capturePayment');
+    // 50 s into the call: the repetition (42 s worst case) would end after the 85 s left in the lease.
+    $fake->beforeNext('capturePayment', static fn () => travel(50)->seconds());
+    $log = captureDefaultLog();
+
+    $result = Checkout::inTenant($link, static fn () => app(CaptureAuthorizedPayment::class)->handle($attempt->id, budget: CallBudget::forJob(115)));
+
+    expect($result->outcome)->toBe(CaptureOutcome::Pending)
+        ->and(array_values(array_filter($fake->captureKeys, static fn (string $key): bool => str_ends_with($key, ':r1'))))->toBe([])
+        ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::RequiresCapture)
+        ->and(collect($log->getRecords())->contains(static fn ($record): bool => $record->level->getName() === 'WARNING' && str_contains($record->message, 'left to the webhook and the reconciliation')))->toBeTrue();
+});
+
+it('stops a background job before its own time limit (W1)', function (): void {
+    [$link, $attempt, $fake] = idempotencyAuthorized();
+    $calls = count($fake->callsTo('capturePayment'));
+
+    // A job whose budget is already used up does not call the gateway at all.
+    $spent = CallBudget::forJob(115);
+    travel(106)->seconds();
+
+    $result = Checkout::inTenant($link, static fn () => app(CaptureAuthorizedPayment::class)->handle($attempt->id, budget: $spent));
+
+    expect($result->outcome)->toBe(CaptureOutcome::Pending)
+        ->and($fake->callsTo('capturePayment'))->toHaveCount($calls)
+        ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::RequiresCapture);
+});
+
+it('queues one completion job per attempt however many polls and events find it busy (W2)', function (): void {
+    Queue::fake([CompleteAuthorizedPaymentJob::class]);
+    [$link, $attempt] = idempotencyAuthorized();
+    // Another actor holds the attempt: every completion answers "pending".
+    Checkout::inTenant($link, static fn () => app(AttemptLease::class)->acquire($attempt->id));
+
+    foreach (range(1, 3) as $i) {
+        Checkout::inTenant($link, static fn () => app(SyncPaymentAttempt::class)->handle($attempt->id, SyncReason::Webhook));
+        Checkout::inTenant($link, static fn () => app(SyncPaymentAttempt::class)->handle($attempt->id, SyncReason::Checkout));
+    }
+
+    Queue::assertPushed(CompleteAuthorizedPaymentJob::class, 1);
+    expect(new CompleteAuthorizedPaymentJob($attempt->id))->toBeInstanceOf(ShouldBeUnique::class);
 });

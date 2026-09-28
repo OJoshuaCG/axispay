@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Modules\Payments\Data\CallBudget;
+use App\Modules\Payments\Jobs\CloseAttemptOfClosedLinkJob;
+use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
+use App\Modules\Payments\Jobs\ReconcilePaymentAttemptsJob;
+use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
@@ -59,4 +64,26 @@ it('starts the workers with a timeout below retry_after', function (): void {
     foreach ($matches[1] as $default) {
         expect((int) $default)->toBeLessThan(config()->integer('queue.connections.database.retry_after'));
     }
+});
+
+it('keeps the gateway time of every job under its budget below its own timeout, with room for one call and the merchant validation', function (string $job): void {
+    expect(class_exists($job))->toBeTrue();
+    $timeout = class_exists($job) ? ((new ReflectionClass($job))->getDefaultProperties()['timeout'] ?? null) : null;
+    expect($timeout)->toBeInt();
+    $timeout = is_int($timeout) ? $timeout : 0;
+    $budget = CallBudget::jobSeconds($timeout);
+
+    // A call only starts when its worst case fits the budget, so the job's
+    // gateway time is at most the budget, which ends before the job is killed.
+    expect($budget)->toBeLessThan($timeout)
+        ->and($budget)->toBeGreaterThanOrEqual(CallBudget::worstCallSeconds() + config()->integer('axispay.checkout.pre_payment_validation_seconds'));
+})->with([
+    CompleteAuthorizedPaymentJob::class,
+    CloseAttemptOfClosedLinkJob::class,
+    ProcessProviderEventJob::class,
+    ReconcilePaymentAttemptsJob::class,
+]);
+
+it('lets a lease holder make at least one bounded gateway call within the lease', function (): void {
+    expect(config()->integer('axispay.checkout.confirmation_lease_seconds') - 5)->toBeGreaterThanOrEqual(CallBudget::worstCallSeconds());
 });
