@@ -9,7 +9,7 @@ Why this shape: [ADR-0036](../adr/0036-dokploy-deployment.md). What the image do
 
 > **Staging, demos or a local test server without TLS?** One all-in-one Application is enough: [dokploy-all-in-one.md](dokploy-all-in-one.md) (ADR-0039). Production always uses the four Applications below.
 
-> **Scope.** This guide covers what exists today: Phases 0–2 (tenancy, identity, panels, Stripe connection). Banxico and Turnstile settings arrive in later phases; they are listed under [Not needed yet](#not-needed-yet).
+> **Scope.** This guide covers what exists today: Phases 0–4 (tenancy, identity, panels, Stripe connection, payment links API, checkout and card payments). Settings of later phases (Banxico, OAuth) are listed under [Not needed yet](#not-needed-yet).
 >
 > **Verified against** the Dokploy docs and the Dokploy v0.30.6 source on 2026-09-24. Items marked **(verify)** could not be confirmed in the docs. Check them in your Dokploy version.
 
@@ -50,10 +50,10 @@ Create one `A` record per host, pointing to the Dokploy server's public IP. Use 
 
 | Host | Surface | Available |
 |---|---|---|
-| `api.<domain>` | Public API v1 | Routes arrive in Phase 3 |
+| `api.<domain>` | Public API v1 and Stripe webhooks | Now |
 | `app.<domain>` | Tenant panel | Now |
 | `admin.<domain>` | Platform (superadmin) panel | Now |
-| `pay.<domain>` | Checkout | Phase 4 (the domain can be added now) |
+| `pay.<domain>` | Checkout (payment page) | Now |
 
 For staging, use for example `api.staging.<domain>`. Let's Encrypt only issues the certificate once the record resolves.
 
@@ -359,6 +359,19 @@ Worker settings:
 - **Resources** (suggested): memory limit `536870912` (512 MiB) for the workers and `268435456` (256 MiB) for the scheduler.
 - **Replicas:** `1` for each. For the scheduler, always exactly `1`.
 
+**What the scheduler runs** (times in UTC; each task runs on one server at a time and never overlaps itself):
+
+| When | What it does |
+|---|---|
+| Every minute | Expires the active payment links whose expiry has passed |
+| Every 5 minutes | Queues again the Stripe events that stayed unprocessed for 5 minutes, and routes the events whose merchant account had no connection once it exists |
+| Every 15 minutes | Checks the payments under way with Stripe (missed events, authorizations past their capture window, bank verifications left open for 30 minutes, links left reserved) |
+| Every 15 minutes | Cancels the active links of modes whose Stripe connection is gone |
+| Hourly | Deletes the API idempotency records older than 24 hours |
+| Hourly | Deletes expired cache entries (only with the database cache store) |
+| Daily 03:30 | Deletes old ignored or unroutable Stripe events and keeps only a reduced copy of old processed ones |
+| Daily 06:00 | Checks the health of every connection made with the merchant's own Stripe keys |
+
 Deploy all three. Their logs show `Worker started on queues critical`, `Worker started on queues default,low` and `Scheduler started (schedule:run every minute)`. If a deploy of `web` is still migrating, they wait for it first.
 
 ---
@@ -522,6 +535,37 @@ The Dokploy docs recommend this for production ([going to production](https://do
 
 ---
 
+### Phase 4 operations
+
+Day-to-day tasks around payments ([ADR-0051](../adr/0051-checkout-and-card-payments-phase-4.md)). Run commands in the `web` terminal.
+
+**Retrying failed Stripe events.** An event that failed five times (or at once, when Stripe refused it) is kept as failed and logged at alert level. Once the cause is fixed (for example the merchant repaired their connection), retry it:
+
+- one event: `php artisan axispay:provider-events:retry <event>` (the platform's event ID or Stripe's `evt_…`);
+- every failed event: `php artisan axispay:provider-events:retry --failed`.
+
+Each retry is recorded in the tenant's audit log. Retrying is safe: an event already processed is left alone, and an event is never applied twice.
+
+**"Needs review" payments.** The tenant panel marks a payment "needs review" in two cases, both for the merchant (their users who may read payments) to check in their Stripe Dashboard:
+
+- closed without Stripe because the connection lost its keys: a hold may remain on the payer's card until the bank releases it;
+- Stripe reports a success on a payment that was already closed: money arrived for it; refund it if it should not have been charged.
+
+The platform operator only acts if the merchant asks for help; the audit log shows when each was flagged.
+
+**Lifting a card-testing block.** A link that received 10 declines within 24 hours stops taking payments for 24 hours, and the merchant's owners and the users who may cancel links get an e-mail. They lift it from the link's detail in the tenant panel (**Unblock payments**), after confirming their password or 2FA code. The platform operator does not unblock links for them.
+
+**Alert-level log lines (until Phase 9).** Superadmin e-mails arrive in Phase 9; until then these lines in the logs call for attention:
+
+| Log line | Meaning | What to do |
+|---|---|---|
+| A gateway event failed. | A Stripe event could not be applied after its tries | Find the cause, then retry it (above) |
+| Unroutable gateway event: no connection matches its account. | An event arrived for a Stripe account no tenant is connected to | Usually a disconnected or never-finished connection; it is routed by itself once the connection exists |
+| A payment link was blocked for possible card testing. | A link got 10 declines within 24 hours | Nothing for the operator; the merchant was e-mailed |
+| The gateway denied access to a Connect account on a payment call; the connection needs review. | Stripe refused the platform's access to a merchant account | Check the connection in the platform panel |
+| A closed payment attempt succeeded at the gateway. (critical) | Money arrived for a closed payment | Make sure the merchant saw the "needs review" flag |
+| A gateway payment does not match its attempt amount; not applied. (critical) | Stripe reported another amount for one of our payments | Investigate before anything else; the payment was not applied |
+
 ## Security checklist
 
 - [ ] `APP_DEBUG=false`, `APP_ENV=production`, `SESSION_SECURE_COOKIE=true`, `SESSION_DOMAIN` not set.
@@ -529,7 +573,7 @@ The Dokploy docs recommend this for production ([going to production](https://do
 - [ ] `DB_MIGRATOR_*` is set on `web` only.
 - [ ] The database firewall allows 3306 only from the Dokploy server; TLS is used across untrusted networks.
 - [ ] `TRUSTED_PROXIES` is Traefik's network range, not `*`; no container port is published under **Advanced → Ports**.
-- [ ] HTTPS with Let's Encrypt on all four hosts; HSTS is sent by the app. Preload is not enabled; that decision belongs to the owner of the domain.
+- [ ] HTTPS with Let's Encrypt on all four hosts. HSTS is sent by the app (two years with the preload flag on the pay host, one year elsewhere). The flag has no effect until the domain owner submits the domain to the browsers' preload list, which remains their decision.
 - [ ] **Admin host allowlist** (plan 4.1, recommended); see below.
 - [ ] Platform admins have 2FA (enforced) and are created only with `axispay:create-platform-admin`.
 - [ ] `APP_KEY` is backed up outside Dokploy.
@@ -634,12 +678,23 @@ Tenants configure nothing. The platform needs **one destination per mode**. In t
 - [ ] URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode. The mode in the URL must match the Dashboard mode.
 - [ ] API version `2026-08-26.dahlia`, the version pinned in the application (`config/services.php`, `stripe.api_version`).
 - [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
-- [ ] After deploying Phase 4: `php artisan axispay:stripe-sync-webhook-endpoints` (payment events on the merchants' own endpoints), `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set (required: the application refuses to start in production without them), `AXISPAY_CHECKOUT_SANDBOX` unset (the application refuses to boot with it outside local/testing).
 - [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` or `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET`, never the other mode's variable.
 
 `php artisan axispay:doctor` prints the pinned API version and the event list, so you can compare them with the Dashboard.
 
 Nothing else is registered by hand: for tenants that connect with their own API keys, the application creates a webhook endpoint on the merchant's account pointing at `https://api.<domain>/webhooks/stripe/direct/<connection id>`. The API host must therefore be reachable from Stripe over HTTPS. Webhook routes are rate-limited generously (1,200 requests per minute per IP) and answer in the API error format.
+
+### Upgrading to Phase 4
+
+One-time steps when a deployment moves to Phase 4 (checkout and card payments, [ADR-0051](../adr/0051-checkout-and-card-payments-phase-4.md)). Payments do not work until all of them are done.
+
+1. **Database update:** deploy `web`; it runs the migrations before it takes traffic.
+2. **Merchants' own webhook endpoints:** in the `web` terminal run `php artisan axispay:stripe-sync-webhook-endpoints`. It adds the payment events to the endpoint of every merchant connected with API keys (their Stripe accounts only send what their endpoint subscribes to).
+3. **The six payment events on both Connect destinations** (test and live): add `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` in the Stripe Dashboard ([Connect webhook destination](#connect-webhook-destination-required)). `php artisan axispay:doctor` prints the full list.
+4. **Security-check keys:** set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (Cloudflare Turnstile, a widget for the pay host). The application refuses to start in production without both: without them a link would stop taking payments after its first decline.
+5. **Sandbox off:** `AXISPAY_CHECKOUT_SANDBOX` must not be set. The application refuses to start with it outside local development and tests.
+6. **Trusted proxy:** `TRUSTED_PROXIES` is Traefik's network range, never `*` ([Trusted proxies](#trusted-proxies)). Without it every payer shares one address and the card-testing limits pause payments for everyone.
+7. Run `php artisan axispay:doctor`: no `ERROR` lines.
 
 ### Confirm that events arrive
 
@@ -658,7 +713,6 @@ These settings are defined by later phases of the master plan (section 27). Do n
 | Setting | Phase |
 |---|---|
 | `STRIPE_<MODE>_CONNECT_CLIENT_ID` (OAuth) | Phase 4B |
-| Cloudflare Turnstile keys; strict CSP on `pay.` | Phase 4 |
 | Banxico SIE token | Phase 6 |
 | `/health/live` and `/health/ready` for external uptime monitoring (plan 24.4) | Later; `/up` covers liveness today |
 

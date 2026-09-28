@@ -167,11 +167,12 @@ Set them in the Application's **Environment** tab. With only one Application the
 | `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` | **secret** | `whsec_…` of the test Connect endpoint `https://api.<staging domain>/webhooks/stripe/connect/test` ([Stripe](dokploy.md#stripe-phase-2)) |
 | `AXISPAY_STRIPE_ALLOWED_COUNTRIES` | `MX` | Optional (ADR-0047) |
 | `GATEWAY_CREDENTIALS_KEY` | **secret** | `base64:` + 32 random bytes, different from `APP_KEY`, backed up on its own. Required as soon as a tenant connects with API keys |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | **secret** | Cloudflare Turnstile keys of the staging pay host (a Turnstile widget created for that hostname). **Required:** staging runs as production, so the application refuses to start without both, and Cloudflare's public test keys are refused there (a check solved with them would let a payment through anywhere). Without the keys a link would stop taking payments after its first decline |
 
 - **Do not set `SESSION_DOMAIN`.** The application refuses to boot when it is set (ADR-0034).
 - `QUEUE_NAMES` is ignored in this role: the queues are fixed to `critical` and `default,low`.
 - The Stripe webhook endpoints must be reachable by Stripe: a [local deployment without TLS](#local-test-deployment-without-tls) cannot receive them (use a public tunnel for the API host, or test with signed fixtures, see `docs/development.md`).
-- Banxico and Turnstile settings arrive in later phases: [Not needed yet](dokploy.md#not-needed-yet).
+- Banxico settings arrive in Phase 6: [Not needed yet](dokploy.md#not-needed-yet).
 
 ---
 
@@ -290,10 +291,11 @@ In the Stripe Dashboard, test mode, **Developers → Webhooks → Add destinatio
 - [ ] URL `https://api.<domain>/webhooks/stripe/connect/test`. It must be reachable by Stripe: a [local deployment without TLS](#local-test-deployment-without-tls) is not (use a public tunnel, see `docs/development.md`).
 - [ ] API version `2026-08-26.dahlia`, the version pinned in `config/services.php` (`stripe.api_version`).
 - [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
-- [ ] After deploying Phase 4: `php artisan axispay:stripe-sync-webhook-endpoints` (payment events on the merchants' own endpoints), `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` set (required: the application refuses to start in production without them), `AXISPAY_CHECKOUT_SANDBOX` unset (the application refuses to boot with it outside local/testing).
 - [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET`; redeploy after setting it.
 
 Tenants that connect with their own API keys need nothing by hand: the application creates the endpoint on the merchant's account.
+
+**Upgrading to Phase 4:** follow the same one-time list as production ([Upgrading to Phase 4](dokploy.md#upgrading-to-phase-4)): database update, merchants' webhook endpoints, the six payment events on the test Connect destination, the security-check keys, the sandbox off and the trusted proxy.
 
 Confirm that it works:
 
