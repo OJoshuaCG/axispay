@@ -23,7 +23,7 @@ it('shows the payment attempts of a link to users with payments:read', function 
         ->assertSee(__('payments.attempts.section'))
         ->assertSee(__('payments.attempt_status.requires_payment_method'))
         ->assertSee('generic_decline')
-        ->assertSee('•••• 4242', false)
+        ->assertSee('•••• 0002', false)
         ->assertSee(Checkout::attempts($link)[0]->prefixedId());
 });
 
@@ -38,13 +38,23 @@ it('hides the attempts from users without payments:read', function (): void {
         ->assertDontSee('generic_decline');
 });
 
-it('shows the block and lets an owner unblock the link', function (): void {
+it('shows the block and lets an owner unblock the link after re-authenticating (L5)', function (): void {
     [$tenant, $link] = Checkout::scenario(static fn ($f) => $f->state(['checkout_blocked_until' => now()->addDay(), 'checkout_block_reason' => 'card_testing']));
     actingAsTenantUser(tenantUser($tenant, [SystemRole::Owner]));
 
     Livewire::test(ViewPaymentLink::class, ['record' => $link->getRouteKey()])
         ->assertSee(__('payments.checkout_block.callout_help'))
-        ->callAction('unblockCheckout')
+        ->callAction('unblockCheckout', data: ['current_password' => ''])
+        ->assertHasActionErrors(['current_password' => 'required']);
+
+    Livewire::test(ViewPaymentLink::class, ['record' => $link->getRouteKey()])
+        ->callAction('unblockCheckout', data: ['current_password' => 'wrong-password'])
+        ->assertHasActionErrors(['current_password']);
+
+    expect(Checkout::freshLink($link)->isCheckoutBlocked())->toBeTrue();
+
+    Livewire::test(ViewPaymentLink::class, ['record' => $link->getRouteKey()])
+        ->callAction('unblockCheckout', data: ['current_password' => 'password-for-tests'])
         ->assertHasNoActionErrors();
 
     expect(Checkout::freshLink($link)->isCheckoutBlocked())->toBeFalse();

@@ -11,6 +11,7 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\TenantContext;
+use Illuminate\Cache\RateLimiter;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -224,4 +225,20 @@ it('captures an authorization at most once while webhooks, the checkout and the 
     } else {
         expect($captures)->toBe(0)->and($freshLink->status)->toBe(PaymentLinkStatus::Active);
     }
+})->group('concurrency');
+
+it('counts only the confirmations of a parallel burst that reached the gateway: the link is not paused (ADR-0051)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
+
+    // Six real cards declined at the same instant: the lease lets them in one at a time.
+    $outcomes = raceActors($link->public_token, array_fill(0, 6, ['pay', 'decline']));
+    $counts = array_count_values($outcomes);
+    $counted = (new RateLimiter(Cache::store('database')))->attempts('checkout:link:'.$link->id);
+
+    expect(array_diff(array_keys($counts), ['declined', 'in_progress', 'turnstile_required']))->toBe([], implode(',', $outcomes))
+        ->and($counts['declined'] ?? 0)->toBeGreaterThanOrEqual(1)
+        // In progress (and Turnstile) answers never reached the gateway: not counted.
+        ->and(is_numeric($counted) ? (int) $counted : -1)->toBe($counts['declined'] ?? 0, implode(',', $outcomes))
+        ->and(Cache::store('database')->get('checkout:link-paused:'.$link->id))->toBeNull();
 })->group('concurrency');

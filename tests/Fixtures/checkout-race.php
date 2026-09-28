@@ -11,7 +11,8 @@ declare(strict_types=1);
  *
  * Usage: php checkout-race.php <public_token> <barrier_dir> <mode> [argument]
  *
- *   pay                     press "Pay" (paid, in_progress, already_paid...)
+ *   pay [scenario]          press "Pay" with a sandbox card (success by default;
+ *                           decline, funds, threeds, processing)
  *   cancel [delay_ms]       cancel the link (canceled, not_cancelable)
  *   webhook <attempt_id>    a payment event: re-read and complete (status)
  *   reconcile <attempt_id>  the reconciliation's re-read (status)
@@ -82,7 +83,7 @@ try {
         'reconcile' => app(SyncPaymentAttempt::class)->handle($extra, SyncReason::Reconciliation)->status->value,
         'capture' => app(CaptureAuthorizedPayment::class)->handle($extra)->outcome->value,
         default => app(StartCheckoutPayment::class)->handle($link, new CheckoutPaymentInput(
-            confirmationToken: 'ctoken_sandbox_success_'.getmypid(),
+            confirmationToken: 'ctoken_sandbox_'.($extra !== '' ? $extra : 'success').'_'.getmypid(),
             payer: ['email' => 'race@example.com'],
             turnstileToken: null,
             clientIp: '10.0.0.'.(getmypid() % 250),

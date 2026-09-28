@@ -51,7 +51,7 @@ it('creates a card-only, manual-capture direct charge on the connected account',
 
     expect($request['headers']['stripe-account'])->toBe('acct_Payments01')
         ->and($request['headers']['idempotency-key'])->toBe('axispay:create_pi:att')
-        ->and($request['params'])->toMatchArray(['amount' => 150000, 'currency' => 'usd', 'capture_method' => 'manual', 'payment_method_types' => ['card'], 'metadata' => ['axispay_attempt_id' => 'att']])
+        ->and($request['params'])->toMatchArray(['amount' => 150000, 'currency' => 'usd', 'capture_method' => 'manual', 'allowed_payment_method_types' => ['card'], 'metadata' => ['axispay_attempt_id' => 'att']])
         ->and($request['params'])->not->toHaveKey('application_fee_amount')
         ->and($payment->status)->toBe(ProviderPaymentStatus::RequiresPaymentMethod)
         ->and($payment->currency)->toBe('USD')
@@ -133,4 +133,27 @@ it('returns the current payment when a retried confirmation finds it already con
     $payment = app(TenantContext::class)->runAsTenant($connection->tenant_id, false, static fn () => stripePayments()->confirmPayment($connection, 'pi_Again0001', 'ctoken_again', 'axispay:confirm:x:ctoken_again', 'https://pay.localhost/x'));
 
     expect($payment->status)->toBe(ProviderPaymentStatus::RequiresCapture);
+});
+
+it('returns the current payment when a capture finds it no longer capturable (captured elsewhere or canceled)', function (string $status, ProviderPaymentStatus $expected): void {
+    $connection = paymentsConnection();
+    stripeHttp()->error('post', '/v1/payment_intents/pi_Late0001/capture', 400, 'invalid_request_error', 'payment_intent_unexpected_state');
+    stripeHttp()->on('get', '/v1/payment_intents/pi_Late0001', intentFixture('pi_Late0001', $status));
+
+    $payment = app(TenantContext::class)->runAsTenant($connection->tenant_id, false, static fn () => stripePayments()->capturePayment($connection, 'pi_Late0001', 'axispay:capture:att'));
+
+    expect($payment->status)->toBe($expected)
+        ->and(stripeHttp()->requestsTo('get', '/v1/payment_intents/pi_Late0001'))->toHaveCount(1);
+})->with([
+    'captured elsewhere' => ['succeeded', ProviderPaymentStatus::Succeeded],
+    'canceled' => ['canceled', ProviderPaymentStatus::Canceled],
+]);
+
+it('reads the card fingerprint of a confirmation token for forensics', function (): void {
+    $connection = paymentsConnection();
+    stripeHttp()->on('get', '/v1/confirmation_tokens/ctoken_Fp01', ['id' => 'ctoken_Fp01', 'object' => 'confirmation_token', 'payment_method_preview' => ['type' => 'card', 'card' => ['brand' => 'visa', 'country' => 'MX', 'last4' => '4242', 'fingerprint' => 'Xt5EWLLDS7FJjR1c']]]);
+
+    $card = app(TenantContext::class)->runAsTenant($connection->tenant_id, false, static fn () => stripePayments()->inspectPaymentMethod($connection, 'ctoken_Fp01'));
+
+    expect($card->fingerprint)->toBe('Xt5EWLLDS7FJjR1c');
 });

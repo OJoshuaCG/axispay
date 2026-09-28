@@ -7,12 +7,14 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Checkout\Actions\UnblockCheckout;
 use App\Modules\Checkout\Notifications\CheckoutBlockedNotification;
+use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\ApiTestHelpers;
 use Tests\Support\CheckoutTestHelpers as Checkout;
+use Tests\Support\GatewayTestHelpers;
 
 /**
  * Plan 11.7 and critical case 16: rate limits, Turnstile after a decline,
@@ -108,6 +110,10 @@ it('blocks the link after 10 declines, notifies the tenant and lets it unblock',
 
     expect(fn () => Checkout::inTenant($link, static fn () => app(UnblockCheckout::class)->handleForUser($viewer, $blocked)))->toThrow(AuthorizationException::class);
 
+    // A sensitive action: refused without a recent re-authentication (plan 17.3).
+    expect(fn () => Checkout::inTenant($link, static fn () => app(UnblockCheckout::class)->handleForUser($owner, $blocked)))->toThrow(ReauthenticationRequiredException::class);
+
+    GatewayTestHelpers::reauthenticated();
     Checkout::inTenant($link, static fn () => app(UnblockCheckout::class)->handleForUser($owner, $blocked));
 
     $fresh = Checkout::freshLink($link);

@@ -59,6 +59,18 @@ final class FakePaymentGateway implements PaymentGateway
     /** @var list<string|null> receipt e-mail of each confirmation */
     public array $receiptEmails = [];
 
+    /** @var list<string> idempotency keys of the confirmations, in order */
+    public array $confirmKeys = [];
+
+    /** @var list<string> idempotency keys of the captures, in order */
+    public array $captureKeys = [];
+
+    /** @var array<string, true> */
+    private array $serverErrorNext = [];
+
+    /** @var array<string, true> keys whose stored answer is a 500 */
+    private array $serverErrorKeys = [];
+
     /** @var array<string, string> idempotency key => fingerprint of its parameters */
     private array $keyParameters = [];
 
@@ -135,13 +147,16 @@ final class FakePaymentGateway implements PaymentGateway
             throw new GatewayRequestException('Fake: no such confirmation token.', 'resource_missing', null, 404);
         }
 
-        return new PaymentMethodPreview('MX', 'visa', self::scenario($confirmationToken) === 'decline' ? '0002' : '4242');
+        $last4 = self::scenario($confirmationToken) === 'decline' ? '0002' : '4242';
+
+        return new PaymentMethodPreview('MX', 'visa', $last4, 'fp_fake_'.$last4);
     }
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
     {
         $this->calls[] = 'createOrUpdatePayment:'.$request->idempotencyKey;
         $this->throwIfFailing('createOrUpdatePayment');
+        $this->throwIfServerError('createOrUpdatePayment', $request->idempotencyKey);
 
         // Like Stripe: a key reused with other parameters is refused.
         $fingerprint = hash('sha256', (string) json_encode([$request->amountMinor, $request->currency, $request->description, $request->metadata, $request->providerPaymentId]));
@@ -175,7 +190,17 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $this->calls[] = 'confirmPayment:'.$providerPaymentId;
         $this->receiptEmails[] = $receiptEmail;
+        $this->confirmKeys[] = $idempotencyKey;
         $this->throwIfFailing('confirmPayment');
+
+        // Like Stripe: a key reused with other parameters is refused.
+        $fingerprint = hash('sha256', (string) json_encode([$providerPaymentId, $confirmationToken, $returnUrl, $receiptEmail]));
+
+        if (isset($this->keyParameters[$idempotencyKey]) && $this->keyParameters[$idempotencyKey] !== $fingerprint) {
+            throw new GatewayRequestException('Keys for idempotent requests can only be used with the same parameters.', 'idempotency_key_in_use', null, 400);
+        }
+
+        $this->keyParameters[$idempotencyKey] = $fingerprint;
 
         if (isset($this->idempotent[$idempotencyKey])) {
             return $this->toPayment($this->payments[$providerPaymentId]);
@@ -191,6 +216,7 @@ final class FakePaymentGateway implements PaymentGateway
         $payment = &$this->payments[$providerPaymentId];
         $payment['failure'] = null;
         $scenario = self::scenario($confirmationToken);
+        $payment['last4'] = $scenario === 'decline' ? '0002' : '4242';
         $payment['status'] = match ($scenario) {
             'threeds' => ProviderPaymentStatus::RequiresAction,
             'processing' => ProviderPaymentStatus::Processing,
@@ -221,7 +247,9 @@ final class FakePaymentGateway implements PaymentGateway
     public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
     {
         $this->calls[] = 'capturePayment:'.$providerPaymentId;
+        $this->captureKeys[] = $idempotencyKey;
         $this->throwIfFailing('capturePayment');
+        $this->throwIfServerError('capturePayment', $idempotencyKey);
 
         if (! isset($this->idempotent[$idempotencyKey])) {
             $this->idempotent[$idempotencyKey] = $providerPaymentId;
@@ -240,6 +268,7 @@ final class FakePaymentGateway implements PaymentGateway
     {
         $this->calls[] = 'cancelPayment:'.$providerPaymentId;
         $this->throwIfFailing('cancelPayment');
+        $this->throwIfServerError('cancelPayment', $idempotencyKey);
 
         $status = $this->payments[$providerPaymentId]['status'];
 
@@ -281,6 +310,29 @@ final class FakePaymentGateway implements PaymentGateway
             unset($this->loseResponse[$method]);
 
             throw new GatewayUnavailableException('Fake: the answer was lost.');
+        }
+    }
+
+    /**
+     * Test seam: the next call of `$method` answers a 500, and, like Stripe,
+     * every later call under the same idempotency key answers it again.
+     */
+    public function serverErrorOnNext(string $method): self
+    {
+        $this->serverErrorNext[$method] = true;
+
+        return $this;
+    }
+
+    private function throwIfServerError(string $method, string $idempotencyKey): void
+    {
+        if (isset($this->serverErrorNext[$method])) {
+            unset($this->serverErrorNext[$method]);
+            $this->serverErrorKeys[$idempotencyKey] = true;
+        }
+
+        if (isset($this->serverErrorKeys[$idempotencyKey])) {
+            throw new GatewayUnavailableException('Fake: a stored server error.', 'api_error', null, 500);
         }
     }
 
@@ -357,6 +409,7 @@ final class FakePaymentGateway implements PaymentGateway
         $id = is_string($payment['id'] ?? null) ? $payment['id'] : '';
         $amount = is_int($payment['amount'] ?? null) ? $payment['amount'] : 0;
         $currency = is_string($payment['currency'] ?? null) ? $payment['currency'] : 'MXN';
+        $last4 = is_string($payment['last4'] ?? null) ? $payment['last4'] : '4242';
 
         return new ProviderPayment(
             providerPaymentId: $id,
@@ -365,7 +418,7 @@ final class FakePaymentGateway implements PaymentGateway
             currency: $currency,
             amountCapturableMinor: $status === ProviderPaymentStatus::RequiresCapture ? $amount : 0,
             clientSecret: $status === ProviderPaymentStatus::RequiresAction ? $id.'_secret_fake' : null,
-            cardPreview: new PaymentMethodPreview('MX', 'visa', '4242'),
+            cardPreview: new PaymentMethodPreview('MX', 'visa', $last4, 'fp_fake_'.$last4),
             failure: $status === ProviderPaymentStatus::RequiresPaymentMethod && $failure instanceof ProviderPaymentFailure ? $failure : null,
             attemptReference: isset($metadata['axispay_attempt_id']) && is_string($metadata['axispay_attempt_id']) ? $metadata['axispay_attempt_id'] : null,
             createdAt: is_int($payment['created'] ?? null) ? $payment['created'] : null,
