@@ -19,12 +19,17 @@ declare(strict_types=1);
  *   webhook    a payment event for `attempt`: re-read and complete (status)
  *   reconcile  the reconciliation's re-read of `attempt` (status)
  *   capture    the checkout's completion of `attempt` (outcome)
+ *
+ * Any actor may `wait` for a signal file of the run; a payer may `hold`
+ * inside the gateway's confirmation until the run's `release` file exists.
  */
 
 use App\Modules\Audit\Data\Actor;
 use App\Modules\Checkout\Actions\StartCheckoutPayment;
 use App\Modules\Checkout\Data\CheckoutPaymentInput;
 use App\Modules\Checkout\Services\CheckoutLinkResolver;
+use App\Modules\Gateways\Enums\GatewayProvider;
+use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
 use App\Modules\PaymentLinks\Data\CancelPaymentLinkData;
 use App\Modules\PaymentLinks\Exceptions\LinkNotCancelableException;
@@ -35,6 +40,7 @@ use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Foundation\Application;
+use Tests\Support\HoldingGateway;
 
 require __DIR__.'/../../vendor/autoload.php';
 
@@ -61,6 +67,21 @@ while (! is_file($barrier.'/go')) {
     }
 
     usleep(200);
+}
+
+// Ordering files of the run (Tests\Support\RaceHarness): wait for a signal,
+// or hold inside the gateway's confirmation until released.
+if ($field('wait') !== '') {
+    $deadline = microtime(true) + 60;
+
+    while (! is_file($barrier.'/'.$field('wait')) && microtime(true) < $deadline) {
+        usleep(2_000);
+    }
+}
+
+if ($field('hold') !== '') {
+    $factory = app(GatewayFactory::class);
+    $factory->fake(new HoldingGateway($factory->for(GatewayProvider::Stripe), $barrier));
 }
 
 $link = app(CheckoutLinkResolver::class)->resolve($token);
