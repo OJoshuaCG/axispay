@@ -8,7 +8,7 @@ use App\Modules\Checkout\Data\CheckoutResult;
 use App\Modules\Checkout\Enums\CheckoutOutcome;
 use App\Modules\Checkout\Services\CheckoutUrls;
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Contracts\View\Factory as ViewFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -24,12 +24,12 @@ final readonly class CheckoutResponses
     public function __construct(
         private CheckoutUrls $urls,
         private ViewFactory $views,
+        private TenantAccess $access,
     ) {}
 
     public function result(CheckoutResult $result, PaymentLink $link): JsonResponse
     {
-        $merchant = Tenant::query()->whereKey($link->tenant_id)->value('display_name');
-        $merchant = is_string($merchant) ? $merchant : '';
+        $merchant = $this->access->displayName($link->tenant_id);
 
         $message = match ($result->outcome) {
             CheckoutOutcome::Declined => __('checkout.messages.declined'),

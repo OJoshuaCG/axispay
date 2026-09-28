@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Checkout\Data;
 
+use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
 use App\Modules\Shared\Money\Money;
 use Carbon\CarbonImmutable;
@@ -34,7 +35,7 @@ final readonly class CheckoutPage
         public array $payerFields,
         public ?array $client,
         public bool $sandbox,
-        public ?string $phase,
+        public ?CheckoutPhase $phase,
     ) {}
 
     /** Plan 11.2: informative pages show the description and date, not the amount. */

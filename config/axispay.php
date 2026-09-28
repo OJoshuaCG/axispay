@@ -174,6 +174,11 @@ return [
         // attempt has not changed for this long (webhooks stay the source of
         // truth; this only speeds the page up).
         'status_sync_after_seconds' => 5,
+        // The longer the attempt stays idle (a 3D Secure step left open), the
+        // less often it is re-read: one interval per step of idle time, the
+        // last one kept (ADR-0051).
+        'status_sync_intervals_seconds' => [5, 10, 20],
+        'status_sync_backoff_step_seconds' => 60,
         // Plan 11.2: poll every 3 seconds for at most 2 minutes.
         'poll_interval_seconds' => 3,
         'poll_max_seconds' => 120,

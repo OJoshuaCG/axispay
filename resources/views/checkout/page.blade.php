@@ -120,7 +120,7 @@
                                          :data-poll="$page->state === CheckoutState::Processing ? json_encode(['status' => route('checkout.status', ['token' => $page->token], false), 'intervalMs' => config()->integer('axispay.checkout.poll_interval_seconds') * 1000, 'maxMs' => config()->integer('axispay.checkout.poll_max_seconds') * 1000]) : null">
                     @switch($page->state)
                         @case(CheckoutState::Processing)
-                            <p data-poll-body>{{ $page->phase === 'validating' ? __('checkout.phase.validating') : __('checkout.states.processing.body') }}</p>
+                            <p data-poll-body>{{ $page->phase === \App\Modules\Checkout\Enums\CheckoutPhase::Validating ? __('checkout.phase.validating') : __('checkout.states.processing.body') }}</p>
                             <div data-poll-timeout hidden class="flex flex-col gap-stack-sm">
                                 <x-alert variant="warning" :title="__('checkout.states.timeout.heading')">{{ __('checkout.states.timeout.body') }}</x-alert>
                                 <x-button variant="secondary" data-poll-retry>{{ __('checkout.states.timeout.action') }}</x-button>

@@ -6,14 +6,13 @@ namespace App\Modules\Checkout\Services;
 
 use App\Modules\Checkout\Actions\ReadCheckoutStatus;
 use App\Modules\Checkout\Data\CheckoutPage;
+use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
-use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Sandbox\SandboxMode;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
@@ -31,17 +30,20 @@ final readonly class CheckoutPageBuilder
         private GatewayFactory $gateways,
         private TenantAccess $access,
         private TurnstileVerifier $turnstile,
-        private CardTestingGuard $guard,
+        private CheckoutRateLimiter $limiter,
+        private LinkDeclineCounter $declines,
         private CheckoutUrls $urls,
         private CheckoutFonts $fonts,
         private EffectivePayerFields $effectiveFields,
+        private ReadCheckoutStatus $status,
+        private CheckoutConnection $connection,
     ) {}
 
-    public function build(PaymentLink $link, ?string $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
+    public function build(PaymentLink $link, ?CheckoutPhase $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
     {
-        $tenant = Tenant::query()->findOrFail($link->tenant_id);
-        $timezone = $this->access->timezone($tenant->id);
-        $state = ReadCheckoutStatus::state($link);
+        $tenantId = $link->tenant_id;
+        $timezone = $this->access->timezone($tenantId);
+        $state = $this->status->state($link);
         $fields = $this->effectiveFields->for($link);
         $noticeHours = config()->integer('axispay.checkout.expiry_notice_hours');
 
@@ -52,9 +54,9 @@ final readonly class CheckoutPageBuilder
         return new CheckoutPage(
             state: $state,
             token: $link->public_token,
-            merchant: $tenant->display_name,
-            supportEmail: $tenant->support_email,
-            privacyUrl: $tenant->privacy_notice_url,
+            merchant: $this->access->displayName($tenantId),
+            supportEmail: $this->access->supportEmail($tenantId),
+            privacyUrl: $this->access->privacyNoticeUrl($tenantId),
             description: $link->description,
             money: $link->money(),
             expiresSoonAt: $expiresSoon,
@@ -93,7 +95,8 @@ final readonly class CheckoutPageBuilder
      */
     private function client(PaymentLink $link, array $fields, int $sessionDeclines): ?array
     {
-        $connection = GatewayConnection::query()->current()->first();
+        // An active page implies a connection that can charge (ReadCheckoutStatus::state()).
+        $connection = $this->connection->chargeable();
 
         if ($connection === null) {
             return null;
@@ -117,7 +120,7 @@ final readonly class CheckoutPageBuilder
                 'sandboxNextAction' => SandboxMode::enabled() ? $this->urls->sandboxNextAction($link) : null,
             ],
             'turnstile' => $this->turnstileConfig($link, $sessionDeclines),
-            'pausedMinutes' => $this->guard->pausedMinutes($link),
+            'pausedMinutes' => $this->limiter->pausedMinutes($link),
             'poll' => [
                 'intervalMs' => max(1, config()->integer('axispay.checkout.poll_interval_seconds')) * 1000,
                 'maxMs' => max(1, config()->integer('axispay.checkout.poll_max_seconds')) * 1000,
@@ -132,7 +135,7 @@ final readonly class CheckoutPageBuilder
     private function turnstileConfig(PaymentLink $link, int $sessionDeclines): array
     {
         $siteKey = $this->turnstile->siteKey();
-        $required = $this->guard->turnstileRequired($link, $sessionDeclines);
+        $required = $this->declines->turnstileRequired($link, $sessionDeclines);
 
         // The page cannot pay without the widget; production refuses to boot
         // without the keys, so this only happens in a misconfigured non-production.

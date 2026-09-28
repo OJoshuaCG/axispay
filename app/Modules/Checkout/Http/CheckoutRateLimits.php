@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\View;
  * Request limits of the pay host (ADR-0051), one named limiter per group so
  * that polling or reloading never eats into the budget of paying. Keyed by
  * client IP and link token. These protect the server; the card-testing
- * rules (CardTestingGuard) are separate and stricter.
+ * rules (CheckoutRateLimiter) are separate and stricter.
  *
  *  - page (the payment page) and complete (the completion page, also the
  *    3D Secure return URL): 60 per minute each;

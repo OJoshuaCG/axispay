@@ -9,7 +9,10 @@ use App\Modules\Checkout\Http\Controllers\CheckoutPageController;
 use App\Modules\Checkout\Http\Controllers\CheckoutStatusController;
 use App\Modules\Checkout\Http\Controllers\SandboxNextActionController;
 use App\Modules\Gateways\Sandbox\SandboxMode;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,7 +36,11 @@ Route::prefix('/l/{token}')
     ->group(function (): void {
         Route::get('/', [CheckoutPageController::class, 'show'])->middleware('throttle:'.CheckoutRateLimits::PAGE)->name('show');
         Route::get('/complete', [CheckoutPageController::class, 'complete'])->middleware('throttle:'.CheckoutRateLimits::COMPLETE)->name('complete');
-        Route::get('/status', CheckoutStatusController::class)->middleware('throttle:'.CheckoutRateLimits::STATUS)->name('status');
+        // A read with no session: polling never starts or refreshes one (no cookie, no session row).
+        Route::get('/status', CheckoutStatusController::class)
+            ->middleware('throttle:'.CheckoutRateLimits::STATUS)
+            ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class])
+            ->name('status');
         Route::post('/attempts', [CheckoutAttemptController::class, 'store'])->middleware('throttle:'.CheckoutRateLimits::ATTEMPTS)->name('attempts.store');
         Route::post('/attempts/continue', [CheckoutAttemptController::class, 'continue'])->middleware('throttle:'.CheckoutRateLimits::CONTINUE)->name('attempts.continue');
 

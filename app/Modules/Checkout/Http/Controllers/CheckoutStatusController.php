@@ -27,6 +27,6 @@ final readonly class CheckoutStatusController
 
         $current = $status->handle($link);
 
-        return new JsonResponse(array_filter(['state' => $current->state->value, 'phase' => $current->phase, 'return_url' => $current->returnUrl]));
+        return new JsonResponse(array_filter(['state' => $current->state->value, 'phase' => $current->phase?->value, 'return_url' => $current->returnUrl]));
     }
 }

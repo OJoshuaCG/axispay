@@ -7,7 +7,7 @@ namespace App\Modules\Checkout\Services;
 use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\Log;
  * notice is not allowed, and refusing to show the payment page would be
  * worse for the payer.
  */
-final class EffectivePayerFields
+final readonly class EffectivePayerFields
 {
+    public function __construct(private TenantAccess $access) {}
+
     /**
      * @return array<string, string> field => requirement
      */
@@ -32,7 +34,7 @@ final class EffectivePayerFields
             $config[$field->value] = (PayerFieldRequirement::tryFrom($link->payer_fields_config[$field->value] ?? '') ?? $field->platformDefault())->value;
         }
 
-        if (! self::collectsAny($config) || self::hasPrivacyNotice($link->tenant_id)) {
+        if (! self::collectsAny($config) || $this->hasPrivacyNotice($link->tenant_id)) {
             return $config;
         }
 
@@ -44,7 +46,7 @@ final class EffectivePayerFields
     /** For the panel: the link asks for payer data the checkout cannot collect. */
     public function missingPrivacyNotice(PaymentLink $link): bool
     {
-        return self::collectsAny($link->payer_fields_config) && ! self::hasPrivacyNotice($link->tenant_id);
+        return self::collectsAny($link->payer_fields_config) && ! $this->hasPrivacyNotice($link->tenant_id);
     }
 
     /**
@@ -61,10 +63,8 @@ final class EffectivePayerFields
         return false;
     }
 
-    private static function hasPrivacyNotice(string $tenantId): bool
+    private function hasPrivacyNotice(string $tenantId): bool
     {
-        $url = Tenant::query()->whereKey($tenantId)->value('privacy_notice_url');
-
-        return is_string($url) && trim($url) !== '';
+        return $this->access->privacyNoticeUrl($tenantId) !== null;
     }
 }

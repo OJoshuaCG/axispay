@@ -5,39 +5,29 @@ declare(strict_types=1);
 namespace App\Modules\Checkout\Services;
 
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Payments\Models\PaymentAttempt;
-use App\Modules\Payments\Models\PaymentAttemptFailure;
-use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * Card-testing protection of the checkout (plan 11.7, ADR-0051):
+ * Card-testing rate limits of the checkout (plan 11.7 rules 1 and 2,
+ * ADR-0051), in the cache (short-lived); values in
+ * `axispay.checkout.rate_limits`:
  *
  *  1. per link: `link_attempts` confirmations in `link_window_minutes`, then
  *     the link refuses confirmations for `link_block_minutes`;
  *  2. per client IP (the /64 network for IPv6): `ip_attempts` confirmations
- *     per `ip_window_minutes`, across links;
+ *     per `ip_window_minutes`, across links.
  *
- * Rules 1 and 2 only count confirmations that actually reach the gateway's
- * confirm call (reserveConfirmation(): an atomic increment, compared after
- * it, so a parallel burst cannot overshoot; requests answered "in progress"
- * never count). Unrecognized tokens and gateway failures while reading the
- * token count per link and client, so they only pause that client, and
- * unrecognized tokens also count per client network across links
- * (`ip_bogus_attempts`), so rotating links cannot hammer the gateway
- * (ADR-0051).
- *  3. Turnstile once the link, or the payer's session, has
- *     `turnstile_after_failures` declines;
- *  4. the long block (`long_block_declines` declines → `long_block_hours`)
- *     lives on the link (BlockCheckoutAfterDeclines) so the tenant can lift
- *     it; declines before the tenant lifted it no longer count.
- *
- * Counters 1-2 live in the cache (short-lived); 3-4 count the recorded
- * declines in the database.
+ * Only confirmations that actually reach the gateway's confirm call count
+ * (reserveConfirmation(): an atomic increment, compared after it, so a
+ * parallel burst cannot overshoot; requests answered "in progress" never
+ * count). Unrecognized tokens and gateway failures while reading the token
+ * count per link and client, so they only pause that client; unrecognized
+ * tokens also count per client network across links (`ip_bogus_attempts`),
+ * so rotating links cannot hammer the gateway.
  */
-final readonly class CardTestingGuard
+final readonly class CheckoutRateLimiter
 {
     public function __construct(private Repository $cache) {}
 
@@ -49,9 +39,7 @@ final readonly class CardTestingGuard
      */
     public function check(PaymentLink $link, ?string $clientIp): ?int
     {
-        $config = config()->array('axispay.checkout.rate_limits');
-        $blockKey = 'checkout:link-paused:'.$link->id;
-        $pausedUntil = $this->cache->get($blockKey);
+        $pausedUntil = $this->cache->get(self::pausedKey($link));
 
         if (is_int($pausedUntil) && $pausedUntil > time()) {
             return self::minutes($pausedUntil - time());
@@ -59,7 +47,7 @@ final readonly class CardTestingGuard
 
         $ipKey = self::ipKey($clientIp);
 
-        if ($ipKey !== null && RateLimiter::tooManyAttempts($ipKey, self::int($config, 'ip_attempts', 10))) {
+        if ($ipKey !== null && RateLimiter::tooManyAttempts($ipKey, self::limit('ip_attempts'))) {
             Log::notice('Checkout confirmations paused for a client IP.', ['payment_link_id' => $link->id]);
 
             return self::minutes(RateLimiter::availableIn($ipKey));
@@ -67,7 +55,7 @@ final readonly class CardTestingGuard
 
         $ipBogusKey = self::ipBogusKey($clientIp);
 
-        if ($ipBogusKey !== null && RateLimiter::tooManyAttempts($ipBogusKey, self::int($config, 'ip_bogus_attempts', 20))) {
+        if ($ipBogusKey !== null && RateLimiter::tooManyAttempts($ipBogusKey, self::limit('ip_bogus_attempts'))) {
             Log::notice('Checkout confirmations paused for a client network sending unrecognized tokens.', ['payment_link_id' => $link->id]);
 
             return self::minutes(RateLimiter::availableIn($ipBogusKey));
@@ -77,13 +65,11 @@ final readonly class CardTestingGuard
         // a stranger posting bogus tokens never pauses the link for others.
         $bogusKey = self::bogusKey($link, $clientIp);
 
-        if (RateLimiter::tooManyAttempts($bogusKey, self::int($config, 'link_attempts', 5))) {
+        if (RateLimiter::tooManyAttempts($bogusKey, self::limit('link_attempts'))) {
             return self::minutes(RateLimiter::availableIn($bogusKey));
         }
 
-        $linkKey = 'checkout:link:'.$link->id;
-
-        if (RateLimiter::tooManyAttempts($linkKey, self::int($config, 'link_attempts', 5))) {
+        if (RateLimiter::tooManyAttempts(self::linkKey($link), self::limit('link_attempts'))) {
             return $this->pause($link);
         }
 
@@ -98,16 +84,15 @@ final readonly class CardTestingGuard
      */
     public function reserveConfirmation(PaymentLink $link, ?string $clientIp): ?int
     {
-        $config = config()->array('axispay.checkout.rate_limits');
-        $linkKey = 'checkout:link:'.$link->id;
-        $linkWindow = self::int($config, 'link_window_minutes', 15) * 60;
+        $linkKey = self::linkKey($link);
+        $linkWindow = self::seconds('link_window_minutes');
         $ipKey = self::ipKey($clientIp);
-        $ipWindow = self::int($config, 'ip_window_minutes', 60) * 60;
+        $ipWindow = self::seconds('ip_window_minutes');
 
         $linkHits = RateLimiter::increment($linkKey, $linkWindow);
         $ipHits = $ipKey !== null ? RateLimiter::increment($ipKey, $ipWindow) : 0;
-        $linkOver = $linkHits > self::int($config, 'link_attempts', 5);
-        $ipOver = $ipHits > self::int($config, 'ip_attempts', 10);
+        $linkOver = $linkHits > self::limit('link_attempts');
+        $ipOver = $ipHits > self::limit('ip_attempts');
 
         if (! $linkOver && ! $ipOver) {
             return null;
@@ -134,12 +119,10 @@ final readonly class CardTestingGuard
      */
     public function countUnrecognizedToken(PaymentLink $link, ?string $clientIp): void
     {
-        $config = config()->array('axispay.checkout.rate_limits');
-
-        RateLimiter::hit(self::bogusKey($link, $clientIp), self::int($config, 'link_window_minutes', 15) * 60);
+        RateLimiter::hit(self::bogusKey($link, $clientIp), self::seconds('link_window_minutes'));
 
         if (($ipBogusKey = self::ipBogusKey($clientIp)) !== null) {
-            RateLimiter::hit($ipBogusKey, self::int($config, 'ip_window_minutes', 60) * 60);
+            RateLimiter::hit($ipBogusKey, self::seconds('ip_window_minutes'));
         }
     }
 
@@ -150,17 +133,15 @@ final readonly class CardTestingGuard
      */
     public function countGatewayFailure(PaymentLink $link, ?string $clientIp): void
     {
-        RateLimiter::hit(self::bogusKey($link, $clientIp), self::int(config()->array('axispay.checkout.rate_limits'), 'link_window_minutes', 15) * 60);
+        RateLimiter::hit(self::bogusKey($link, $clientIp), self::seconds('link_window_minutes'));
     }
 
-    private function pause(PaymentLink $link): int
+    /** Minutes left of the short pause of a link, if any (page load). */
+    public function pausedMinutes(PaymentLink $link): ?int
     {
-        $seconds = self::int(config()->array('axispay.checkout.rate_limits'), 'link_block_minutes', 30) * 60;
-        $this->cache->put('checkout:link-paused:'.$link->id, time() + $seconds, $seconds);
-        RateLimiter::clear('checkout:link:'.$link->id);
-        Log::notice('Checkout confirmations paused for a payment link.', ['payment_link_id' => $link->id, 'minutes' => $seconds / 60]);
+        $pausedUntil = $this->cache->get(self::pausedKey($link));
 
-        return self::minutes($seconds);
+        return is_int($pausedUntil) && $pausedUntil > time() ? self::minutes($pausedUntil - time()) : null;
     }
 
     /**
@@ -183,6 +164,26 @@ final readonly class CardTestingGuard
         return $clientIp;
     }
 
+    private function pause(PaymentLink $link): int
+    {
+        $seconds = self::seconds('link_block_minutes');
+        $this->cache->put(self::pausedKey($link), time() + $seconds, $seconds);
+        RateLimiter::clear(self::linkKey($link));
+        Log::notice('Checkout confirmations paused for a payment link.', ['payment_link_id' => $link->id, 'minutes' => $seconds / 60]);
+
+        return self::minutes($seconds);
+    }
+
+    private static function pausedKey(PaymentLink $link): string
+    {
+        return 'checkout:link-paused:'.$link->id;
+    }
+
+    private static function linkKey(PaymentLink $link): string
+    {
+        return 'checkout:link:'.$link->id;
+    }
+
     private static function ipKey(?string $clientIp): ?string
     {
         $network = self::clientNetwork($clientIp);
@@ -202,49 +203,18 @@ final readonly class CardTestingGuard
         return 'checkout:bogus-token:'.$link->id.':'.hash('sha256', (string) self::clientNetwork($clientIp));
     }
 
-    /** Minutes left of the short pause of a link, if any (page load). */
-    public function pausedMinutes(PaymentLink $link): ?int
+    private static function limit(string $key): int
     {
-        $pausedUntil = $this->cache->get('checkout:link-paused:'.$link->id);
-
-        return is_int($pausedUntil) && $pausedUntil > time() ? self::minutes($pausedUntil - time()) : null;
+        return max(1, config()->integer('axispay.checkout.rate_limits.'.$key));
     }
 
-    public function turnstileRequired(PaymentLink $link, int $sessionDeclines): bool
+    private static function seconds(string $minutesKey): int
     {
-        $threshold = max(1, config()->integer('axispay.checkout.turnstile_after_failures'));
-
-        return $sessionDeclines >= $threshold || $this->declinesOf($link) >= $threshold;
-    }
-
-    /**
-     * Declines recorded on the link's attempts in the last long-block window,
-     * after the tenant last lifted a block.
-     */
-    public function declinesOf(PaymentLink $link): int
-    {
-        $since = CarbonImmutable::now()->subHours(max(1, config()->integer('axispay.checkout.long_block_hours')));
-
-        if ($link->checkout_unblocked_at !== null && $link->checkout_unblocked_at->greaterThan($since)) {
-            $since = $link->checkout_unblocked_at;
-        }
-
-        return PaymentAttemptFailure::query()
-            ->whereIn('payment_attempt_id', PaymentAttempt::query()->select('id')->where('payment_link_id', $link->id))
-            ->where('created_at', '>', $since->utc()->format('Y-m-d H:i:s.u'))
-            ->count();
+        return self::limit($minutesKey) * 60;
     }
 
     private static function minutes(int $seconds): int
     {
         return max(1, (int) ceil($seconds / 60));
-    }
-
-    /**
-     * @param  array<mixed>  $config
-     */
-    private static function int(array $config, string $key, int $default): int
-    {
-        return is_int($config[$key] ?? null) ? $config[$key] : $default;
     }
 }

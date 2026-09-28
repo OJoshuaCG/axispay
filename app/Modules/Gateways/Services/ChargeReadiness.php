@@ -41,6 +41,12 @@ final class ChargeReadiness
         return GatewayConnection::query()->current()->exists();
     }
 
+    /** Whether this connection can charge now: `active` and charges enabled at the gateway. */
+    public function isReady(?GatewayConnection $connection): bool
+    {
+        return self::ready($connection);
+    }
+
     private static function ready(?GatewayConnection $connection): bool
     {
         return $connection !== null && $connection->status->canCharge() && $connection->charges_enabled;

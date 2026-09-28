@@ -6,6 +6,7 @@ namespace App\Modules\Checkout\Actions;
 
 use App\Modules\Checkout\Data\CheckoutResult;
 use App\Modules\Checkout\Enums\CheckoutOutcome;
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
@@ -68,7 +69,7 @@ final readonly class CompleteCheckoutAuthorization
         return CheckoutResult::of(match ($attempt->status) {
             PaymentAttemptStatus::Succeeded => CheckoutOutcome::Paid,
             PaymentAttemptStatus::Processing, PaymentAttemptStatus::RequiresAction => CheckoutOutcome::Processing,
-            PaymentAttemptStatus::RequiresPaymentMethod => $attempt->last_failure_code === 'payment_intent_authentication_failure'
+            PaymentAttemptStatus::RequiresPaymentMethod => $attempt->last_failure_kind === ProviderFailureKind::AuthenticationFailed
                 ? CheckoutOutcome::AuthenticationFailed
                 : CheckoutOutcome::Declined,
             default => $link->refresh()->status === PaymentLinkStatus::Paid ? CheckoutOutcome::Paid : CheckoutOutcome::Error,

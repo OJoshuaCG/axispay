@@ -55,10 +55,11 @@ final readonly class CheckoutPageController
         }
 
         CheckoutLocale::apply($request, $link->locale);
+        // Re-reads the payment first; the link is refreshed there when it did.
         $current = $status->handle($link);
 
         return new Response(view('checkout.page', [
-            'page' => $this->pages->build($link->refresh(), $current->phase, CheckoutSession::paidHere($request, $link->id), CheckoutSession::declines($request, $link->id)),
+            'page' => $this->pages->build($link, $current->phase, CheckoutSession::paidHere($request, $link->id), CheckoutSession::declines($request, $link->id)),
         ])->render());
     }
 }

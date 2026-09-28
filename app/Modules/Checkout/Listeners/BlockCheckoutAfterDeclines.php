@@ -8,8 +8,8 @@ use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Checkout\Notifications\CheckoutBlockedNotification;
-use App\Modules\Checkout\Services\CardTestingGuard;
 use App\Modules\Checkout\Services\CheckoutNotificationRecipients;
+use App\Modules\Checkout\Services\LinkDeclineCounter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Events\PaymentDeclined;
 use App\Modules\Tenancy\TenantContext;
@@ -31,7 +31,7 @@ final readonly class BlockCheckoutAfterDeclines
 
     public function __construct(
         private TenantContext $context,
-        private CardTestingGuard $guard,
+        private LinkDeclineCounter $declines,
         private AuditLogger $audit,
         private CheckoutNotificationRecipients $recipients,
     ) {}
@@ -42,7 +42,7 @@ final readonly class BlockCheckoutAfterDeclines
             $blocked = DB::transaction(function () use ($event): ?PaymentLink {
                 $link = PaymentLink::query()->lockForUpdate()->find($event->paymentLinkId);
 
-                if ($link === null || $link->isCheckoutBlocked() || $this->guard->declinesOf($link) < max(1, config()->integer('axispay.checkout.long_block_declines'))) {
+                if ($link === null || $link->isCheckoutBlocked() || $this->declines->declinesOf($link) < max(1, config()->integer('axispay.checkout.long_block_declines'))) {
                     return null;
                 }
 

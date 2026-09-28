@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Checkout\Data;
 
+use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
 
 /**
@@ -15,7 +16,7 @@ final readonly class CheckoutStatus
 {
     public function __construct(
         public CheckoutState $state,
-        public ?string $phase = null,
+        public ?CheckoutPhase $phase = null,
         public ?string $returnUrl = null,
     ) {}
 }
