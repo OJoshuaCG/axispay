@@ -21,6 +21,7 @@ use App\Modules\PaymentLinks\Services\CancelPaymentLinkInputParser;
 use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Services\AttemptDisplay;
 use App\Modules\Shared\Http\Errors\ApiException;
 use App\Modules\Shared\Money\CurrencyCode;
 use App\Modules\Shared\Money\MoneyDisplay;
@@ -51,6 +52,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Js;
 use Illuminate\Support\Str;
 
@@ -318,12 +320,16 @@ final class PaymentLinkResource extends Resource
                                 ->label(__('payments.attempts.card'))
                                 ->state(static fn (PaymentAttempt $record): ?string => $record->card_last4 !== null ? self::cardLine($record) : null)
                                 ->placeholder('—'),
-                            TextEntry::make('card_country')->label(__('payments.attempts.card_country'))->placeholder('—'),
+                            TextEntry::make('card_country')
+                                ->label(__('payments.attempts.card_country'))
+                                ->formatStateUsing(static fn (?string $state): ?string => AttemptDisplay::countryName($state))
+                                ->placeholder('—'),
                             TextEntry::make('failure_count')->label(__('payments.attempts.failures')),
                             TextEntry::make('last_decline_code')
                                 ->label(__('payments.attempts.last_decline'))
-                                ->state(static fn (PaymentAttempt $record): ?string => $record->last_decline_code ?? $record->last_failure_code)
-                                ->fontFamily(FontFamily::Mono)
+                                ->state(static fn (PaymentAttempt $record): ?string => ($code = $record->last_decline_code ?? $record->last_failure_code) !== null ? AttemptDisplay::declineLabel($code) : null)
+                                // The raw gateway code stays visible for support.
+                                ->helperText(static fn (PaymentAttempt $record): ?HtmlString => ($code = $record->last_decline_code ?? $record->last_failure_code) !== null ? new HtmlString('<code>'.e($code).'</code>') : null)
                                 ->placeholder('—'),
                             TextEntry::make('late_payment')
                                 ->label(__('payments.attempts.late_payment'))
@@ -331,7 +337,7 @@ final class PaymentLinkResource extends Resource
                                 ->visible(static fn (PaymentAttempt $record): bool => $record->late_payment),
                             TextEntry::make('needs_review')
                                 ->label(__('payments.attempts.needs_review'))
-                                ->state(__('payments.attempts.needs_review_help'))
+                                ->state(static fn (PaymentAttempt $record): string => AttemptDisplay::reviewReason($record->review_reason))
                                 ->color('warning')
                                 ->icon(Heroicon::OutlinedExclamationTriangle)
                                 ->visible(static fn (PaymentAttempt $record): bool => $record->needs_review)
@@ -357,7 +363,7 @@ final class PaymentLinkResource extends Resource
     /** `Visa •••• 4242` */
     private static function cardLine(PaymentAttempt $record): string
     {
-        $line = __('payments.attempts.card_value', ['brand' => ucfirst((string) $record->card_brand), 'last4' => (string) $record->card_last4]);
+        $line = __('payments.attempts.card_value', ['brand' => AttemptDisplay::brandName($record->card_brand), 'last4' => (string) $record->card_last4]);
 
         return is_string($line) ? $line : (string) $record->card_last4;
     }
