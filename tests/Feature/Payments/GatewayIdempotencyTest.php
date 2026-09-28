@@ -9,15 +9,21 @@ use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
 use App\Modules\Payments\Actions\VoidAuthorization;
+use App\Modules\Payments\Data\PrePaymentDecision;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\VoidReason;
+use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLocks;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\ServerErrorRetry;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\CheckoutTestHelpers as Checkout;
+use Tests\Support\CountingValidator;
 use Tests\Support\FakePaymentGateway;
+
+use function Pest\Laravel\travel;
 
 /**
  * ADR-0051, Phase 4 iteration 6 (Stripe API correctness): a server error is
@@ -144,4 +150,72 @@ it('answers like the Stripe adapter: a payment no longer capturable is returned 
     expect(fn () => $fake->capturePayment($connection, (string) $attempt->provider_payment_id, 'k-2'))
         ->toThrow(GatewayRequestException::class)
         ->and(thrownBy(GatewayRequestException::class, fn () => $fake->retrievePayment($connection, 'pi_Unknown'))->httpStatus)->toBe(404);
+});
+
+// Judgment Day: the payer's time budget reaches capture and void ---------------
+
+it('stops retrying a capture that answered a 5xx when the payer request runs out of time, then completes it once in the background', function (): void {
+    Queue::fake([CompleteAuthorizedPaymentJob::class]);
+    [, $link, $fake] = Checkout::scenario();
+    $fake->serverErrorOnNext('capturePayment');
+    // The capture call takes 20 s: the repetition (42 s worst case) no longer fits in the 50 s budget.
+    $fake->beforeNext('capturePayment', static fn () => travel(20)->seconds());
+
+    Checkout::pay($link)->assertOk()->assertJson(['outcome' => 'processing']);
+
+    [$attempt] = Checkout::attempts($link);
+    expect($fake->captureKeys)->toBe([IdempotencyKeys::capture($attempt->id)])
+        ->and($attempt->status)->toBe(PaymentAttemptStatus::RequiresCapture)
+        ->and($attempt->leaseHeld())->toBeFalse();
+    Queue::assertPushed(CompleteAuthorizedPaymentJob::class, static fn (CompleteAuthorizedPaymentJob $job): bool => $job->paymentAttemptId === $attempt->id);
+
+    // The background completion (no request budget) repeats under a new key and captures once.
+    Checkout::inTenant($link, static fn () => app()->call([new CompleteAuthorizedPaymentJob($attempt->id), 'handle']));
+
+    expect(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Succeeded)
+        ->and(array_values(array_filter($fake->captureKeys, static fn (string $key): bool => str_ends_with($key, ':r1'))))->toHaveCount(1)
+        ->and(Checkout::freshLink($link)->status)->toBe(PaymentLinkStatus::Paid);
+});
+
+it('stops retrying the void of a rejected authorization when the payer request runs out of time, then voids it in the background', function (): void {
+    Queue::fake([CompleteAuthorizedPaymentJob::class]);
+    [, $link, $fake] = Checkout::scenario();
+    CountingValidator::install(PrePaymentDecision::reject('Out of stock'));
+    $fake->serverErrorOnNext('cancelPayment');
+    $fake->beforeNext('cancelPayment', static fn () => travel(20)->seconds());
+
+    // Never "no charge was made" while the authorization may still stand.
+    Checkout::pay($link)->assertOk()->assertJson(['outcome' => 'processing']);
+
+    [$attempt] = Checkout::attempts($link);
+    expect($fake->callsTo('cancelPayment'))->toHaveCount(1)
+        ->and($attempt->status)->toBe(PaymentAttemptStatus::RequiresCapture);
+    Queue::assertPushed(CompleteAuthorizedPaymentJob::class);
+
+    Checkout::inTenant($link, static fn () => app()->call([new CompleteAuthorizedPaymentJob($attempt->id), 'handle']));
+
+    expect(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Canceled)
+        ->and($fake->callsTo('capturePayment'))->toBe([])
+        ->and(Checkout::freshLink($link)->status)->toBe(PaymentLinkStatus::Active);
+});
+
+it('bounds the status re-read by its own request budget: a void past the capture window that answers a 5xx is left to the background', function (): void {
+    Queue::fake([CompleteAuthorizedPaymentJob::class]);
+    [$link, $attempt, $fake] = idempotencyAuthorized();
+    $captures = count($fake->callsTo('capturePayment'));
+    travel(16)->minutes();
+    $fake->serverErrorOnNext('cancelPayment');
+    $fake->beforeNext('cancelPayment', static fn () => travel(20)->seconds());
+
+    Checkout::status($link)->assertOk();
+
+    expect($fake->callsTo('cancelPayment'))->toHaveCount(1)
+        ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::RequiresCapture);
+    Queue::assertPushed(CompleteAuthorizedPaymentJob::class);
+
+    Checkout::inTenant($link, static fn () => app()->call([new CompleteAuthorizedPaymentJob($attempt->id), 'handle']));
+
+    // Past the window: voided, never captured.
+    expect(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Canceled)
+        ->and($fake->callsTo('capturePayment'))->toHaveCount($captures);
 });
