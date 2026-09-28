@@ -13,7 +13,7 @@ use App\Modules\Payments\Enums\ClaimRefusal;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLease;
-use Illuminate\Database\DetectsConcurrencyErrors;
+use App\Modules\Shared\Database\ConcurrencyErrors;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -28,11 +28,14 @@ use Illuminate\Support\Facades\Log;
  * is confirmed (plan 9.1). A reservation left by a confirmation that died
  * (lease expired, nothing under way) is taken over. Anything already under
  * way is refused as in progress, never an error: another session creating
- * the attempt at the same time, or repeated deadlocks, answer the same.
+ * the attempt at the same time, or lock conflicts that persist after
+ * retries (deadlocks, a row changed under MariaDB's snapshot isolation),
+ * answer the same.
  */
 final readonly class ClaimLinkAttempt
 {
-    use DetectsConcurrencyErrors;
+    /** Claims under lock conflicts are retried this many times in all (with jitter). */
+    private const int TRIES = 3;
 
     public function __construct(
         private AttemptLease $lease,
@@ -42,22 +45,39 @@ final readonly class ClaimLinkAttempt
 
     public function handle(PaymentLink $link, AttemptClaimRequest $request): AttemptClaim|ClaimRefusal
     {
-        try {
-            return DB::transaction(fn (): AttemptClaim|ClaimRefusal => $this->claim($link, $request), 3);
-        } catch (UniqueConstraintViolationException) {
-            return ClaimRefusal::InProgress; // another session created the link's active attempt at the same time
-        } catch (QueryException $e) {
-            if (! $this->causedByConcurrencyError($e)) {
-                throw $e;
+        for ($try = 1; ; $try++) {
+            // Read in autocommit, BEFORE the transaction: a plain read inside
+            // it would open a read snapshot, and MariaDB then refuses to lock
+            // a row changed since (ER_CHECKREAD). Re-checked under the locks.
+            $attemptId = PaymentAttempt::query()->activeForLink($link->id)->value('id');
+
+            try {
+                return DB::transaction(fn (): AttemptClaim|ClaimRefusal => $this->claim($link, $request, is_string($attemptId) ? $attemptId : null));
+            } catch (UniqueConstraintViolationException) {
+                return ClaimRefusal::InProgress; // another session created the link's active attempt at the same time
+            } catch (QueryException $e) {
+                $kind = ConcurrencyErrors::kind($e);
+
+                if ($kind === null) {
+                    throw $e;
+                }
+
+                if ($try < self::TRIES) {
+                    ConcurrencyErrors::jitter();
+
+                    continue;
+                }
+
+                Log::warning($kind === ConcurrencyErrors::RECORD_CHANGED
+                    ? 'Checkout claim kept meeting an attempt changed by another process; answered in progress.'
+                    : 'Checkout claim kept hitting lock conflicts; answered in progress.', ['payment_link_id' => $link->id, 'error' => $kind, 'tries' => $try]);
+
+                return ClaimRefusal::InProgress;
             }
-
-            Log::warning('Checkout claim kept deadlocking; answered in progress.', ['payment_link_id' => $link->id]);
-
-            return ClaimRefusal::InProgress;
         }
     }
 
-    private function claim(PaymentLink $link, AttemptClaimRequest $request): AttemptClaim|ClaimRefusal
+    private function claim(PaymentLink $link, AttemptClaimRequest $request, ?string $attemptId): AttemptClaim|ClaimRefusal
     {
         $locked = PaymentLink::query()->lockForUpdate()->findOrFail($link->id);
         $reclaiming = $locked->status === PaymentLinkStatus::Processing;
@@ -66,12 +86,13 @@ final readonly class ClaimLinkAttempt
             return $locked->status === PaymentLinkStatus::Paid ? ClaimRefusal::AlreadyPaid : ClaimRefusal::InProgress;
         }
 
-        // The link lock already serializes this link: read its active attempt
-        // without a locking range read (no gap locks shared with other links
-        // of the tenant), then lock that row by its key.
-        $attemptId = PaymentAttempt::query()->activeForLink($locked->id)->value('id');
-        $attempt = is_string($attemptId) ? PaymentAttempt::query()->whereKey($attemptId)->lockForUpdate()->first() : null;
-        $attempt = $attempt !== null && ! $attempt->status->isTerminal() ? $attempt : null;
+        // The active attempt read before the transaction (never a locking
+        // range read: no gap locks shared with other links of the tenant),
+        // locked by its key and re-checked: still this link's and not final.
+        // Otherwise a new one is created; if another session created it
+        // meanwhile, the unique active-attempt key refuses it (in progress).
+        $attempt = $attemptId !== null ? PaymentAttempt::query()->whereKey($attemptId)->lockForUpdate()->first() : null;
+        $attempt = $attempt !== null && $attempt->payment_link_id === $locked->id && ! $attempt->status->isTerminal() ? $attempt : null;
 
         if ($reclaiming && ($attempt === null || $attempt->status->isInFlight() || $attempt->leaseHeld())) {
             return ClaimRefusal::InProgress; // a live confirmation holds the reservation

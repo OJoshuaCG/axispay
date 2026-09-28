@@ -38,9 +38,11 @@ use App\Modules\Payments\Enums\ClaimRefusal;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\LinkReservation;
+use App\Modules\Shared\Database\ConcurrencyErrors;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Shared\Money\Money;
 use App\Modules\Tenancy\Services\TenantAccess;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use LogicException;
 
@@ -157,9 +159,29 @@ final readonly class StartCheckoutPayment
         try {
             return $this->confirm($link, $claim, $amount, $payer, $input, $turnstileRequired);
         } finally {
-            // No payment under way (failure, refusal, never reached the
-            // gateway): the reserved link is payable again; the lease is freed.
+            $this->releaseClaim($claim);
+        }
+    }
+
+    /**
+     * No payment under way (failure, refusal, never reached the gateway):
+     * the reserved link is payable again and the lease is freed. A lock
+     * conflict here never replaces the payer's answer: it is logged, the
+     * lease expires by itself and the reconciliation frees a link left in
+     * `processing` (ADR-0051).
+     */
+    private function releaseClaim(AttemptClaim $claim): void
+    {
+        try {
             $this->release->handle($claim->attempt->id, $claim->leaseToken);
+        } catch (QueryException $e) {
+            $kind = ConcurrencyErrors::kind($e);
+
+            if ($kind === null) {
+                throw $e;
+            }
+
+            Log::warning('The link could not be released after a confirmation; left to the lease expiry and the reconciliation.', ['payment_attempt_id' => $claim->attempt->id, 'error' => $kind]);
         }
     }
 
