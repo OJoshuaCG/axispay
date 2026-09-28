@@ -8,6 +8,7 @@ use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -70,6 +71,8 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
         $staleBefore = CarbonImmutable::now()->subMinutes(config()->integer('axispay.payments.reconcile_after_minutes'));
         // Time box: no new sync starts after the budget (each one is bounded
         // by the Stripe call limits); the next run continues where the cursor is.
+        // Every gateway call of the run (all syncs) ends before the job's time limit.
+        $budget = CallBudget::forJob($this->timeout);
         $deadline = microtime(true) + max(1, config()->integer('axispay.payments.reconcile_time_budget_seconds'));
 
         // Only payments under way at the gateway: attempts still waiting for
@@ -83,7 +86,7 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
             ->orderBy('id')
             ->limit(max(1, config()->integer('axispay.payments.reconcile_batch_size')))
             ->pluck('id')
-            ->each(static function (mixed $attemptId) use ($sync, $deadline): bool {
+            ->each(static function (mixed $attemptId) use ($sync, $deadline, $budget): bool {
                 if (! is_string($attemptId)) {
                     return true;
                 }
@@ -97,7 +100,7 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
                 PaymentAttempt::query()->whereKey($attemptId)->toBase()->update(['reconciled_at' => CarbonImmutable::now()->utc()->format('Y-m-d H:i:s.u')]);
 
                 try {
-                    $sync->handle($attemptId, SyncReason::Reconciliation);
+                    $sync->handle($attemptId, SyncReason::Reconciliation, budget: $budget);
                 } catch (Throwable $e) {
                     Log::warning('A payment attempt could not be reconciled.', ['payment_attempt_id' => $attemptId, 'exception' => $e::class]);
                     report($e);

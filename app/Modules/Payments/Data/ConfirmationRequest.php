@@ -22,6 +22,6 @@ final readonly class ConfirmationRequest
         public string $returnUrl,
         #[SensitiveParameter] public ?string $receiptEmail,
         public ?string $clientIp,
-        public ?CallBudget $budget = null,
+        public CallBudget $budget,
     ) {}
 }

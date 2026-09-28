@@ -10,6 +10,7 @@ use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Enums\VoidReason;
+use App\Modules\Payments\Exceptions\CallBudgetExhausted;
 use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
@@ -45,7 +46,8 @@ final readonly class SyncPaymentAttempt
      *                                          attempt never stored its ID (a crash right after
      *                                          creating it), once the gateway confirms it is ours
      * @param  bool  $complete  false: only re-read and apply; the caller completes an authorization itself
-     * @param  CallBudget|null  $budget  a payer request's time budget (the status re-read); null for background work
+     * @param  CallBudget|null  $budget  the caller's time budget: a payer request (the status
+     *                                   re-read) or a job (CallBudget::forJob())
      */
     public function handle(string $attemptId, SyncReason $reason, ?string $providerPaymentId = null, bool $complete = true, ?CallBudget $budget = null): PaymentAttempt
     {
@@ -72,7 +74,10 @@ final readonly class SyncPaymentAttempt
         }
 
         if ($budget !== null && ! $budget->affords()) {
-            return $attempt; // no time for the re-read: the next poll, the events or the reconciliation do it
+            // No time for the re-read: the next poll, event or reconciliation does it.
+            Log::warning('No time left to re-read a payment; left to the next check.', ['payment_attempt_id' => $attempt->id]);
+
+            return $attempt;
         }
 
         $idleSince = $attempt->updated_at ?? CarbonImmutable::now();
@@ -98,7 +103,13 @@ final readonly class SyncPaymentAttempt
         // payable again (or expires) through the usual path.
         if ($reason === SyncReason::Reconciliation && $attempt->status === PaymentAttemptStatus::RequiresAction
             && $idleSince->lessThanOrEqualTo(CarbonImmutable::now()->subMinutes(max(1, config()->integer('axispay.checkout.abandon_action_after_minutes'))))) {
-            return $this->void->handle($attempt->id, VoidReason::AbandonedAction, budget: $budget);
+            try {
+                return $this->void->handle($attempt->id, VoidReason::AbandonedAction, budget: $budget);
+            } catch (CallBudgetExhausted) {
+                Log::warning('No time left to cancel an abandoned 3D Secure step; left to the next check.', ['payment_attempt_id' => $attempt->id]);
+
+                return $attempt;
+            }
         }
 
         if ($attempt->status !== PaymentAttemptStatus::RequiresCapture || ! $complete) {

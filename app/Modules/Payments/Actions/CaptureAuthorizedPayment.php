@@ -61,9 +61,10 @@ final readonly class CaptureAuthorizedPayment
     ) {}
 
     /**
-     * @param  CallBudget|null  $budget  a payer request's time budget: no merchant call or gateway
-     *                                   call starts unless it fits (Pending instead); null for
-     *                                   background work, bounded by its job's own time limit
+     * @param  CallBudget|null  $budget  the caller's time budget (a payer request, or a job's
+     *                                   CallBudget::forJob()): no merchant or gateway call starts
+     *                                   unless it fits (Pending instead). Every call is also kept
+     *                                   within the attempt's lease (CallBudget::withinLease()).
      */
     public function handle(string $attemptId, ?string $leaseToken = null, ?CallBudget $budget = null): CaptureResult
     {
@@ -138,6 +139,10 @@ final readonly class CaptureAuthorizedPayment
             return new CaptureResult(CaptureOutcome::Pending, $current);
         }
 
+        // From here every gateway call (and its retries) ends before the
+        // lease just renewed does, and within the caller's budget.
+        $budget = CallBudget::withinLease($budget);
+
         $windowElapsed = $windowElapsed || CaptureWindow::elapsed($current);
 
         if ($linkClosed || $windowElapsed || $outcome === null || ! $outcome->allowsCapture()) {
@@ -164,7 +169,7 @@ final readonly class CaptureAuthorizedPayment
             return new CaptureResult($reason === VoidReason::MerchantRejected ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
         }
 
-        if ($budget !== null && ! $budget->affords()) {
+        if (! $budget->affords()) {
             return self::outOfTime($current, 'capture');
         }
 
@@ -187,7 +192,7 @@ final readonly class CaptureAuthorizedPayment
                 // Refused (e.g. the authorization expired): apply what the gateway says now.
                 Log::warning('The gateway refused a capture.', ['payment_attempt_id' => $current->id, 'provider_code' => $e->providerCode]);
 
-                if ($budget !== null && ! $budget->affords()) {
+                if (! $budget->affords()) {
                     return self::outOfTime($current, 'read the refused capture');
                 }
 
@@ -211,14 +216,14 @@ final readonly class CaptureAuthorizedPayment
     }
 
     /**
-     * No time left in the payer's request for the next call: nothing more is
-     * sent, the attempt stays authorized, and the background work (Stripe's
-     * event, the delayed completion job, the reconciliation) captures it
-     * within the capture window or voids it past it.
+     * No time left (the payer's request, the job, or the lease) for the next
+     * call: nothing more is sent, the attempt stays authorized, and the next
+     * check (the delayed completion job, Stripe's event, the reconciliation)
+     * captures it within the capture window or voids it past it.
      */
     private static function outOfTime(PaymentAttempt $attempt, string $step): CaptureResult
     {
-        Log::warning('No time left in the payer request; the authorization is left to the background completion.', ['payment_attempt_id' => $attempt->id, 'step' => $step]);
+        Log::warning('No time left for the next gateway call; the authorization is left to the next check.', ['payment_attempt_id' => $attempt->id, 'step' => $step]);
 
         return new CaptureResult(CaptureOutcome::Pending, $attempt);
     }

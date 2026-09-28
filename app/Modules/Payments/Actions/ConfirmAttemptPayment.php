@@ -79,7 +79,8 @@ final readonly class ConfirmAttemptPayment
             providerPaymentId: $providerPaymentId,
         );
 
-        $budget = $request->budget ?? CallBudget::unlimited();
+        // The caller renewed the lease right before: stay within it too.
+        $budget = CallBudget::withinLease($request->budget);
 
         if ($attempt->provider_payment_id === null) {
             if (! $budget->affords()) {
@@ -116,6 +117,8 @@ final readonly class ConfirmAttemptPayment
         if (! $this->lease->extend($attempt->id, $leaseToken)) {
             return null;
         }
+
+        $budget = CallBudget::withinLease($request->budget);
 
         $providerPaymentId = (string) $attempt->provider_payment_id;
         $confirmKey = IdempotencyKeys::confirm($attempt->id, $request->confirmationToken, $request->receiptEmail, $request->returnUrl);

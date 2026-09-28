@@ -6,6 +6,7 @@ namespace App\Modules\ProviderEvents\Jobs;
 
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\ProviderEvents\Actions\ProcessProviderEvent;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\Middleware\RestoreTenantContext;
@@ -106,7 +107,8 @@ final class ProcessProviderEventJob implements ShouldBeUnique, ShouldQueue, Tena
     public function handle(ProcessProviderEvent $process): void
     {
         try {
-            $process->handle($this->providerEventId);
+            // Its gateway calls end before the job's own time limit (ADR-0051).
+            $process->handle($this->providerEventId, CallBudget::forJob($this->timeout));
         } catch (GatewayAuthenticationException|GatewayRequestException $e) {
             // Plan 12.6: refused credentials or a 4xx never succeed on retry: fail now.
             $this->fail($e);

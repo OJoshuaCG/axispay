@@ -7,14 +7,17 @@ namespace App\Modules\Payments\Jobs;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Payments\Actions\VoidAuthorization;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
+use App\Modules\Payments\Exceptions\CallBudgetExhausted;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Plan 9.1: a link that expired or was canceled cancels its waiting gateway
@@ -50,7 +53,11 @@ final class CloseAttemptOfClosedLinkJob implements ShouldQueue, TenantAware
     public function handle(VoidAuthorization $void): void
     {
         try {
-            $void->handle($this->paymentAttemptId, VoidReason::LinkClosed);
+            // Its gateway calls end before the job's own time limit (ADR-0051).
+            $void->handle($this->paymentAttemptId, VoidReason::LinkClosed, budget: CallBudget::forJob($this->timeout));
+        } catch (CallBudgetExhausted) {
+            Log::warning('No time left in the job to void a closed link\'s payment; tried again later.', ['payment_attempt_id' => $this->paymentAttemptId]);
+            $this->release(30);
         } catch (GatewayAuthenticationException|GatewayRequestException $e) {
             $this->fail($e); // plan 12.6: never retried
         } catch (AttemptBusyException) {

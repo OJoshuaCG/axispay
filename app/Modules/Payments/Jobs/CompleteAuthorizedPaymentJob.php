@@ -7,9 +7,11 @@ namespace App\Modules\Payments\Jobs;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -19,7 +21,7 @@ use Illuminate\Queue\InteractsWithQueue;
  * holding when its webhook arrived. If it is still held, the reconciliation
  * takes over. Only the attempt ID is serialized.
  */
-final class CompleteAuthorizedPaymentJob implements ShouldQueue, TenantAware
+final class CompleteAuthorizedPaymentJob implements ShouldBeUnique, ShouldQueue, TenantAware
 {
     use CapturesTenantContext;
     use Dispatchable;
@@ -31,10 +33,23 @@ final class CompleteAuthorizedPaymentJob implements ShouldQueue, TenantAware
 
     public int $tries = 3;
 
+    /**
+     * One queued completion per attempt: covers the dispatch delay (60 s),
+     * every try's time limit and the backoffs (60 + 3 × 115 + 30 + 120 =
+     * 555 s), with a margin. Further dispatches while one is pending are
+     * dropped; the pending one completes the attempt.
+     */
+    public int $uniqueFor = 600;
+
     public function __construct(public readonly string $paymentAttemptId)
     {
         $this->captureTenantContext();
         $this->onQueue('critical');
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->paymentAttemptId;
     }
 
     /**
@@ -48,7 +63,8 @@ final class CompleteAuthorizedPaymentJob implements ShouldQueue, TenantAware
     public function handle(CaptureAuthorizedPayment $capture): void
     {
         try {
-            $capture->handle($this->paymentAttemptId);
+            // Its gateway calls end before the job's own time limit (ADR-0051).
+            $capture->handle($this->paymentAttemptId, budget: CallBudget::forJob($this->timeout));
         } catch (GatewayAuthenticationException|GatewayRequestException $e) {
             $this->fail($e); // plan 12.6: never retried
         }

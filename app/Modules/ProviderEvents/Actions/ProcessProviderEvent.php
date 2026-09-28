@@ -14,6 +14,7 @@ use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
@@ -53,7 +54,10 @@ final readonly class ProcessProviderEvent
         private AuditLogger $audit,
     ) {}
 
-    public function handle(string $providerEventId): void
+    /**
+     * @param  CallBudget|null  $budget  the job's gateway time (CallBudget::forJob())
+     */
+    public function handle(string $providerEventId, ?CallBudget $budget = null): void
     {
         $event = ProviderEvent::query()->find($providerEventId);
 
@@ -66,7 +70,7 @@ final readonly class ProcessProviderEvent
             : null;
 
         try {
-            [$outcome, $reason] = $connection === null ? [ProviderEventStatus::Ignored, null] : $this->apply($event, $connection);
+            [$outcome, $reason] = $connection === null ? [ProviderEventStatus::Ignored, null] : $this->apply($event, $connection, $budget);
         } catch (Throwable $e) {
             $this->recordAttempt($event, $e);
 
@@ -103,12 +107,12 @@ final readonly class ProcessProviderEvent
     /**
      * @return array{0: ProviderEventStatus, 1: string|null} outcome and the reason of an `ignored`
      */
-    private function apply(ProviderEvent $event, GatewayConnection $connection): array
+    private function apply(ProviderEvent $event, GatewayConnection $connection, ?CallBudget $budget): array
     {
         return match ($this->kindOf($event, $connection)) {
             ProviderEventKind::AccountUpdated => [$this->accountUpdated($connection), null],
             ProviderEventKind::AccountDeauthorized => [$this->accountDeauthorized($connection), null],
-            ProviderEventKind::PaymentUpdated => $this->paymentUpdated($event),
+            ProviderEventKind::PaymentUpdated => $this->paymentUpdated($event, $budget),
             ProviderEventKind::Unhandled => [ProviderEventStatus::Ignored, null],
         };
     }
@@ -116,7 +120,7 @@ final readonly class ProcessProviderEvent
     /**
      * @return array{0: ProviderEventStatus, 1: string|null}
      */
-    private function paymentUpdated(ProviderEvent $event): array
+    private function paymentUpdated(ProviderEvent $event, ?CallBudget $budget): array
     {
         $attempt = $event->payment_attempt_id !== null ? PaymentAttempt::query()->find($event->payment_attempt_id) : null;
 
@@ -124,7 +128,7 @@ final readonly class ProcessProviderEvent
             return [ProviderEventStatus::Ignored, ProviderEventStatus::FOREIGN_OBJECT];
         }
 
-        $this->syncPayment->handle($attempt->id, SyncReason::Webhook, providerPaymentId: $event->object_id);
+        $this->syncPayment->handle($attempt->id, SyncReason::Webhook, providerPaymentId: $event->object_id, budget: $budget);
 
         return [ProviderEventStatus::Processed, null];
     }

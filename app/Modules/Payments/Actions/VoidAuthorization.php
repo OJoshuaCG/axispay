@@ -56,11 +56,12 @@ final readonly class VoidAuthorization
 
     /**
      * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
-     * @param  CallBudget|null  $budget  a payer request's time budget (null: background work)
+     * @param  CallBudget|null  $budget  the caller's time budget (a payer request or a job); the
+     *                                   calls also stay within the attempt's lease
      *
      * @throws AttemptBusyException when another process holds the attempt
      * @throws GatewayException when the gateway could not be reached or refused (retry)
-     * @throws CallBudgetExhausted before a call that would not fit in the payer's request
+     * @throws CallBudgetExhausted before a call that would not fit (nothing was sent)
      */
     public function handle(string $attemptId, VoidReason $reason, ?string $leaseToken = null, ?CallBudget $budget = null): PaymentAttempt
     {
@@ -103,7 +104,10 @@ final readonly class VoidAuthorization
             throw AttemptBusyException::for($attempt->id);
         }
 
-        if ($budget !== null && ! $budget->affords()) {
+        // Within the lease just renewed and the caller's budget.
+        $budget = CallBudget::withinLease($budget);
+
+        if (! $budget->affords()) {
             throw CallBudgetExhausted::before('void the authorization');
         }
 
