@@ -12,6 +12,7 @@ use App\Modules\Gateways\Enums\HealthCheckStatus;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Notifications\GatewayConnectionNotification;
 use App\Modules\Gateways\Services\GatewayNotificationRecipients;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 
@@ -67,7 +68,7 @@ final readonly class MarkConnectionCredentialsInvalid
         });
 
         if ($changed) {
-            Notification::send($this->recipients->of($updated->tenant_id), new GatewayConnectionNotification(ConnectionNotice::InvalidCredentials, $updated->livemode));
+            Notification::send($this->recipients->of($updated->tenant_id), (new GatewayConnectionNotification(ConnectionNotice::InvalidCredentials, $updated->livemode))->locale(app(TenantAccess::class)->defaultLocale($updated->tenant_id)));
         }
 
         return $updated;

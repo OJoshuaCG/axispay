@@ -16,6 +16,7 @@ use App\Modules\Gateways\Notifications\GatewayConnectionNotification;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\Gateways\Services\GatewayNotificationRecipients;
 use App\Modules\Gateways\Services\TenantGatewayActivation;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use LogicException;
@@ -140,7 +141,7 @@ final readonly class SyncGatewayConnection
         };
 
         if ($notice !== null) {
-            Notification::send($this->recipients->of($connection->tenant_id), new GatewayConnectionNotification($notice, $connection->livemode));
+            Notification::send($this->recipients->of($connection->tenant_id), (new GatewayConnectionNotification($notice, $connection->livemode))->locale(app(TenantAccess::class)->defaultLocale($connection->tenant_id)));
         }
     }
 }

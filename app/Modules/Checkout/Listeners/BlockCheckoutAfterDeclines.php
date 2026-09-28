@@ -12,6 +12,7 @@ use App\Modules\Checkout\Services\CheckoutNotificationRecipients;
 use App\Modules\Checkout\Services\LinkDeclineCounter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Events\PaymentDeclined;
+use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,7 @@ final readonly class BlockCheckoutAfterDeclines
         private LinkDeclineCounter $declines,
         private AuditLogger $audit,
         private CheckoutNotificationRecipients $recipients,
+        private TenantAccess $access,
     ) {}
 
     public function handle(PaymentDeclined $event): void
@@ -66,7 +68,10 @@ final readonly class BlockCheckoutAfterDeclines
 
             Log::alert('A payment link was blocked for possible card testing.', ['payment_link_id' => $blocked->id, 'tenant_id' => $blocked->tenant_id, 'livemode' => $blocked->livemode]);
 
-            Notification::send($this->recipients->of($blocked->tenant_id), new CheckoutBlockedNotification($blocked->id, $blocked->livemode));
+            Notification::send(
+                $this->recipients->of($blocked->tenant_id),
+                (new CheckoutBlockedNotification($blocked->id, $blocked->livemode))->locale($this->access->defaultLocale($blocked->tenant_id)),
+            );
         });
     }
 }

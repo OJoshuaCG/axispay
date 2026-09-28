@@ -18,6 +18,7 @@ use App\Modules\Gateways\Stripe\Connection\ApiKeyFlow;
 use App\Modules\Gateways\Stripe\StripeClientFactory;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ReauthenticationWindow;
+use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -107,7 +108,7 @@ final readonly class DisconnectGatewayConnection
         if ($changed) {
             // Owners are told first: nothing that follows may keep them
             // from hearing about the disconnection.
-            Notification::send($this->recipients->of($updated->tenant_id), new GatewayConnectionNotification(ConnectionNotice::Disconnected, $updated->livemode));
+            Notification::send($this->recipients->of($updated->tenant_id), (new GatewayConnectionNotification(ConnectionNotice::Disconnected, $updated->livemode))->locale(app(TenantAccess::class)->defaultLocale($updated->tenant_id)));
             event(new GatewayConnectionDisconnected($updated->id, $updated->tenant_id, $updated->livemode));
         }
 

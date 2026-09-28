@@ -80,6 +80,12 @@ final class TenantAccess
         return $this->find($tenantId)->timezone ?? 'America/Mexico_City';
     }
 
+    /** The language of the tenant's e-mails and panel defaults (plan 7.1). */
+    public function defaultLocale(string $tenantId): string
+    {
+        return $this->find($tenantId)->default_locale ?? config()->string('app.locale');
+    }
+
     /** Name shown to payers (checkout, e-mails). */
     public function displayName(string $tenantId): string
     {

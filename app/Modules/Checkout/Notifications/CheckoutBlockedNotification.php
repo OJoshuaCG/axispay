@@ -14,7 +14,7 @@ use Illuminate\Notifications\Notification;
 /**
  * Plan 11.7 rule 4 / 22: a link was blocked after repeated declines. No
  * amounts, card or payer data; the link's public ID only, so the tenant can
- * find it in the panel and lift the block.
+ * find it in the panel and lift the block. Sent in the tenant's language.
  */
 final class CheckoutBlockedNotification extends Notification implements ShouldQueue
 {
@@ -40,9 +40,13 @@ final class CheckoutBlockedNotification extends Notification implements ShouldQu
         $mode = __('gateways.mode.'.($this->livemode ? 'live' : 'test'));
         $link = PrefixedId::encode(ResourceType::PaymentLink, $this->paymentLinkId);
 
+        $hours = config()->integer('axispay.checkout.long_block_hours');
+
         return (new MailMessage)
             ->subject(__('checkout.mail.blocked.subject', ['mode' => $mode]))
-            ->line(__('checkout.mail.blocked.line', ['link' => $link, 'hours' => config()->integer('axispay.checkout.long_block_hours')]))
-            ->line(__('checkout.mail.blocked.action'));
+            ->line(trans_choice('checkout.mail.blocked.line', $hours, ['link' => $link, 'hours' => $hours]))
+            ->line(__('checkout.mail.blocked.action'))
+            // The link's detail in the tenant panel, where the block is lifted.
+            ->action(__('checkout.mail.blocked.button'), route('filament.app.resources.payment-links.view', ['record' => $this->paymentLinkId]));
     }
 }

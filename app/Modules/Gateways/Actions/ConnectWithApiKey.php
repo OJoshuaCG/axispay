@@ -29,6 +29,7 @@ use App\Modules\Gateways\Stripe\StripeClientFactory;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ReauthenticationWindow;
 use App\Modules\Shared\Ids\Ulid;
+use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -111,10 +112,10 @@ final readonly class ConnectWithApiKey
         }
 
         $recipients = $this->recipients->of($connection->tenant_id);
-        Notification::send($recipients, new GatewayConnectionNotification(ConnectionNotice::Connected, $connection->livemode));
+        Notification::send($recipients, (new GatewayConnectionNotification(ConnectionNotice::Connected, $connection->livemode))->locale(app(TenantAccess::class)->defaultLocale($connection->tenant_id)));
 
         if ($result->excessive !== []) {
-            Notification::send($recipients, new GatewayConnectionNotification(ConnectionNotice::ExcessivePermissions, $connection->livemode));
+            Notification::send($recipients, (new GatewayConnectionNotification(ConnectionNotice::ExcessivePermissions, $connection->livemode))->locale(app(TenantAccess::class)->defaultLocale($connection->tenant_id)));
         }
 
         $this->activation->afterGatewayReady($connection);

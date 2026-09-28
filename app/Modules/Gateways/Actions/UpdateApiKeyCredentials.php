@@ -28,6 +28,7 @@ use App\Modules\Gateways\Stripe\StripeClientFactory;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ReauthenticationWindow;
 use App\Modules\Shared\Ids\Ulid;
+use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -113,7 +114,7 @@ final readonly class UpdateApiKeyCredentials
         }
 
         if ($result->excessive !== []) {
-            Notification::send($this->recipients->of($updated->tenant_id), new GatewayConnectionNotification(ConnectionNotice::ExcessivePermissions, $updated->livemode));
+            Notification::send($this->recipients->of($updated->tenant_id), (new GatewayConnectionNotification(ConnectionNotice::ExcessivePermissions, $updated->livemode))->locale(app(TenantAccess::class)->defaultLocale($updated->tenant_id)));
         }
 
         $this->activation->afterGatewayReady($updated);
