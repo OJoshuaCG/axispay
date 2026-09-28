@@ -10,6 +10,7 @@ declare(strict_types=1);
 return [
     'title' => [
         'pay' => 'Pagar a :merchant',
+        'pay_short' => 'Pagar',
         'too_many_requests' => 'Demasiadas solicitudes',
         'not_found' => 'Enlace no encontrado',
     ],
@@ -64,10 +65,11 @@ return [
         'declined' => 'La tarjeta fue rechazada. Intenta con otra o contacta a tu banco.',
         'authentication_failed' => 'No pudimos completar la verificación de tu banco. Intenta de nuevo o usa otra tarjeta.',
         'turnstile' => 'Por seguridad, confirma que eres una persona antes de volver a intentar.',
-        'rate_limited' => 'Por seguridad, pausamos los pagos por un momento. Intenta de nuevo en :minutes minutos.',
+        'rate_limited' => '{1} Por seguridad, pausamos los pagos por un momento. Intenta de nuevo en :minutes minuto.|[2,*] Por seguridad, pausamos los pagos por un momento. Intenta de nuevo en :minutes minutos.',
         'error' => 'No pudimos procesar el pago. No se hizo ningún cargo. Intenta de nuevo.',
         'unavailable' => 'Este enlace no acepta pagos por ahora. Contacta a :merchant.',
-        'too_many_requests' => 'Demasiadas solicitudes. Vuelve a intentarlo en :seconds segundos.',
+        'too_many_requests' => '{1} Demasiadas solicitudes. Vuelve a intentarlo en :seconds segundo.|[2,*] Demasiadas solicitudes. Vuelve a intentarlo en :seconds segundos.',
+        'session_expired' => 'Recarga la página para continuar.',
         'security_unavailable' => 'Los pagos en esta página no están disponibles en este momento. Vuelve a intentarlo más tarde.',
         'fix_fields' => 'Revisa los campos marcados.',
     ],
@@ -79,11 +81,11 @@ return [
     'states' => [
         'processing' => [
             'heading' => 'Tu pago se está procesando',
-            'body' => 'Tu pago se está procesando. No cierres esta página.',
+            'body' => 'No cierres esta página.',
         ],
         'timeout' => [
             'heading' => 'Aún no tenemos la confirmación final',
-            'body' => 'Aún no tenemos la confirmación final. No vuelvas a pagar: revisa este enlace más tarde.',
+            'body' => 'No vuelvas a pagar: revisa este enlace más tarde.',
             'action' => 'Revisar de nuevo',
         ],
         'paid' => [
@@ -96,11 +98,10 @@ return [
         ],
         'expired' => [
             'heading' => 'Este enlace de pago expiró',
-            'body' => 'Este enlace de pago expiró. Contacta a :merchant.',
+            'body' => 'Contacta a :merchant.',
         ],
         'canceled' => [
             'heading' => 'Este enlace de pago ya no está disponible',
-            'body' => 'Este enlace de pago ya no está disponible.',
         ],
         'blocked' => [
             'heading' => 'Este enlace no acepta pagos',
@@ -118,7 +119,30 @@ return [
         ],
         'not_found' => [
             'heading' => 'No encontramos este enlace',
-            'body' => 'No encontramos este enlace. Revisa que la dirección esté completa.',
+            'body' => 'Revisa que la dirección esté completa.',
+        ],
+    ],
+
+    'error_pages' => [
+        404 => [
+            'heading' => 'No encontramos esta página',
+            'body' => 'Revisa que la dirección esté completa.',
+        ],
+        419 => [
+            'heading' => 'Tu sesión expiró',
+            'body' => 'Recarga la página para continuar.',
+        ],
+        429 => [
+            'heading' => 'Demasiadas solicitudes',
+            'body' => 'Espera un momento y vuelve a cargar esta página.',
+        ],
+        500 => [
+            'heading' => 'Algo salió mal',
+            'body' => 'No se hizo ningún cargo. Vuelve a intentarlo en unos minutos.',
+        ],
+        503 => [
+            'heading' => 'Volvemos en un momento',
+            'body' => 'Estamos haciendo mantenimiento. Vuelve a intentarlo en unos minutos.',
         ],
     ],
 
@@ -161,8 +185,9 @@ return [
 
     'mail' => [
         'blocked' => [
-            'subject' => 'Se bloqueó un link de pago (modo :mode)',
-            'line' => 'El link de pago :link recibió muchas tarjetas rechazadas en poco tiempo y dejó de aceptar pagos durante :hours horas, como protección contra pruebas de tarjetas.',
+            'subject' => 'Se bloqueó un link de pago (:mode)',
+            'line' => '{1} El link de pago :link recibió muchas tarjetas rechazadas en poco tiempo y dejó de aceptar pagos durante :hours hora, como protección contra pruebas de tarjetas.|[2,*] El link de pago :link recibió muchas tarjetas rechazadas en poco tiempo y dejó de aceptar pagos durante :hours horas, como protección contra pruebas de tarjetas.',
+            'button' => 'Ver el link',
             'action' => 'Si los rechazos fueron legítimos, puede desbloquearlo desde el detalle del link en el panel.',
         ],
     ],

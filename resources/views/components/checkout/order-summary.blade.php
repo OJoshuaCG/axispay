@@ -34,7 +34,7 @@
         @if ($expiresAt)
             <dt class="sr-only">{{ __('payment_links.fields.expires') }}</dt>
             <dd class="text-sm text-fg-secondary">
-                <time datetime="{{ $expiresAt->toIso8601String() }}">{{ __('checkout.summary.expires', ['date' => $expiresAt->isoFormat('LLL').' '.$expiresAt->format('T')]) }}</time>
+                {!! __('checkout.summary.expires', ['date' => '<time datetime="'.e($expiresAt->toIso8601String()).'">'.e($expiresAt->isoFormat('LLL').' '.$expiresAt->format('T')).'</time>']) !!}
             </dd>
         @endif
     </dl>

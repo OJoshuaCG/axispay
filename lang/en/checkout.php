@@ -10,6 +10,7 @@ declare(strict_types=1);
 return [
     'title' => [
         'pay' => 'Pay :merchant',
+        'pay_short' => 'Pay',
         'too_many_requests' => 'Too many requests',
         'not_found' => 'Link not found',
     ],
@@ -64,10 +65,11 @@ return [
         'declined' => 'Your card was declined. Try another card or contact your bank.',
         'authentication_failed' => "We couldn't complete your bank's verification. Try again or use another card.",
         'turnstile' => "For security, please confirm you're human before trying again.",
-        'rate_limited' => 'For security, payments are paused. Try again in :minutes minutes.',
+        'rate_limited' => '{1} For security, payments are paused. Try again in :minutes minute.|[2,*] For security, payments are paused. Try again in :minutes minutes.',
         'error' => "We couldn't process the payment. No charge was made. Please try again.",
         'unavailable' => "This link isn't accepting payments right now. Contact :merchant.",
-        'too_many_requests' => 'Too many requests. Try again in :seconds seconds.',
+        'too_many_requests' => '{1} Too many requests. Try again in :seconds second.|[2,*] Too many requests. Try again in :seconds seconds.',
+        'session_expired' => 'Reload the page to continue.',
         'security_unavailable' => 'Payments on this page are unavailable right now. Please try again later.',
         'fix_fields' => 'Check the highlighted fields.',
     ],
@@ -79,11 +81,11 @@ return [
     'states' => [
         'processing' => [
             'heading' => 'Your payment is processing',
-            'body' => 'Your payment is processing. Please keep this page open.',
+            'body' => 'Please keep this page open.',
         ],
         'timeout' => [
             'heading' => "We don't have final confirmation yet",
-            'body' => "We don't have final confirmation yet. Don't pay again: check this link later.",
+            'body' => "Don't pay again: check this link later.",
             'action' => 'Check again',
         ],
         'paid' => [
@@ -96,11 +98,10 @@ return [
         ],
         'expired' => [
             'heading' => 'This payment link has expired',
-            'body' => 'This payment link has expired. Contact :merchant.',
+            'body' => 'Contact :merchant.',
         ],
         'canceled' => [
             'heading' => 'This payment link is no longer available',
-            'body' => 'This payment link is no longer available.',
         ],
         'blocked' => [
             'heading' => "This link isn't accepting payments",
@@ -118,7 +119,30 @@ return [
         ],
         'not_found' => [
             'heading' => "We couldn't find this link",
-            'body' => "We couldn't find this link. Check that the address is complete.",
+            'body' => 'Check that the address is complete.',
+        ],
+    ],
+
+    'error_pages' => [
+        404 => [
+            'heading' => "We couldn't find this page",
+            'body' => 'Check that the address is complete.',
+        ],
+        419 => [
+            'heading' => 'Your session expired',
+            'body' => 'Reload the page to continue.',
+        ],
+        429 => [
+            'heading' => 'Too many requests',
+            'body' => 'Please wait a moment and reload this page.',
+        ],
+        500 => [
+            'heading' => 'Something went wrong',
+            'body' => 'You were not charged. Please try again in a few minutes.',
+        ],
+        503 => [
+            'heading' => "We'll be right back",
+            'body' => "We're doing maintenance. Please try again in a few minutes.",
         ],
     ],
 
@@ -161,8 +185,9 @@ return [
 
     'mail' => [
         'blocked' => [
-            'subject' => 'A payment link was blocked (:mode mode)',
-            'line' => 'The payment link :link received many declined cards in a short time and stopped accepting payments for :hours hours, as a protection against card testing.',
+            'subject' => 'A payment link was blocked (:mode)',
+            'line' => '{1} The payment link :link received many declined cards in a short time and stopped accepting payments for :hours hour, as a protection against card testing.|[2,*] The payment link :link received many declined cards in a short time and stopped accepting payments for :hours hours, as a protection against card testing.',
+            'button' => 'View the link',
             'action' => 'If the declines were legitimate, you can unblock it from the link detail in the panel.',
         ],
     ],

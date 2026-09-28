@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\PayerFields\Data;
 
+use Collator;
 use Locale;
 
 /**
@@ -43,7 +44,8 @@ final class PayerCountries
             }
         }
 
-        asort($options, SORT_LOCALE_STRING);
+        // Sorted as the payer's language sorts (accents, ñ), not by bytes.
+        (new Collator($locale))->asort($options);
 
         return [self::DEFAULT => self::name(self::DEFAULT, $locale)] + $options;
     }

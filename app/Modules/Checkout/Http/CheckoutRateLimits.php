@@ -65,7 +65,7 @@ final class CheckoutRateLimits
         if ($request->expectsJson()) {
             return new JsonResponse([
                 'outcome' => 'too_many_requests',
-                'message' => __('checkout.messages.too_many_requests', ['seconds' => $seconds]),
+                'message' => trans_choice('checkout.messages.too_many_requests', $seconds, ['seconds' => $seconds]),
                 'retry_after_seconds' => $seconds,
             ], 429, $headers);
         }
