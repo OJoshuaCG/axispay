@@ -22,6 +22,7 @@ use App\Modules\Payments\Data\PrePaymentDecision;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Enums\ValidationOutcome;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PayerDetails;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -32,6 +33,7 @@ use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
 use Tests\Support\CheckoutTestHelpers as Checkout;
+use Tests\Support\CountingValidator;
 use Tests\Support\FakePaymentGateway;
 
 use function Pest\Laravel\get;
@@ -42,26 +44,9 @@ use function Pest\Laravel\get;
  * the merchant's decision is kept, errors never reach the payer as HTTP 500,
  * stale reads and foreign amounts are not applied, and the lease has an owner.
  */
-final class CountingValidator implements PrePaymentValidator
-{
-    public int $calls = 0;
-
-    public function __construct(private readonly PrePaymentDecision $decision) {}
-
-    public function decide(PaymentLink $link, PaymentAttempt $attempt): PrePaymentDecision
-    {
-        $this->calls++;
-
-        return $this->decision;
-    }
-}
-
 function countingValidator(PrePaymentDecision $decision): CountingValidator
 {
-    $validator = new CountingValidator($decision);
-    app()->instance(PrePaymentValidator::class, $validator);
-
-    return $validator;
+    return CountingValidator::install($decision);
 }
 
 // Item 2 -------------------------------------------------------------------
@@ -159,7 +144,7 @@ it('makes the void wait for the lease holder', function (): void {
     [$attempt] = Checkout::attempts($link);
     Checkout::inTenant($link, static fn () => app(AttemptLease::class)->acquire($attempt->id));
 
-    expect(fn () => Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, 'link_closed')))->toThrow(AttemptBusyException::class)
+    expect(fn () => Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, VoidReason::LinkClosed)))->toThrow(AttemptBusyException::class)
         ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::RequiresAction);
 });
 

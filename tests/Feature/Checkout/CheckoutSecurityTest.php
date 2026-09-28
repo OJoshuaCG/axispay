@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Checkout\Actions\CompleteCheckoutAuthorization;
 use App\Modules\Checkout\Http\Middleware\CheckoutSecurityHeaders;
-use App\Modules\Checkout\Services\CardTestingGuard;
+use App\Modules\Checkout\Services\CheckoutRateLimiter;
 use App\Modules\Checkout\Services\TurnstileVerifier;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
@@ -46,10 +46,10 @@ it('never lets bogus confirmation tokens pause a link for other payers', functio
 // M5 -----------------------------------------------------------------------
 
 it('keys the per-IP limit by the /64 network for IPv6 and by the address for IPv4', function (): void {
-    expect(CardTestingGuard::clientNetwork('2001:db8:abcd:12:1::1'))->toBe(CardTestingGuard::clientNetwork('2001:db8:abcd:12:ffff:ffff:ffff:ffff'))
-        ->and(CardTestingGuard::clientNetwork('2001:db8:abcd:12::1'))->not->toBe(CardTestingGuard::clientNetwork('2001:db8:abcd:13::1'))
-        ->and(CardTestingGuard::clientNetwork('203.0.113.9'))->toBe('203.0.113.9')
-        ->and(CardTestingGuard::clientNetwork('203.0.113.9'))->not->toBe(CardTestingGuard::clientNetwork('203.0.113.10'));
+    expect(CheckoutRateLimiter::clientNetwork('2001:db8:abcd:12:1::1'))->toBe(CheckoutRateLimiter::clientNetwork('2001:db8:abcd:12:ffff:ffff:ffff:ffff'))
+        ->and(CheckoutRateLimiter::clientNetwork('2001:db8:abcd:12::1'))->not->toBe(CheckoutRateLimiter::clientNetwork('2001:db8:abcd:13::1'))
+        ->and(CheckoutRateLimiter::clientNetwork('203.0.113.9'))->toBe('203.0.113.9')
+        ->and(CheckoutRateLimiter::clientNetwork('203.0.113.9'))->not->toBe(CheckoutRateLimiter::clientNetwork('203.0.113.10'));
 });
 
 it('limits payers rotating IPv6 addresses inside one /64', function (): void {

@@ -9,14 +9,16 @@ declare(strict_types=1);
  * barrier, then runs one actor against the same link or attempt, so the
  * races happen in MariaDB, not in PHP. Prints the outcome.
  *
- * Usage: php checkout-race.php <public_token> <barrier_dir> <mode> [argument]
+ * Usage: php checkout-race.php <barrier_dir> <actor_json> (Tests\Support\RaceHarness)
  *
- *   pay [scenario]          press "Pay" with a sandbox card (success by default;
- *                           decline, funds, threeds, processing)
- *   cancel [delay_ms]       cancel the link (canceled, not_cancelable)
- *   webhook <attempt_id>    a payment event: re-read and complete (status)
- *   reconcile <attempt_id>  the reconciliation's re-read (status)
- *   capture <attempt_id>    the checkout's completion of an authorization (outcome)
+ * The actor names its link (`token`) and one `mode`:
+ *
+ *   pay        press "Pay" with a sandbox card: `scenario` (success by
+ *              default; decline, funds, threeds, processing)
+ *   cancel     cancel the link after `delay_ms` (canceled, not_cancelable)
+ *   webhook    a payment event for `attempt`: re-read and complete (status)
+ *   reconcile  the reconciliation's re-read of `attempt` (status)
+ *   capture    the checkout's completion of `attempt` (outcome)
  */
 
 use App\Modules\Audit\Data\Actor;
@@ -42,8 +44,11 @@ $app->make(Kernel::class)->bootstrap();
 
 $args = $_SERVER['argv'] ?? [];
 $args = is_array($args) ? array_values($args) : [];
-$arg = static fn (int $index): string => is_string($args[$index] ?? null) ? $args[$index] : '';
-[$token, $barrier, $mode, $extra] = [$arg(1), $arg(2), $arg(3) !== '' ? $arg(3) : 'pay', $arg(4)];
+$barrier = is_string($args[1] ?? null) ? $args[1] : '';
+$actor = json_decode(is_string($args[2] ?? null) ? $args[2] : '{}', true);
+$actor = is_array($actor) ? $actor : [];
+$field = static fn (string $name): string => is_scalar($actor[$name] ?? null) ? (string) $actor[$name] : '';
+[$token, $mode] = [$field('token'), $field('mode') !== '' ? $field('mode') : 'pay'];
 
 file_put_contents($barrier.'/ready-'.getmypid(), '1');
 $deadline = microtime(true) + 30;
@@ -68,8 +73,8 @@ if ($link === null) {
 
 try {
     echo match ($mode) {
-        'cancel' => (static function () use ($link, $extra): string {
-            usleep(max(0, (int) $extra) * 1000);
+        'cancel' => (static function () use ($link, $field): string {
+            usleep(max(0, (int) $field('delay_ms')) * 1000);
 
             try {
                 app(CancelPaymentLink::class)->handle(PaymentLink::query()->findOrFail($link->id), new CancelPaymentLinkData('race'), Actor::system());
@@ -79,11 +84,11 @@ try {
                 return 'not_cancelable';
             }
         })(),
-        'webhook' => app(SyncPaymentAttempt::class)->handle($extra, SyncReason::Webhook)->status->value,
-        'reconcile' => app(SyncPaymentAttempt::class)->handle($extra, SyncReason::Reconciliation)->status->value,
-        'capture' => app(CaptureAuthorizedPayment::class)->handle($extra)->outcome->value,
+        'webhook' => app(SyncPaymentAttempt::class)->handle($field('attempt'), SyncReason::Webhook)->status->value,
+        'reconcile' => app(SyncPaymentAttempt::class)->handle($field('attempt'), SyncReason::Reconciliation)->status->value,
+        'capture' => app(CaptureAuthorizedPayment::class)->handle($field('attempt'))->outcome->value,
         default => app(StartCheckoutPayment::class)->handle($link, new CheckoutPaymentInput(
-            confirmationToken: 'ctoken_sandbox_'.($extra !== '' ? $extra : 'success').'_'.getmypid(),
+            confirmationToken: 'ctoken_sandbox_'.($field('scenario') !== '' ? $field('scenario') : 'success').'_'.getmypid(),
             payer: ['email' => 'race@example.com'],
             turnstileToken: null,
             clientIp: '10.0.0.'.(getmypid() % 250),

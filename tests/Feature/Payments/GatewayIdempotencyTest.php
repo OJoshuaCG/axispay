@@ -9,9 +9,12 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
 use App\Modules\Payments\Actions\VoidAuthorization;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Services\AttemptLocks;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\ServerErrorRetry;
+use Illuminate\Support\Facades\DB;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 use Tests\Support\FakePaymentGateway;
 
@@ -64,7 +67,7 @@ it('repeats a void that answered a stored 500 under a new key (M2)', function ()
     [$link, $attempt, $fake] = idempotencyAuthorized();
     $fake->serverErrorOnNext('cancelPayment');
 
-    Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, 'merchant_rejected'));
+    Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, VoidReason::MerchantRejected));
 
     expect($fake->callsTo('cancelPayment'))->toHaveCount(2)
         ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Canceled);
@@ -114,4 +117,16 @@ it('derives a confirmation key that covers every parameter that can vary, and st
         ->and(IdempotencyKeys::confirm('01K6AAAAAAAAAAAAAAAAAAAAAA', $token, null, 'https://pay.localhost/l/y/complete'))->not->toBe($base)
         ->and(IdempotencyKeys::confirm('01K6AAAAAAAAAAAAAAAAAAAAAA', $token, null, 'https://pay.localhost/l/x/complete'))->toBe($base)
         ->and(strlen($base))->toBeLessThanOrEqual(255);
+});
+
+it('locks the link, then the attempt, only inside a transaction (Q6)', function (): void {
+    [$link, $attempt] = idempotencyAuthorized();
+
+    expect(fn () => AttemptLocks::lockLinkThenAttempt($link->id, $attempt->id))->toThrow(LogicException::class);
+
+    [$lockedLink, $lockedAttempt] = Checkout::inTenant($link, static fn () => DB::transaction(static fn (): array => AttemptLocks::lockLinkThenAttemptOrFail($link->id, $attempt->id)));
+
+    expect($lockedLink->id)->toBe($link->id)
+        ->and($lockedAttempt->id)->toBe($attempt->id)
+        ->and(Checkout::inTenant($link, static fn () => PaymentAttempt::query()->activeForLink($link->id)->pluck('id')->all()))->toBe([$attempt->id]);
 });

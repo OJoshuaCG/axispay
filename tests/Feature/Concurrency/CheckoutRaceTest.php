@@ -15,8 +15,8 @@ use Illuminate\Cache\RateLimiter;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\Process\Process;
 use Tests\Support\ApiTestHelpers;
+use Tests\Support\RaceHarness;
 
 /**
  * Plan 26.2 critical case 1: a single-use link opened in several sessions.
@@ -39,59 +39,6 @@ afterEach(function (): void {
 });
 
 /**
- * Runs one child per entry of `$actors` ([mode, argument, token?]) at the
- * same instant (start barrier) and returns their outputs in order.
- *
- * @param  list<array{0: string, 1?: string, 2?: string}>  $actors
- * @return list<string>
- */
-function raceActors(string $token, array $actors): array
-{
-    $barrier = sys_get_temp_dir().'/axispay-checkout-race-'.bin2hex(random_bytes(6));
-    mkdir($barrier);
-    $running = [];
-
-    try {
-        foreach ($actors as $actor) {
-            $process = new Process(
-                [PHP_BINARY, base_path('tests/Fixtures/checkout-race.php'), $actor[2] ?? $token, $barrier, $actor[0], $actor[1] ?? ''],
-                base_path(),
-                // The sandbox keeps its payments in the cache: the database store is shared by the processes.
-                ['APP_ENV' => 'testing', 'AXISPAY_CHECKOUT_SANDBOX' => 'true', 'CACHE_STORE' => 'database', 'QUEUE_CONNECTION' => 'sync'],
-                timeout: 90,
-            );
-            $process->start();
-            $running[] = $process;
-        }
-
-        $deadline = microtime(true) + 60;
-
-        while (count(glob($barrier.'/ready-*') ?: []) < count($actors)) {
-            expect(microtime(true))->toBeLessThan($deadline, 'Not every race process booted in time.');
-            usleep(20_000);
-        }
-
-        touch($barrier.'/go');
-        $outcomes = [];
-
-        foreach ($running as $process) {
-            $process->wait();
-            expect($process->getExitCode())->toBe(0, $process->getErrorOutput().$process->getOutput());
-            $outcomes[] = trim($process->getOutput());
-        }
-
-        return $outcomes;
-    } finally {
-        foreach ($running as $process) {
-            $process->stop(0);
-        }
-
-        array_map(unlink(...), glob($barrier.'/*') ?: []);
-        rmdir($barrier);
-    }
-}
-
-/**
  * @return list<string>
  */
 function checkoutRace(string $token, int $processes = 8, int $cancellers = 0, int $cancelDelayMs = 0): array
@@ -99,10 +46,10 @@ function checkoutRace(string $token, int $processes = 8, int $cancellers = 0, in
     $actors = [];
 
     foreach (range(1, $processes) as $i) {
-        $actors[] = $i <= $cancellers ? ['cancel', (string) $cancelDelayMs] : ['pay'];
+        $actors[] = $i <= $cancellers ? ['mode' => 'cancel', 'token' => $token, 'delay_ms' => $cancelDelayMs] : ['mode' => 'pay', 'token' => $token];
     }
 
-    return raceActors($token, $actors);
+    return RaceHarness::run($actors);
 }
 
 /** Captures the sandbox performed for a gateway payment (shared database cache). */
@@ -176,7 +123,7 @@ it('claims the first payment of eight links of one tenant at once without deadlo
     $tenant = ApiTestHelpers::readyTenant();
     $links = array_map(static fn (): PaymentLink => ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000])), range(1, 8));
 
-    $outcomes = raceActors('', array_map(static fn (PaymentLink $link): array => ['pay', '', $link->public_token], $links));
+    $outcomes = RaceHarness::run(array_map(static fn (PaymentLink $link): array => ['mode' => 'pay', 'token' => $link->public_token], $links));
 
     expect($outcomes)->toBe(array_fill(0, 8, 'paid'));
 })->group('concurrency');
@@ -209,16 +156,16 @@ it('captures an authorization at most once while webhooks, the checkout and the 
     $actors = [];
 
     foreach (range(1, 8) as $i) {
-        $actors[] = [['webhook', 'reconcile', 'capture'][$i % 3], $attempt->id];
+        $actors[] = ['mode' => ['webhook', 'reconcile', 'capture'][$i % 3], 'token' => $link->public_token, 'attempt' => $attempt->id];
     }
 
-    $outcomes = raceActors($link->public_token, $actors);
+    $outcomes = RaceHarness::run($actors);
     $fresh = PaymentAttempt::query()->withoutGlobalScopes()->findOrFail($attempt->id);
     $freshLink = PaymentLink::query()->withoutGlobalScopes()->findOrFail($link->id);
     $captures = sandboxCaptures($fresh->provider_payment_id);
 
     expect($captures)->toBeLessThanOrEqual(1, implode(',', $outcomes))
-        ->and($fresh->status)->toBeIn([PaymentAttemptStatus::Succeeded, PaymentAttemptStatus::Canceled]);
+        ->and($fresh->status)->toBeIn([PaymentAttemptStatus::Succeeded, PaymentAttemptStatus::Canceled], implode(',', $outcomes));
 
     if ($fresh->status === PaymentAttemptStatus::Succeeded) {
         expect($captures)->toBe(1)->and($freshLink->status)->toBe(PaymentLinkStatus::Paid);
@@ -232,7 +179,7 @@ it('counts only the confirmations of a parallel burst that reached the gateway: 
     $link = ApiTestHelpers::link($tenant, false, static fn ($f) => $f->state(['currency' => 'MXN', 'amount_minor' => 150_000]));
 
     // Six real cards declined at the same instant: the lease lets them in one at a time.
-    $outcomes = raceActors($link->public_token, array_fill(0, 6, ['pay', 'decline']));
+    $outcomes = RaceHarness::run(array_fill(0, 6, ['mode' => 'pay', 'token' => $link->public_token, 'scenario' => 'decline']));
     $counts = array_count_values($outcomes);
     $counted = (new RateLimiter(Cache::store('database')))->attempts('checkout:link:'.$link->id);
 

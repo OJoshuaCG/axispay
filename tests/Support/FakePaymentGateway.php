@@ -17,6 +17,7 @@ use App\Modules\Gateways\Data\RefundRequest;
 use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
@@ -226,7 +227,7 @@ final class FakePaymentGateway implements PaymentGateway
         };
 
         if ($scenario === 'decline' || $scenario === 'funds') {
-            $payment['failure'] = new ProviderPaymentFailure('ch_fake_'.bin2hex(random_bytes(4)), 'card_declined', $scenario === 'funds' ? 'insufficient_funds' : 'generic_decline', 'Your card was declined.');
+            $payment['failure'] = new ProviderPaymentFailure('ch_fake_'.bin2hex(random_bytes(4)), 'card_declined', $scenario === 'funds' ? 'insufficient_funds' : 'generic_decline', 'Your card was declined.', $scenario === 'funds' ? ProviderFailureKind::InsufficientFunds : ProviderFailureKind::CardDeclined);
         }
 
         $result = $this->toPayment($payment);

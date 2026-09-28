@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
+use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
@@ -105,7 +106,7 @@ it('reports a failed bank verification and leaves the link payable', function ()
 
     Checkout::pay($link, 'ctoken_threeds');
     [$attempt] = Checkout::attempts($link);
-    $fake->setPaymentStatus((string) $attempt->provider_payment_id, ProviderPaymentStatus::RequiresPaymentMethod, new ProviderPaymentFailure('ch_auth_1', 'payment_intent_authentication_failure', null, 'Authentication failed.'));
+    $fake->setPaymentStatus((string) $attempt->provider_payment_id, ProviderPaymentStatus::RequiresPaymentMethod, new ProviderPaymentFailure('ch_auth_1', 'payment_intent_authentication_failure', null, 'Authentication failed.', ProviderFailureKind::AuthenticationFailed));
 
     Checkout::continue($link)->assertStatus(402)->assertJson(['outcome' => 'authentication_failed']);
 

@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use App\Modules\Checkout\Providers\CheckoutServiceProvider;
-use App\Modules\Checkout\Services\CardTestingGuard;
+use App\Modules\Checkout\Services\CheckoutFonts;
+use App\Modules\Checkout\Services\CheckoutRateLimiter;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\Support\ApiTestHelpers;
@@ -16,6 +18,7 @@ use Tests\Support\CheckoutTestHelpers as Checkout;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\getJson;
+use function Pest\Laravel\travel;
 
 /**
  * ADR-0051, Phase 4 iteration 5 (card testing and abuse): atomic counting of
@@ -46,14 +49,14 @@ it('never counts requests answered in progress, so they cannot pause the link (M
     }
 
     expect(abuseLinkCount($link))->toBe(1)
-        ->and(app(CardTestingGuard::class)->pausedMinutes(Checkout::freshLink($link)))->toBeNull();
+        ->and(app(CheckoutRateLimiter::class)->pausedMinutes(Checkout::freshLink($link)))->toBeNull();
 });
 
 it('reserves confirmations atomically and takes back the one over the limit (M1)', function (): void {
     config(['axispay.checkout.rate_limits.ip_attempts' => 2]);
     $tenant = ApiTestHelpers::readyTenant();
     $links = array_map(static fn (): PaymentLink => ApiTestHelpers::link($tenant, false), range(1, 3));
-    $guard = app(CardTestingGuard::class);
+    $guard = app(CheckoutRateLimiter::class);
 
     expect($guard->reserveConfirmation($links[0], '203.0.113.7'))->toBeNull()
         ->and($guard->reserveConfirmation($links[1], '203.0.113.7'))->toBeNull()
@@ -66,7 +69,7 @@ it('reserves confirmations atomically and takes back the one over the limit (M1)
 
 it('pauses the link on the confirmation over its limit, and only then (M1)', function (): void {
     [, $link] = Checkout::scenario();
-    $guard = app(CardTestingGuard::class);
+    $guard = app(CheckoutRateLimiter::class);
 
     foreach (range(1, 5) as $i) {
         expect($guard->reserveConfirmation($link, '203.0.113.'.$i))->toBeNull();
@@ -107,7 +110,7 @@ it('counts gateway failures while reading the token per link and client (M2)', f
     Checkout::pay($link, 'ctoken_success')->assertJson(['outcome' => 'rate_limited']);
 
     // Only this client: the link itself is not paused.
-    expect(app(CardTestingGuard::class)->pausedMinutes(Checkout::freshLink($link)))->toBeNull();
+    expect(app(CheckoutRateLimiter::class)->pausedMinutes(Checkout::freshLink($link)))->toBeNull();
 });
 
 // M3 -----------------------------------------------------------------------
@@ -223,4 +226,79 @@ it('keeps the card fingerprint on the attempt and its declines, for forensics (L
 
     // Never on the payer's page.
     get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0 (Test)'])->assertDontSee('fp_fake_0002');
+});
+
+// P15 ----------------------------------------------------------------------
+
+it('answers the status poll without starting a session (P15)', function (): void {
+    [, $link] = Checkout::scenario();
+
+    $response = getJson(payUrl('/l/'.$link->public_token.'/status'))->assertOk()->assertJson(['state' => 'active']);
+
+    expect(collect($response->headers->getCookies())->map->getName()->all())->toBe([]);
+});
+
+// P14, P16, P18 -------------------------------------------------------------
+
+it('defers Stripe.js before the page script and preconnects to Stripe\'s API (P14)', function (): void {
+    [, $link] = Checkout::scenario();
+
+    $html = (string) get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->getContent();
+    $stripe = strpos($html, 'js.stripe.com/dahlia/stripe.js');
+    $entry = strpos($html, 'resources/js/checkout/checkout.js') ?: strpos($html, '/build/assets/checkout-');
+
+    expect(preg_match('#<script src="https://js\.stripe\.com/dahlia/stripe\.js" defer#', $html))->toBe(1);
+    expect(str_contains($html, '<link rel="preconnect" href="https://api.stripe.com" crossorigin>'))->toBeTrue();
+    expect(str_contains($html, 'rel="preconnect" href="https://js.stripe.com"'))->toBeFalse();
+    expect(is_int($stripe) && is_int($entry) && $stripe < $entry)->toBeTrue();
+});
+
+it('reads the tenant once and the connection once for a page load (P16)', function (): void {
+    [, $link] = Checkout::scenario();
+
+    DB::enableQueryLog();
+    get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk();
+    $queries = array_column(DB::getQueryLog(), 'query');
+    DB::disableQueryLog();
+
+    expect(array_filter($queries, static fn (string $sql): bool => str_starts_with($sql, 'select') && str_contains($sql, 'from `tenants`')))->toHaveCount(1)
+        ->and(array_filter($queries, static fn (string $sql): bool => str_contains($sql, 'from `gateway_connections`')))->toHaveCount(1);
+});
+
+it('re-reads a payment left in 3D Secure less often the longer it stays idle (P18)', function (): void {
+    [, $link, $fake] = Checkout::scenario();
+    Checkout::pay($link, 'ctoken_threeds')->assertJson(['outcome' => 'requires_action']);
+    $reads = static fn (): int => count($fake->callsTo('retrievePayment'));
+    $poll = static fn () => getJson(payUrl('/l/'.$link->public_token.'/status'))->assertOk();
+    $start = $reads();
+
+    travel(6)->seconds();
+    $poll();
+    expect($reads())->toBe($start + 1); // idle 6 s: every 5 s
+
+    travel(70)->seconds();
+    $poll();
+    $afterMinute = $reads();
+    travel(6)->seconds();
+    $poll();
+    expect($reads())->toBe($afterMinute); // idle over a minute: every 10 s
+
+    travel(5)->seconds();
+    $poll();
+    expect($reads())->toBe($afterMinute + 1);
+
+    travel(60)->seconds();
+    $poll();
+    $afterTwo = $reads();
+    travel(11)->seconds();
+    $poll();
+    expect($reads())->toBe($afterTwo); // idle over two minutes: every 20 s
+
+    travel(10)->seconds();
+    $poll();
+    expect($reads())->toBe($afterTwo + 1);
+});
+
+it('sends Stripe only the Mukta weights the card form uses (P19)', function (): void {
+    expect(CheckoutFonts::STRIPE_WEIGHTS)->toBe([400, 500]);
 });

@@ -12,14 +12,14 @@ use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayConnectionResolver;
+use App\Modules\Gateways\Stripe\StripeFailureKinds;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
-use App\Modules\Payments\Actions\ApplyProviderPayment;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
-use App\Modules\Payments\Services\PaymentSnapshot;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
@@ -27,8 +27,12 @@ use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Models\DomainEvent;
 use Database\Factories\GatewayConnectionFactory;
+use Illuminate\Bus\UniqueLock;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\CheckoutTestHelpers as Checkout;
@@ -76,6 +80,12 @@ function recoveryAge(string $eventId, int $minutes): void
     ProviderEvent::query()->withoutGlobalScopes()->where('provider_event_id', $eventId)->update(['received_at' => now()->subMinutes($minutes)]);
 }
 
+/** The job of a stored event was lost (its worker died): its unique lock is gone too. */
+function recoveryLoseJob(string $eventId): void
+{
+    Cache::lock(UniqueLock::getKey(new ProcessProviderEventJob(recoveryEvent($eventId)->id, '', false)))->forceRelease();
+}
+
 function recoveryAudits(AuditAction $action): int
 {
     return AuditLog::query()->withoutGlobalScopes()->where('action', $action->value)->count();
@@ -103,11 +113,26 @@ it('queues again an event stuck in received when it is delivered again late (H1)
     recoveryPaymentEvent($link, $attempt, 'evt_Stuck0001');
     Queue::assertPushed(ProcessProviderEventJob::class, 1);
 
+    // Old, but its job is still queued (or waiting for a retry): nothing new.
     recoveryAge('evt_Stuck0001', 10);
+    recoveryPaymentEvent($link, $attempt, 'evt_Stuck0001');
+    Queue::assertPushed(ProcessProviderEventJob::class, 1);
+
+    // Its job was lost: the next delivery queues it again.
+    recoveryLoseJob('evt_Stuck0001');
     recoveryPaymentEvent($link, $attempt, 'evt_Stuck0001');
 
     Queue::assertPushed(ProcessProviderEventJob::class, 2);
     expect(ProviderEvent::query()->withoutGlobalScopes()->count())->toBe(1);
+});
+
+it('keeps one job per stored event for all its tries (P13)', function (): void {
+    $job = new ProcessProviderEventJob('01K6AAAAAAAAAAAAAAAAAAAAAA', 'tenant', false);
+    $tries = $job->tries * $job->timeout + array_sum($job->backoff());
+
+    expect($job)->toBeInstanceOf(ShouldBeUnique::class)
+        ->and($job->uniqueId())->toBe('01K6AAAAAAAAAAAAAAAAAAAAAA')
+        ->and($job->uniqueFor)->toBeGreaterThanOrEqual($tries);
 });
 
 it('sweeps events stuck in received, leaves recent ones, and is scheduled every five minutes (H1)', function (): void {
@@ -117,6 +142,13 @@ it('sweeps events stuck in received, leaves recent ones, and is scheduled every 
     recoveryPaymentEvent($link, $attempt, 'evt_Sweep0002', 'payment_intent.processing');
     recoveryAge('evt_Sweep0001', 10);
 
+    // Its job is still in flight: the sweeper leaves it (no job, no audit).
+    artisanCommand('axispay:provider-events:sweep')->assertSuccessful();
+    Queue::assertPushed(ProcessProviderEventJob::class, 2);
+    expect(recoveryAudits(AuditAction::ProviderEventRetried))->toBe(0);
+
+    recoveryLoseJob('evt_Sweep0001');
+    artisanCommand('axispay:provider-events:sweep')->assertSuccessful();
     artisanCommand('axispay:provider-events:sweep')->assertSuccessful();
 
     Queue::assertPushed(ProcessProviderEventJob::class, 3);
@@ -218,6 +250,22 @@ it('routes an unroutable event with the sweeper once its connection exists (M4)'
     expect($event->tenant_id)->toBe($connection->tenant_id)
         ->and($event->status)->toBe(ProviderEventStatus::Processed)
         ->and(AuditLog::query()->withoutGlobalScopes()->where('action', AuditAction::ProviderEventRetried->value)->where('tenant_id', $connection->tenant_id)->count())->toBe(1);
+});
+
+it('sweeps unroutable events without reading their payload and resolves each account once (P17)', function (): void {
+    FakePaymentGateway::install()->withAccount('acct_Batch00001');
+
+    foreach (['evt_Batch0001', 'evt_Batch0002', 'evt_Batch0003'] as $id) {
+        recoveryPost($id, 'account.updated', 'acct_Batch00001', ['id' => 'acct_Batch00001', 'object' => 'account']);
+    }
+
+    DB::enableQueryLog();
+    artisanCommand('axispay:provider-events:sweep')->assertSuccessful();
+    $queries = array_column(DB::getQueryLog(), 'query');
+    DB::disableQueryLog();
+
+    expect(array_filter($queries, static fn (string $sql): bool => str_contains($sql, 'from `gateway_connections`')))->toHaveCount(1)
+        ->and(array_filter($queries, static fn (string $sql): bool => str_contains($sql, 'from `provider_events`') && str_contains($sql, 'select *')))->toBe([]);
 });
 
 // M3: capture window ----------------------------------------------------------
@@ -330,9 +378,9 @@ it('records payment.processing once when a payment enters processing (M6)', func
 });
 
 it('maps gateway failure codes to generic ones (M6)', function (?string $code, ?string $decline, ?string $expected): void {
-    expect(PaymentSnapshot::genericFailureCode($code, $decline))->toBe($expected);
+    expect(StripeFailureKinds::of($code, $decline)->value)->toBe($expected);
 })->with([
-    [null, null, null],
+    [null, null, 'card_declined'],
     ['card_declined', 'insufficient_funds', 'insufficient_funds'],
     ['card_declined', 'fraudulent', 'card_declined'],
     ['card_declined', 'stolen_card', 'card_declined'],
@@ -359,7 +407,7 @@ it('flags a closed attempt whose payment later succeeds for review, once (L1)', 
 
     expect($fresh->status)->toBe(PaymentAttemptStatus::Canceled)
         ->and($fresh->needs_review)->toBeTrue()
-        ->and($fresh->review_reason)->toBe(ApplyProviderPayment::SUCCEEDED_AFTER_CLOSE)
+        ->and($fresh->review_reason)->toBe(ReviewReason::SucceededAfterClose)
         ->and(recoveryAudits(AuditAction::PaymentNeedsReview))->toBe(1);
 });
 

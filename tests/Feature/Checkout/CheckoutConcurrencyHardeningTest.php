@@ -21,7 +21,9 @@ use App\Modules\Payments\Contracts\PrePaymentValidator;
 use App\Modules\Payments\Data\PrePaymentDecision;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\SyncReason;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptLease;
@@ -98,7 +100,7 @@ it('refuses a void whose lease was lost before the gateway call', function (): v
     Checkout::inTenant($link, static fn () => PaymentAttempt::query()->whereKey($attempt->id)->update(['confirmation_lease_until' => now()->subSecond()]));
     Checkout::inTenant($link, static fn () => $lease->acquire($attempt->id)); // the next actor
 
-    expect(fn () => Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, 'link_closed', $stale)))->toThrow(AttemptBusyException::class)
+    expect(fn () => Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, VoidReason::LinkClosed, $stale)))->toThrow(AttemptBusyException::class)
         ->and($fake->callsTo('cancelPayment'))->toBe([]);
 });
 
@@ -244,11 +246,11 @@ it('flags for review an attempt closed without the gateway', function (): void {
     Checkout::inTenant($link, static fn () => GatewayConnection::query()->whereKey($attempt->gateway_connection_id)->update(['credentials_secret' => null]));
     FakePaymentGatewayThatNeedsKeys::install();
 
-    $closed = Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, 'link_closed'));
+    $closed = Checkout::inTenant($link, static fn () => app(VoidAuthorization::class)->handle($attempt->id, VoidReason::LinkClosed));
 
     expect($closed->status)->toBe(PaymentAttemptStatus::Failed)
         ->and($closed->needs_review)->toBeTrue()
-        ->and($closed->review_reason)->toBe('closed_without_gateway')
+        ->and($closed->review_reason)->toBe(ReviewReason::ClosedWithoutGateway)
         ->and(AuditLog::query()->withoutGlobalScopes()->where('action', AuditAction::PaymentNeedsReview->value)->count())->toBe(1);
 });
 
