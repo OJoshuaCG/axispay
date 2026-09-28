@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Checkout\Actions\RecordCheckoutOpening;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Models\DomainEvent;
 use Illuminate\Support\Carbon;
@@ -170,4 +171,32 @@ it('treats an empty user agent as a previewer', function (): void {
     expect(RecordCheckoutOpening::isPreviewer(null))->toBeTrue()
         ->and(RecordCheckoutOpening::isPreviewer('Slackbot-LinkExpanding 1.0'))->toBeTrue()
         ->and(RecordCheckoutOpening::isPreviewer('Mozilla/5.0 (iPhone)'))->toBeFalse();
+});
+
+it('lays out the form as the design spec says (iteration 10)', function (): void {
+    [, $link] = Checkout::scenario(static fn ($f) => $f->state(['payer_fields_config' => ['phone' => 'required']]));
+    Tenant::query()->whereKey($link->tenant_id)->update(['privacy_notice_url' => 'https://demo.test/privacidad']);
+
+    $html = (string) get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->getContent();
+    $form = substr($html, (int) strpos($html, '<form id="checkout-form"'));
+
+    expect(str_contains($html, '<title>Pagar · Tienda Demo</title>'))->toBeTrue()
+        // The only h1 is the first thing inside the form (a rejection replaces the form).
+        ->and(preg_match('#<form id="checkout-form"[^>]*>\s*(<!--.*?-->\s*)*<h1 class="sr-only"#s', $html))->toBe(1)
+        // Both alerts are groups, right before the card form.
+        ->and(substr_count($form, 'role="group" data-checkout-alert'))->toBe(2)
+        ->and(strpos($form, 'data-checkout-alert="warning"') < strpos($form, 'data-payment-element'))->toBeTrue()
+        ->and(strpos($form, 'data-field="phone"') < strpos($form, 'data-checkout-alert="error"'))->toBeTrue()
+        // The phone country shows "{country} (+{code})", never a truncated label.
+        ->and(str_contains($form, 'México (+52)') && ! str_contains($form, 'label="MX +52"'))->toBeTrue()
+        // The trust line starts at the start edge.
+        ->and(str_contains($form, 'justify-start gap-1.5 text-start text-sm text-fg-secondary'))->toBeTrue();
+});
+
+it('does not repeat a state\'s heading in its body (iteration 10)', function (): void {
+    [, $link] = Checkout::scenario(static fn ($f) => $f->canceled());
+
+    $html = (string) get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->getContent();
+
+    expect(substr_count($html, 'Este enlace de pago ya no está disponible'))->toBe(2); // the <title> and the heading
 });

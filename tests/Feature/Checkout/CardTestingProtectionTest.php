@@ -71,7 +71,7 @@ it('pauses a link for 30 minutes after 5 confirmations in 15 minutes', function 
         Checkout::pay($link, 'ctoken_decline_'.$i)->assertJson(['outcome' => 'declined']);
     }
 
-    Checkout::pay($link, 'ctoken_success')->assertStatus(429)->assertJson(['outcome' => 'rate_limited', 'retry_after_minutes' => 30]);
+    Checkout::pay($link, 'ctoken_success')->assertStatus(429)->assertHeader('Retry-After', '1800')->assertJson(['outcome' => 'rate_limited', 'retry_after_minutes' => 30]);
     expect($fake->callsTo('confirmPayment'))->toHaveCount(5);
 });
 
