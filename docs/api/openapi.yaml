@@ -657,6 +657,12 @@ components:
           format: date-time
         cancel_reason:
           type: [string, 'null']
+          description: >-
+            Why the link was canceled. The free text given by whoever canceled
+            it (API or panel), or one of the reasons the platform records when
+            it cancels a link itself: `gateway_disconnected` (the tenant's
+            payment gateway was disconnected in this mode) or `tenant_closed`
+            (the tenant's account was closed).
         expired_at:
           type: [string, 'null']
           format: date-time
@@ -673,7 +679,7 @@ components:
           format: date-time
         payment:
           type: 'null'
-          description: The summarized payment once the link is paid (from Phase 4).
+          description: Always null for now; the summarized payment arrives in a later phase.
         created_at:
           type: string
           format: date-time

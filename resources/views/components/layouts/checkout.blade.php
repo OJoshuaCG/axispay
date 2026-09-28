@@ -1,5 +1,5 @@
 {{--
-    Payer-facing checkout layout (plan 11, DESIGN.md, ADR-0051).
+    Payer-facing checkout layout (plan 11, docs/frontend/checkout-design.md, ADR-0051).
 
     Differences from <x-layouts.app>:
         - no theme pre-paint script and no data-theme: the page follows the

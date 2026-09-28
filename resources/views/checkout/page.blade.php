@@ -1,5 +1,5 @@
 {{--
-    The payment page of a link (plan 11.2, 11.3, DESIGN.md, ADR-0051), every
+    The payment page of a link (plan 11.2, 11.3, docs/frontend/checkout-design.md, ADR-0051), every
     state. Presentation only: CheckoutPageBuilder decides the state and the
     data. Layout: one column on the page up to 767px; a hairline card
     centred from 768px; from 1024px the summary (left, sticky) and the form
@@ -57,7 +57,7 @@
                         @include('checkout.payer-fields', ['page' => $page])
                     @endif
 
-                    {{-- Right before the card form (DESIGN.md). role="group": the script moves focus to them, which announces them once. --}}
+                    {{-- Right before the card form (docs/frontend/checkout-design.md). role="group": the script moves focus to them, which announces them once. --}}
                     <x-alert variant="error" role="group" data-checkout-alert="error" tabindex="-1" hidden><span data-alert-text></span></x-alert>
                     <x-alert variant="warning" role="group" data-checkout-alert="warning" tabindex="-1" hidden><span data-alert-text></span></x-alert>
 
@@ -105,7 +105,7 @@
                      data-paused-message="{{ $page->client['pausedMinutes'] !== null ? trans_choice('checkout.messages.rate_limited', $page->client['pausedMinutes'], ['minutes' => $page->client['pausedMinutes']]) : '' }}"
                      data-checkout-strings></div>
 
-                {{-- Probe for Stripe's Appearance API: colors read from real utilities (DESIGN.md). --}}
+                {{-- Probe for Stripe's Appearance API: colors read from real utilities (docs/frontend/checkout-design.md). --}}
                 <div aria-hidden="true" class="pointer-events-none invisible absolute size-0 overflow-hidden" data-appearance-probe>
                     <span data-probe="primary" class="text-primary"></span>
                     <span data-probe="background" class="text-page"></span>

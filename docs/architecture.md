@@ -113,7 +113,31 @@ How a link gets paid (ADR-0050, ADR-0051):
 | Capture or void | Approved → captured; rejected → the authorization is voided, nothing charged |
 | Truth | Every Stripe state goes through one action; Stripe's events (re-read, never trusted) and the 15-minute reconciliation keep the database right; authorizations left uncaptured are voided |
 
-Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.failed`, `payment.succeeded`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks.
+Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.processing`, `payment.failed`, `payment.succeeded`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks, as frozen snapshots (the link as `PaymentLinkPresenter` shows it, the payment as `PaymentSnapshot` builds it).
+
+### Payment mechanics (technical detail of ADR-0051)
+
+ADR-0051 states the business rules; this is how the code keeps them.
+
+| Topic | Mechanism |
+|---|---|
+| Module split | `Checkout\Actions\StartCheckoutPayment` orchestrates; the Payments module owns the attempt: `ClaimLinkAttempt` (claim under the link lock, lease, payer details via `StorePayerDetails`), `ConfirmAttemptPayment` (create/update/confirm), `CaptureAuthorizedPayment`, `VoidAuthorization`, `ApplyProviderPayment` (the single place a gateway state is applied), `SyncPaymentAttempt`, `ReleaseLinkAfterAttempt`. |
+| One active attempt | Unique index on the generated column `active_link_id` of `payment_attempts` (set while the status is active). |
+| Lock order | `AttemptLocks::lockLinkThenAttempt()`: link row, then attempt row, `FOR UPDATE`, inside the caller's transaction. The attempt's link id is read before the transaction (`linkIdOf()`). |
+| Snapshot isolation | MariaDB 11.8's `innodb_snapshot_isolation` refuses to lock a row changed after the transaction's first consistent read (ER_CHECKREAD, 1020). No plain read precedes a lock inside a transaction: the claim reads the active attempt id in autocommit, then locks the link and that attempt by key and re-checks it. Deadlocks, lock-wait timeouts and 1020 are retried three times in all with 5–20 ms jitter (`Shared\Database\ConcurrencyErrors`); the active-attempt range is never locked (gap locks between links of one tenant). |
+| Lease | `AttemptLease`: `confirmation_lease_until` + owner token, 90 s; renewed before each gateway call; only the holder may apply a "backward" state (`PaymentAttemptStateMachine::isBackward()`). |
+| Bounded Stripe calls | `services.stripe`: 20 s per request, 5 s to connect, one SDK retry with the same idempotency key, at most 2 s between: 42 s worst case, below the lease. |
+| Request budget | `CallBudget::forPayerRequest()` (`checkout.request_budget_seconds`, 50 s, below nginx's 60 s and FPM's `request_terminate_timeout` 65 s): a gateway call starts only if its worst case fits. Before the confirmation: the payer sees an error, nothing was charged. After it: "processing" (capture left to events, the reconciliation and the status poll). A confirmation that timed out raises `PaymentOutcomeUnknownException` and also answers "processing". |
+| Idempotency keys | `IdempotencyKeys`: `create_pi:{attempt}` (fixed: creation carries only link-fixed values), `update_pi:{attempt}:{amount}{currency}`, `confirm:{attempt}:{sha256(token, receipt e-mail, return URL)}`, `capture:{attempt}`, `cancel:{attempt}`. |
+| Stored 5xx | Stripe stores a 5xx under its key for 24 h. `ServerErrorRetry` (through `AttemptGateway::retryingCall()`): re-read the payment (`movedOn()`); if still due, repeat under `:r1`, `:r2`. |
+| Unexpected state | `StripeGateway::callIntent()` re-reads and returns the payment on `payment_intent_unexpected_state` (confirm, capture, cancel); a declined confirm (402) is re-read with its failure. |
+| Card only | `allowed_payment_method_types: ['card']` (2026-07-29.dahlia; `payment_method_types` is removed from 2026-08-26.preview); Stripe.js `allowedPaymentMethodTypes: ['card']`, `wallets: {applePay, googlePay, link: 'never'}`. |
+| Failure kinds | `Gateways\Enums\ProviderFailureKind`, mapped from Stripe codes by `StripeFailureKinds`; stored as `last_failure_kind` / `payment_attempt_failures.kind`. |
+| Gateway port additions | `confirmPayment()` takes the return URL; `capturePayment()`; `cancelPayment()` takes an idempotency key; `ProviderPaymentStatus` with `RequiresCapture`; `ProviderPayment` carries the client secret (only while the browser must act), the card preview (with fingerprint), the last failure (reference, codes, kind), the attempt reference, `captureBefore` and `createdAt`; one event kind `PaymentUpdated`. |
+| Gateway events | `ProcessProviderEventJob` is `ShouldBeUnique` (unique id = stored event, `uniqueFor` 1500 s ≥ the sum over tries of max(timeout + backoff, `retry_after`)); `dispatchIfIdle()` hands the lock to the job. `axispay:provider-events:sweep` (5 min) and `:retry {id?} {--failed}`. Payloads are `encrypted`, reduced for payment events. |
+| Job time limits | Queue `retry_after` 150 s; payment and event jobs `$timeout` 115 s; worker `--timeout` 120 s (a unit test keeps every job below `retry_after`). |
+| CSP | `CheckoutContentSecurityPolicy`, nonce-based: `script-src 'self' 'nonce-…' https://js.stripe.com https://*.js.stripe.com https://challenges.cloudflare.com`; `frame-src` Stripe (`js.stripe.com`, `*.js.stripe.com`, `hooks.stripe.com`) and Cloudflare; `connect-src 'self' https://api.stripe.com`; `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'`. Headers wrap every pay-host response (`CheckoutSecurityHeaders`, outermost). |
+| Pay-host requests | Named limiters (`CheckoutRateLimits`), the link's locale before throttling (`ApplyCheckoutLocale`), status without session middleware, own error pages (`CheckoutErrorPages`). |
 
 ## Identity, access and 2FA
 

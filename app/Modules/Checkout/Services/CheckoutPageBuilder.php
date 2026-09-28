@@ -149,7 +149,7 @@ final readonly class CheckoutPageBuilder
     /**
      * Billing details the page collects itself (required fields only): the
      * Payment Element does not ask for them again, and the page passes them
-     * with the confirmation token (DESIGN.md, Stripe Appearance).
+     * with the confirmation token (docs/frontend/checkout-design.md, Stripe Appearance).
      *
      * @param  array<string, string>  $fields
      * @return list<string>

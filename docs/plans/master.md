@@ -1292,6 +1292,8 @@ Una página pública que acepta tarjetas y permite reintentos es un objetivo cl�
 6. **Alertas** a superadmins ante picos de rechazos por tenant (sección 24).
 7. **No revelar** el motivo exacto de un rechazo al pagador (mensajes genéricos tipo "La tarjeta fue rechazada, intenta con otra o contacta a tu banco"); el detalle queda en el panel del tenant.
 
+> **Nota (Fase 4, [ADR-0051](../adr/0051-checkout-and-card-payments-phase-4.md)):** Turnstile se exige desde el primer intento de pago posterior a un rechazo en el link o en la sesión del pagador. La regla 3 ("a partir del 2.º intento fallido") y el caso crítico 16 ("tras un rechazo") no coinciden; se eligió la lectura más estricta, configurable, pendiente de confirmación del dueño. El bloqueo prolongado de la regla 4 cuenta 10 rechazos dentro de 24 horas (la regla no fija una ventana de tiempo), y la cuenta vuelve a empezar cuando el comercio levanta un bloqueo.
+
 ### 11.8 Cabeceras de seguridad del checkout
 
 - `Content-Security-Policy` estricta: `default-src 'self'`; `script-src 'self' https://js.stripe.com https://challenges.cloudflare.com` (con nonce para los scripts inline); `frame-src https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com`; `connect-src 'self' https://api.stripe.com`; `img-src 'self' data:` (más el origen de los logos); `style-src 'self' 'nonce-...'`; `frame-ancestors 'none'`. Verificar la lista vigente de dominios de Stripe.js en su documentación de CSP.

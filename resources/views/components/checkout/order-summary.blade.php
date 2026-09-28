@@ -1,5 +1,5 @@
 {{--
-    Order summary of the checkout (plan 11.3, DESIGN.md): who is paid, the
+    Order summary of the checkout (plan 11.3, docs/frontend/checkout-design.md): who is paid, the
     description (plain text, escaped, full length), the total through
     <x-amount> (numeric font, number + ISO code) and, only when the link
     expires within 72 hours, its expiry in the tenant's time zone.

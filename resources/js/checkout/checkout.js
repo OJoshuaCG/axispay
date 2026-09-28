@@ -1,5 +1,5 @@
 /**
- * Payment page script (plan 11.4, DESIGN.md, ADR-0051). Presentation and
+ * Payment page script (plan 11.4, docs/frontend/checkout-design.md, ADR-0051). Presentation and
  * transport only: every decision is made by the server, every user-facing
  * text comes from the page (data-* attributes and server messages).
  *

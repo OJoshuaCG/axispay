@@ -1,5 +1,5 @@
 {{--
-    Terminal or waiting state of the checkout (DESIGN.md): an icon in a
+    Terminal or waiting state of the checkout (docs/frontend/checkout-design.md): an icon in a
     *-subtle circle, the page's <h1> (focusable, focused on arrival when
     `focus`), a body and optional actions. No illustrations.
 

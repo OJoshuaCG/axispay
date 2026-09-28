@@ -7,7 +7,7 @@ namespace App\Modules\Checkout\Services;
 use Illuminate\Support\Facades\Vite;
 
 /**
- * The checkout's Content-Security-Policy (plan 11.8, DESIGN.md), built for
+ * The checkout's Content-Security-Policy (plan 11.8, docs/frontend/checkout-design.md), built for
  * one nonce. Sources from Stripe's CSP guide (docs.stripe.com/security/guide,
  * "Stripe.js": js.stripe.com and *.js.stripe.com for scripts and frames,
  * hooks.stripe.com for 3D Secure frames, api.stripe.com for requests) and

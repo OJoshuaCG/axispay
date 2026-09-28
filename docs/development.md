@@ -455,14 +455,16 @@ STRIPE_CONTRACT_RESTRICTED_KEY=rk_test_… STRIPE_CONTRACT_PUBLISHABLE_KEY=pk_te
 ./vendor/bin/pest --group=stripe
 ```
 
-The connected account must be an MX account that can charge. The items that need a browser (updating the card form, Mukta inside Stripe's iframe, the 3D Secure dialog) and the cost of voided authorizations are checked by hand and recorded in the ADR.
+The connected account must be an MX account that can charge. The gate has two lists (ADR-0051, section 12):
+
+- **A. Automated** by these contract tests, for both the Connect method and the `api_key` method: items 1, 2, 3, 4 (the resulting state), 8 (server half), 9 and 10. Run the `api_key` variant with a restricted key that holds **only** the documented permissions (`payment_intent_write`, `confirmation_token_read` and the Phase 2 set), so item 10 proves they are enough.
+- **B. Checked by hand** and recorded in the ADR: 4 (what a void costs and what the payer's statement shows), 5 (authorization lifetime), 6 (`elements.update()` with a new amount and currency), 7 (Mukta inside Stripe's iframe), 8 (the browser half of 3D Secure), 11 (billing details with the ConfirmationToken) and 12 (connected-account events delivered to the Connect destination).
+
+If 1, 3 or 12 fails, stop and report before building on it.
 
 ### After deploying Phase 4
 
-1. Run the migrations.
-2. `php artisan axispay:stripe-sync-webhook-endpoints` so every `api_key` endpoint receives the payment events.
-3. Add the six `payment_intent.*` events to both Connect destinations in the Stripe Dashboard (`axispay:doctor` prints the list).
-4. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`; make sure `AXISPAY_CHECKOUT_SANDBOX` is not set.
+Follow [Upgrading to Phase 4](deployment/dokploy.md#upgrading-to-phase-4) in the deployment guide: migrations, `php artisan axispay:stripe-sync-webhook-endpoints`, the six `payment_intent.*` events on both Connect destinations, `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`, `AXISPAY_CHECKOUT_SANDBOX` unset, `TRUSTED_PROXIES`.
 
 ## Quality checks
 

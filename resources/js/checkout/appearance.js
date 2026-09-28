@@ -1,5 +1,5 @@
 /**
- * Stripe Elements Appearance from the page's own tokens (DESIGN.md).
+ * Stripe Elements Appearance from the page's own tokens (docs/frontend/checkout-design.md).
  *
  * Colors are read from hidden probe elements that carry real utility
  * classes (getComputedStyle → hex), not from --color-* variables: Lightning
