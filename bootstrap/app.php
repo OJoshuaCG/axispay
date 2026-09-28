@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Middleware\SetLocale;
+use App\Modules\Checkout\Http\CheckoutErrorPages;
+use App\Modules\Checkout\Http\Middleware\ApplyCheckoutLocale;
 use App\Modules\Checkout\Http\Middleware\CheckoutSecurityHeaders;
 use App\Modules\Shared\Http\Errors\ApiErrorRenderer;
 use App\Modules\Shared\Http\Errors\ApiException;
@@ -13,6 +15,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
 use Sentry\Laravel\Integration;
 
@@ -57,6 +60,9 @@ return Application::configure(basePath: dirname(__DIR__))
             SetLocale::class,
         ]);
 
+        // Checkout: the link's language before the request limits answer (ADR-0051).
+        $middleware->prependToPriorityList(ThrottleRequests::class, ApplyCheckoutLocale::class);
+
         // Non-Filament routes that need a tenant user (app host) send guests
         // to the tenant panel's sign-in page.
         $middleware->redirectGuestsTo(static fn (): string => route('filament.app.auth.login'));
@@ -68,6 +74,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // Client errors are expected API outcomes, not incidents.
         $exceptions->dontReportWhen(
             fn (Throwable $e): bool => $e instanceof ApiException && $e->status() < 500,
+        );
+
+        // Pay host only: the checkout's own error pages and outcomes (ADR-0051).
+        $exceptions->render(
+            fn (Throwable $e, Request $request) => CheckoutErrorPages::render($e, $request),
         );
 
         // API surface only: the error envelope of plan section 10.4. Returning

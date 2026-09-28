@@ -8,6 +8,7 @@ use App\Modules\Checkout\Http\Controllers\CheckoutAttemptController;
 use App\Modules\Checkout\Http\Controllers\CheckoutPageController;
 use App\Modules\Checkout\Http\Controllers\CheckoutStatusController;
 use App\Modules\Checkout\Http\Controllers\SandboxNextActionController;
+use App\Modules\Checkout\Http\Middleware\ApplyCheckoutLocale;
 use App\Modules\Gateways\Sandbox\SandboxMode;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
@@ -32,6 +33,7 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::prefix('/l/{token}')
     ->where(['token' => '[^/]{1,128}'])
+    ->middleware(ApplyCheckoutLocale::class)
     ->name('checkout.')
     ->group(function (): void {
         Route::get('/', [CheckoutPageController::class, 'show'])->middleware('throttle:'.CheckoutRateLimits::PAGE)->name('show');

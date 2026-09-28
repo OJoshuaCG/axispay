@@ -34,7 +34,7 @@ final class PaymentLinkLookup
 
         $row = PaymentLink::query()
             ->withoutGlobalScopes()
-            ->select(['id', 'tenant_id', 'livemode'])
+            ->select(['id', 'tenant_id', 'livemode', 'locale'])
             ->where('public_token', $wellFormed ? $token : str_repeat('0', 43))
             ->first();
 

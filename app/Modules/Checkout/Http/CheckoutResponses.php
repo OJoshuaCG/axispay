@@ -35,11 +35,14 @@ final readonly class CheckoutResponses
             CheckoutOutcome::Declined => __('checkout.messages.declined'),
             CheckoutOutcome::AuthenticationFailed => __('checkout.messages.authentication_failed'),
             CheckoutOutcome::TurnstileRequired => __('checkout.messages.turnstile'),
-            CheckoutOutcome::RateLimited => __('checkout.messages.rate_limited', ['minutes' => $result->minutes ?? 1]),
+            CheckoutOutcome::RateLimited => trans_choice('checkout.messages.rate_limited', $result->minutes ?? 1, ['minutes' => $result->minutes ?? 1]),
             CheckoutOutcome::Blocked, CheckoutOutcome::Unavailable => __('checkout.messages.unavailable', ['merchant' => $merchant]),
             CheckoutOutcome::Error => __('checkout.messages.error'),
             default => null,
         };
+
+        // A card-testing pause: the page (and any client) waits the real time left.
+        $headers = $result->outcome === CheckoutOutcome::RateLimited ? ['Retry-After' => (string) (($result->minutes ?? 1) * 60)] : [];
 
         return new JsonResponse(array_filter([
             'outcome' => $result->outcome->value,
@@ -49,7 +52,7 @@ final readonly class CheckoutResponses
             'retry_after_minutes' => $result->minutes,
             'payer_message' => $result->payerMessage,
             'redirect_url' => $result->outcome->leavesForm() ? $this->urls->complete($link) : null,
-        ], static fn (mixed $value): bool => $value !== null), $result->outcome->httpStatus());
+        ], static fn (mixed $value): bool => $value !== null), $result->outcome->httpStatus(), $headers);
     }
 
     /**
