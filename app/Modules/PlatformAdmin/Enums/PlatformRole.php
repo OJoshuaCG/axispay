@@ -13,6 +13,19 @@ enum PlatformRole: string
     case Superadmin = 'superadmin';
     case SupportReadonly = 'support_readonly';
 
+    /**
+     * The platform permissions of the role (ADR-014: code checks these).
+     *
+     * @return list<PlatformPermission>
+     */
+    public function permissions(): array
+    {
+        return match ($this) {
+            self::Superadmin => PlatformPermission::cases(),
+            self::SupportReadonly => [],
+        };
+    }
+
     public function label(): string
     {
         return __('platform.role.'.$this->value);

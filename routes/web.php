@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\LocaleController;
+use App\Http\Middleware\SetLocale;
+use App\Modules\Branding\Http\Controllers\PlatformLogoController;
 use App\Modules\Gateways\Http\Controllers\OnboardingRefreshController;
 use App\Modules\Gateways\Http\Controllers\OnboardingReturnController;
 use App\Modules\Identity\Http\Controllers\InvitationController;
@@ -11,7 +13,12 @@ use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
 use App\Modules\Shared\Http\Controllers\SessionPingController;
 use App\Modules\Tenancy\Http\Controllers\LivemodeController;
 use App\Modules\Tenancy\Http\Middleware\ResolveTenantContext;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /*
 |--------------------------------------------------------------------------
@@ -72,6 +79,35 @@ foreach (['admin', 'app'] as $panel) {
         ->middleware('throttle:30,1')
         ->get('/session/ping', SessionPingController::class)
         ->name("{$panel}.session.ping");
+}
+
+/*
+|--------------------------------------------------------------------------
+| Platform logo (ADR-0053): admin, app and pay hosts
+|--------------------------------------------------------------------------
+|
+| Same-origin on every host that shows it (the checkout allows images from
+| 'self' only). Versioned URL cached for a year, so it runs without the
+| session, cookie and locale middleware: the response never sets a
+| cookie and does not vary by viewer.
+|
+*/
+
+foreach (['admin', 'app', 'pay'] as $surface) {
+    $surfaceHost = config("axispay.surfaces.{$surface}");
+
+    Route::domain(is_string($surfaceHost) ? $surfaceHost : "{$surface}.localhost")
+        ->withoutMiddleware([
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            PreventRequestForgery::class,
+            SetLocale::class,
+        ])
+        ->get('/branding/platform-logo/{variant}/{version}.png', PlatformLogoController::class)
+        ->where(['variant' => 'light|dark', 'version' => '[0-9a-z]{26}'])
+        ->name("{$surface}.branding.platform-logo");
 }
 
 /*

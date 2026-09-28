@@ -58,6 +58,9 @@ enum AuditAction: string
     case PaymentNeedsReview = 'payment.needs_review';
     case ProviderEventFailed = 'provider_event.failed';
     case ProviderEventRetried = 'provider_event.retried';
+    case PlatformLogoUpdated = 'platform.logo_updated';
+    case PlatformLogoRemoved = 'platform.logo_removed';
+    case PlatformBrandDisplayModeChanged = 'platform.brand_display_mode_changed';
 
     public function label(): string
     {

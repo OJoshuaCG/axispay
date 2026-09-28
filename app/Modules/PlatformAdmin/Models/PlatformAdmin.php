@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\PlatformAdmin\Models;
 
+use App\Modules\PlatformAdmin\Enums\PlatformPermission;
 use App\Modules\PlatformAdmin\Enums\PlatformRole;
 use App\Modules\Shared\Database\HasUlidPrimaryKey;
 use App\Modules\Shared\Database\UsesMicrosecondDates;
@@ -55,6 +56,12 @@ final class PlatformAdmin extends Authenticatable implements FilamentUser, HasAp
     public function canAccessPanel(Panel $panel): bool
     {
         return $panel->getId() === 'admin' && $this->disabled_at === null;
+    }
+
+    /** Platform permission check (ADR-014): disabled admins hold none. */
+    public function hasPlatformPermission(PlatformPermission $permission): bool
+    {
+        return $this->disabled_at === null && in_array($permission, $this->role->permissions(), true);
     }
 
     public function isSuperadmin(): bool

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Support\Filament;
 
 use App\Http\Middleware\SetLocale;
+use App\Modules\Branding\Enums\LogoVariant;
+use App\Modules\Branding\Services\PlatformBrand;
 use App\Modules\Identity\Auth\AuditedAppAuthentication;
 use App\Modules\Identity\Filament\Pages\EditProfile;
 use App\Modules\Identity\Filament\Pages\Login;
@@ -35,7 +37,7 @@ use Livewire\LivewireManager;
  * Configuration shared by the `admin` and `app` panels (ADR-0025, ADR-0030):
  * design-token palettes, self-hosted Mukta and Geist Mono, the token-based
  * theme, the dark-mode bridge, the language switcher and theme control, the
- * brand mark, audited TOTP 2FA and the profile page. Each panel provider
+ * platform brand (ADR-0053), audited TOTP 2FA and the profile page. Each panel provider
  * adds its host, guard, resources and rules.
  */
 final class PanelDefaults
@@ -54,9 +56,15 @@ final class PanelDefaults
             ->darkMode()
             ->defaultThemeMode(ThemeMode::Light)
             ->brandName(static fn (): string => Brand::displayName())
-            // Brand tile + name (topbar, mobile sidebar, sign-in card) until
-            // the ADR-0038 logo exists. brandName() stays: titles and alt text.
-            ->brandLogo(static fn (): Htmlable => new HtmlString(view('filament.partials.brand')->render()))
+            // The platform brand (topbar, mobile sidebar, sign-in, 2FA and
+            // invitation pages) as the superadmin set it (ADR-0053): logo,
+            // name, or both; the name alone when there is no logo. The dark
+            // variant only when one exists (else the light logo serves both).
+            // brandName() stays: page titles, alt text, the 2FA issuer.
+            ->brandLogo(static fn (): Htmlable => self::brandMark(LogoVariant::Light))
+            ->darkModeBrandLogo(static fn (): ?Htmlable => app(PlatformBrand::class)->showsLogo() && app(PlatformBrand::class)->hasVariant(LogoVariant::Dark)
+                ? self::brandMark(LogoVariant::Dark)
+                : null)
             ->brandLogoHeight('1.75rem')
             ->multiFactorAuthentication(
                 [AuditedAppAuthentication::make()->recoverable()->brandName(Brand::displayName())],
@@ -95,6 +103,12 @@ final class PanelDefaults
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_START, static fn (): View => view('filament.partials.guest-controls', [
                 'show' => ! self::simplePageHasUserHeader(),
             ]));
+    }
+
+    /** The brand partial for one logo variant (ADR-0053). */
+    private static function brandMark(LogoVariant $variant): Htmlable
+    {
+        return new HtmlString(view('filament.partials.brand', ['variant' => $variant])->render());
     }
 
     /** Display format of dates with time in every panel table and schema (ADR-0049). */

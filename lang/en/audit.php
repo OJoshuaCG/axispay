@@ -91,6 +91,9 @@ return [
         'payment_needs_review' => 'Payment flagged for review',
         'provider_event_failed' => 'Gateway event failed',
         'provider_event_retried' => 'Gateway event retried',
+        'platform_logo_updated' => 'Platform logo updated',
+        'platform_logo_removed' => 'Platform logo removed',
+        'platform_brand_display_mode_changed' => 'Platform brand display changed',
     ],
 
 ];

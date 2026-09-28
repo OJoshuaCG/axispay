@@ -91,6 +91,9 @@ return [
         'payment_needs_review' => 'Pago marcado para revisión',
         'provider_event_failed' => 'Evento de la pasarela fallido',
         'provider_event_retried' => 'Evento de la pasarela reintentado',
+        'platform_logo_updated' => 'Logo de la plataforma actualizado',
+        'platform_logo_removed' => 'Logo de la plataforma eliminado',
+        'platform_brand_display_mode_changed' => 'Visualización de la marca de la plataforma cambiada',
     ],
 
 ];
