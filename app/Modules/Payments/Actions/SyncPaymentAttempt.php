@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Actions;
 
 use App\Modules\Gateways\Data\ProviderPayment;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
@@ -44,8 +45,9 @@ final readonly class SyncPaymentAttempt
      *                                          attempt never stored its ID (a crash right after
      *                                          creating it), once the gateway confirms it is ours
      * @param  bool  $complete  false: only re-read and apply; the caller completes an authorization itself
+     * @param  CallBudget|null  $budget  a payer request's time budget (the status re-read); null for background work
      */
-    public function handle(string $attemptId, SyncReason $reason, ?string $providerPaymentId = null, bool $complete = true): PaymentAttempt
+    public function handle(string $attemptId, SyncReason $reason, ?string $providerPaymentId = null, bool $complete = true, ?CallBudget $budget = null): PaymentAttempt
     {
         if (Transactions::open()) {
             throw new LogicException('Syncing calls the gateway: never inside a transaction.');
@@ -67,6 +69,10 @@ final readonly class SyncPaymentAttempt
             Log::warning('A payment event names an attempt that holds another payment.', ['payment_attempt_id' => $attempt->id]);
 
             return $attempt;
+        }
+
+        if ($budget !== null && ! $budget->affords()) {
+            return $attempt; // no time for the re-read: the next poll, the events or the reconciliation do it
         }
 
         $idleSince = $attempt->updated_at ?? CarbonImmutable::now();
@@ -92,16 +98,18 @@ final readonly class SyncPaymentAttempt
         // payable again (or expires) through the usual path.
         if ($reason === SyncReason::Reconciliation && $attempt->status === PaymentAttemptStatus::RequiresAction
             && $idleSince->lessThanOrEqualTo(CarbonImmutable::now()->subMinutes(max(1, config()->integer('axispay.checkout.abandon_action_after_minutes'))))) {
-            return $this->void->handle($attempt->id, VoidReason::AbandonedAction);
+            return $this->void->handle($attempt->id, VoidReason::AbandonedAction, budget: $budget);
         }
 
         if ($attempt->status !== PaymentAttemptStatus::RequiresCapture || ! $complete) {
             return $attempt;
         }
 
-        $result = $this->capture->handle($attempt->id);
+        $result = $this->capture->handle($attempt->id, budget: $budget);
 
-        if ($result->outcome === CaptureOutcome::Pending && $reason === SyncReason::Webhook) {
+        // Not completed now (another actor holds it, a gateway error, or no
+        // time left in the payer's request): one more try a minute later.
+        if ($result->outcome === CaptureOutcome::Pending && $reason !== SyncReason::Reconciliation) {
             CompleteAuthorizedPaymentJob::dispatch($attempt->id)->delay(now()->addMinute());
         }
 

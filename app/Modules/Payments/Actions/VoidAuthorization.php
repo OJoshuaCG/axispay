@@ -13,10 +13,12 @@ use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
+use App\Modules\Payments\Exceptions\CallBudgetExhausted;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
@@ -54,11 +56,13 @@ final readonly class VoidAuthorization
 
     /**
      * @param  string|null  $leaseToken  the caller's lease; without one the lease is taken here
+     * @param  CallBudget|null  $budget  a payer request's time budget (null: background work)
      *
      * @throws AttemptBusyException when another process holds the attempt
      * @throws GatewayException when the gateway could not be reached or refused (retry)
+     * @throws CallBudgetExhausted before a call that would not fit in the payer's request
      */
-    public function handle(string $attemptId, VoidReason $reason, ?string $leaseToken = null): PaymentAttempt
+    public function handle(string $attemptId, VoidReason $reason, ?string $leaseToken = null, ?CallBudget $budget = null): PaymentAttempt
     {
         if (Transactions::open()) {
             throw new LogicException('Voiding calls the gateway: never inside a transaction.');
@@ -73,7 +77,7 @@ final readonly class VoidAuthorization
         $token = $leaseToken ?? $this->lease->acquire($attemptId) ?? throw AttemptBusyException::for($attemptId);
 
         try {
-            return $this->void($attempt->refresh(), $reason, $token);
+            return $this->void($attempt->refresh(), $reason, $token, $budget);
         } finally {
             if ($leaseToken === null) {
                 $this->lease->release($attemptId, $token);
@@ -81,7 +85,7 @@ final readonly class VoidAuthorization
         }
     }
 
-    private function void(PaymentAttempt $attempt, VoidReason $reason, string $token): PaymentAttempt
+    private function void(PaymentAttempt $attempt, VoidReason $reason, string $token, ?CallBudget $budget): PaymentAttempt
     {
         if ($attempt->status->isTerminal()) {
             return $attempt;
@@ -99,6 +103,10 @@ final readonly class VoidAuthorization
             throw AttemptBusyException::for($attempt->id);
         }
 
+        if ($budget !== null && ! $budget->affords()) {
+            throw CallBudgetExhausted::before('void the authorization');
+        }
+
         [$gateway, $connection] = $this->gateways->for($attempt);
 
         try {
@@ -113,6 +121,7 @@ final readonly class VoidAuthorization
                     ProviderPaymentStatus::RequiresPaymentMethod, ProviderPaymentStatus::RequiresConfirmation, ProviderPaymentStatus::RequiresAction, ProviderPaymentStatus::RequiresCapture,
                 ]),
                 ['payment_attempt_id' => $attempt->id, 'operation' => 'cancel'],
+                $budget,
             );
         } catch (GatewayConfigurationException $e) {
             // The connection lost its credentials (a disconnected api_key). A

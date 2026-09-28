@@ -11,6 +11,7 @@ use App\Modules\Checkout\Services\CheckoutConnection;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -48,7 +49,8 @@ final readonly class ReadCheckoutStatus
 
         if ($attempt !== null && $attempt->status->isInFlight() && ! $attempt->leaseHeld() && $this->due($attempt)) {
             try {
-                $attempt = $this->sync->handle($attempt->id, SyncReason::Checkout);
+                // The status request has its own time budget (a separate payer request).
+                $attempt = $this->sync->handle($attempt->id, SyncReason::Checkout, budget: CallBudget::forPayerRequest());
             } catch (Throwable $e) {
                 Log::warning('The checkout status could not be re-read from the gateway.', ['payment_attempt_id' => $attempt->id, 'exception' => $e::class]);
             }

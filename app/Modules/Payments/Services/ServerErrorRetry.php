@@ -45,6 +45,9 @@ final class ServerErrorRetry
             try {
                 return $call($current);
             } catch (GatewayUnavailableException $e) {
+                // With a budget (a payer request), neither the re-read nor the
+                // repetition starts unless it fits: the 5xx stands, and the
+                // caller answers "processing" (background work finishes it).
                 if (($e->httpStatus ?? 0) < 500 || $retry > self::MAX_RETRIES || ($budget !== null && ! $budget->affords())) {
                     throw $e;
                 }
@@ -53,6 +56,10 @@ final class ServerErrorRetry
 
                 if ($moved !== null) {
                     return $moved;
+                }
+
+                if ($budget !== null && ! $budget->affords()) {
+                    throw $e;
                 }
 
                 Log::warning('A gateway call answered a server error; repeated under a new idempotency key.', [...$context, 'retry' => $retry]);

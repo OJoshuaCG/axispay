@@ -19,6 +19,7 @@ use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Exceptions\AttemptBusyException;
+use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Models\PaymentAttempt;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Log;
@@ -58,7 +59,7 @@ final readonly class CompleteCheckoutAuthorization
         }
 
         try {
-            $attempt = $this->sync->handle($attempt->id, SyncReason::Checkout, complete: false);
+            $attempt = $this->sync->handle($attempt->id, SyncReason::Checkout, complete: false, budget: $budget);
         } catch (GatewayException $e) {
             Log::warning('The checkout could not re-read a payment after 3D Secure.', ['payment_attempt_id' => $attempt->id, 'exception' => $e::class]);
 
@@ -82,26 +83,31 @@ final readonly class CompleteCheckoutAuthorization
     /**
      * Completes an authorization for the page. Never an error page: anything
      * unexpected answers "processing", and the webhook or the reconciliation
-     * finishes the payment with the merchant's kept decision. So does a
-     * request with no time left for the merchant's validation and the
-     * capture (Stripe slow): the payment is authorized, and completing it is
-     * left to them.
+     * finishes the payment with the merchant's kept decision. The payer's
+     * time budget reaches every call of the completion (the merchant's
+     * validation, the capture or void, their retries): whatever does not
+     * fit is not started, and the payer is told the payment is processing.
+     * The authorization is then completed in the background, a minute later
+     * (CompleteAuthorizedPaymentJob), by Stripe's event or by the
+     * reconciliation: captured within the capture window, voided past it.
      */
     public static function complete(CaptureAuthorizedPayment $capture, string $attemptId, ?string $leaseToken = null, ?CallBudget $budget = null): CheckoutResult
     {
-        if ($budget !== null && ! $budget->affords(1, max(0, config()->integer('axispay.checkout.pre_payment_validation_seconds')))) {
-            Log::warning('The checkout ran out of time before capturing; the authorization is left to events and the reconciliation.', ['payment_attempt_id' => $attemptId]);
-
-            return CheckoutResult::of(CheckoutOutcome::Processing);
-        }
-
         try {
-            return self::toResult($capture->handle($attemptId, $leaseToken));
+            $result = $capture->handle($attemptId, $leaseToken, $budget);
         } catch (GatewayException|GatewayConfigurationException|AttemptBusyException $e) {
-            Log::warning('An authorization could not be completed now; left to the webhook and the reconciliation.', ['payment_attempt_id' => $attemptId, 'exception' => $e::class]);
+            Log::warning('An authorization could not be completed now; left to the background completion.', ['payment_attempt_id' => $attemptId, 'exception' => $e::class]);
+            CompleteAuthorizedPaymentJob::dispatch($attemptId)->delay(now()->addMinute());
 
             return CheckoutResult::of(CheckoutOutcome::Processing);
         }
+
+        if ($result->outcome === CaptureOutcome::Pending) {
+            // After the payer's lease is released, a job completes it.
+            CompleteAuthorizedPaymentJob::dispatch($attemptId)->delay(now()->addMinute());
+        }
+
+        return self::toResult($result);
     }
 
     /** What the page shows for the completion of an authorization. */

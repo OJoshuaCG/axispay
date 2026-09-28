@@ -11,10 +11,12 @@ use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Contracts\PrePaymentValidator;
+use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\CaptureResult;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\VoidReason;
+use App\Modules\Payments\Exceptions\CallBudgetExhausted;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
@@ -58,7 +60,12 @@ final readonly class CaptureAuthorizedPayment
         private VoidAuthorization $void,
     ) {}
 
-    public function handle(string $attemptId, ?string $leaseToken = null): CaptureResult
+    /**
+     * @param  CallBudget|null  $budget  a payer request's time budget: no merchant call or gateway
+     *                                   call starts unless it fits (Pending instead); null for
+     *                                   background work, bounded by its job's own time limit
+     */
+    public function handle(string $attemptId, ?string $leaseToken = null, ?CallBudget $budget = null): CaptureResult
     {
         if (Transactions::open()) {
             throw new LogicException('Completing an authorized payment calls the merchant and the gateway: never inside a transaction.');
@@ -77,7 +84,7 @@ final readonly class CaptureAuthorizedPayment
         }
 
         try {
-            return $this->complete($attempt, $token);
+            return $this->complete($attempt, $token, $budget);
         } finally {
             if ($leaseToken === null) {
                 $this->lease->release($attemptId, $token);
@@ -85,7 +92,7 @@ final readonly class CaptureAuthorizedPayment
         }
     }
 
-    private function complete(PaymentAttempt $attempt, string $token): CaptureResult
+    private function complete(PaymentAttempt $attempt, string $token, ?CallBudget $budget): CaptureResult
     {
         $outcome = $attempt->validation_outcome;
         $payerMessage = $attempt->validation_payer_message;
@@ -93,6 +100,11 @@ final readonly class CaptureAuthorizedPayment
         $windowElapsed = CaptureWindow::elapsed($attempt);
 
         if ($outcome === null && ! $windowElapsed) {
+            // The merchant's validation and the capture after it must both fit.
+            if ($budget !== null && ! $budget->affords(1, max(0, config()->integer('axispay.checkout.pre_payment_validation_seconds')))) {
+                return self::outOfTime($attempt, 'validate');
+            }
+
             // Step 4, outside any lock or transaction (rule 7b).
             $decision = $this->validator->decide(PaymentLink::query()->findOrFail($attempt->payment_link_id), $attempt);
             [$outcome, $payerMessage] = [$decision->outcome(), $decision->payerMessage];
@@ -136,7 +148,9 @@ final readonly class CaptureAuthorizedPayment
             };
 
             try {
-                $voided = $this->void->handle($current->id, $reason, $token);
+                $voided = $this->void->handle($current->id, $reason, $token, $budget);
+            } catch (CallBudgetExhausted) {
+                return self::outOfTime($current, 'void');
             } catch (GatewayException $e) {
                 Log::warning('Void outcome unknown; left to the webhook and the reconciliation.', ['payment_attempt_id' => $current->id, 'exception' => $e::class]);
 
@@ -148,6 +162,10 @@ final readonly class CaptureAuthorizedPayment
             }
 
             return new CaptureResult($reason === VoidReason::MerchantRejected ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
+        }
+
+        if ($budget !== null && ! $budget->affords()) {
+            return self::outOfTime($current, 'capture');
         }
 
         [$gateway, $connection] = $this->gateways->for($current);
@@ -163,10 +181,16 @@ final readonly class CaptureAuthorizedPayment
                     static fn (string $key): ProviderPayment => $gateway->capturePayment($connection, $providerPaymentId, $key),
                     static fn (): ?ProviderPayment => $gateways->movedOn($gateway, $connection, $providerPaymentId, [ProviderPaymentStatus::RequiresCapture]),
                     ['payment_attempt_id' => $current->id, 'operation' => 'capture'],
+                    $budget,
                 );
             } catch (GatewayRequestException $e) {
                 // Refused (e.g. the authorization expired): apply what the gateway says now.
                 Log::warning('The gateway refused a capture.', ['payment_attempt_id' => $current->id, 'provider_code' => $e->providerCode]);
+
+                if ($budget !== null && ! $budget->affords()) {
+                    return self::outOfTime($current, 'read the refused capture');
+                }
+
                 $payment = $this->gateways->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
             }
         } catch (GatewayException $e) {
@@ -184,5 +208,18 @@ final readonly class CaptureAuthorizedPayment
             in_array($status, [PaymentAttemptStatus::Succeeded, PaymentAttemptStatus::Processing], true) ? CaptureOutcome::Captured : CaptureOutcome::NotAuthorized,
             $applied->attempt,
         );
+    }
+
+    /**
+     * No time left in the payer's request for the next call: nothing more is
+     * sent, the attempt stays authorized, and the background work (Stripe's
+     * event, the delayed completion job, the reconciliation) captures it
+     * within the capture window or voids it past it.
+     */
+    private static function outOfTime(PaymentAttempt $attempt, string $step): CaptureResult
+    {
+        Log::warning('No time left in the payer request; the authorization is left to the background completion.', ['payment_attempt_id' => $attempt->id, 'step' => $step]);
+
+        return new CaptureResult(CaptureOutcome::Pending, $attempt);
     }
 }
