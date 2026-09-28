@@ -25,8 +25,13 @@ use App\Modules\Shared\Ids\Ulid;
  *
  * The ConfirmationToken is created with Stripe's test helper
  * (POST /v1/test_helpers/confirmation_tokens) from test payment methods, so
- * no browser is needed. What needs a browser (elements.update(), fonts in the
- * card iframe, handleNextAction) is on the manual list of ADR-0051.
+ * no browser is needed. This file is list A of the gate (automated): items
+ * 1, 2, 3, 4 (the resulting state), 8 (server half), 9 and 10. Run the
+ * api_key variant with a restricted key that holds ONLY the documented
+ * permissions (item 10). List B of the gate in ADR-0051 is checked by hand
+ * and recorded there (the cost and statement of a void, the authorization
+ * lifetime, elements.update(), fonts in the card iframe, the browser half
+ * of 3D Secure, billing details, Connect event delivery).
  */
 function checkoutContractEnv(string $name): ?string
 {

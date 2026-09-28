@@ -14,7 +14,7 @@ use function Pest\Laravel\get;
 use function Pest\Laravel\travel;
 
 /**
- * The payment page (plan 11.1-11.3, 11.6, 11.8; DESIGN.md; ADR-0051).
+ * The payment page (plan 11.1-11.3, 11.6, 11.8; docs/frontend/checkout-design.md; ADR-0051).
  */
 /**
  * @return array<mixed>

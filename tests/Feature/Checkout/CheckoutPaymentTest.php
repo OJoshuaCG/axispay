@@ -19,6 +19,8 @@ use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Models\DomainEvent;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 
+use function Pest\Laravel\travel;
+
 /**
  * The payment flow of the checkout (plan 11.4, ADR-0050, ADR-0051) against
  * FakePaymentGateway: authorize with manual capture, validation hook, capture.
@@ -222,7 +224,8 @@ it('uses stable idempotency keys: a retry after a network error confirms the sam
     [, $link, $fake] = Checkout::scenario();
     $fake->failNext('confirmPayment', new GatewayUnavailableException('Stripe is unavailable.'));
 
-    Checkout::pay($link, 'ctoken_success_same')->assertStatus(503)->assertJson(['outcome' => 'error']);
+    // A confirmation without an answer may be under way: "processing", never an error.
+    Checkout::pay($link, 'ctoken_success_same')->assertOk()->assertJson(['outcome' => 'processing']);
     Checkout::pay($link, 'ctoken_success_same')->assertOk()->assertJson(['outcome' => 'paid']);
 
     [$attempt] = Checkout::attempts($link);
@@ -260,4 +263,34 @@ it('shows "Payment complete" on the completion page only to the session that pai
     \Pest\Laravel\flushSession();
 
     \Pest\Laravel\get(payUrl('/l/'.$link->public_token.'/complete'), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->assertSee('Este cobro ya fue pagado');
+});
+
+// Request time budget (ADR-0051) ---------------------------------------------
+
+it('stops before confirming when Stripe was slow and no time is left: nothing is charged', function (): void {
+    [, $link, $fake] = Checkout::scenario();
+    $fake->beforeNext('createOrUpdatePayment', static fn () => travel(20)->seconds());
+
+    Checkout::pay($link)->assertJson(['outcome' => 'error']);
+
+    expect($fake->callsTo('confirmPayment'))->toBe([])
+        ->and(Checkout::freshLink($link)->status)->toBe(PaymentLinkStatus::Active);
+});
+
+it('answers processing when Stripe was slow and no time is left to capture; the status poll completes it', function (): void {
+    [, $link, $fake] = Checkout::scenario();
+    $fake->beforeNext('confirmPayment', static fn () => travel(46)->seconds());
+
+    Checkout::pay($link)->assertOk()->assertJson(['outcome' => 'processing']);
+
+    [$attempt] = Checkout::attempts($link);
+    expect($fake->callsTo('capturePayment'))->toBe([])
+        ->and($attempt->status)->toBe(PaymentAttemptStatus::RequiresCapture);
+
+    // Later, the page polls: the payment is re-read and captured once.
+    travel(10)->seconds();
+    Checkout::status($link)->assertOk();
+
+    expect($fake->callsTo('capturePayment'))->toHaveCount(1)
+        ->and(Checkout::attempts($link)[0]->status)->toBe(PaymentAttemptStatus::Succeeded);
 });

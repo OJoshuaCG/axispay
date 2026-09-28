@@ -80,7 +80,7 @@ it('frees the reserved link when the confirmation fails, or expires it past its 
     [, $link, $fake] = Checkout::scenario();
     $fake->failNext('confirmPayment', new GatewayUnavailableException('down'));
 
-    Checkout::pay($link)->assertStatus(503)->assertJson(['outcome' => 'error']);
+    Checkout::pay($link)->assertOk()->assertJson(['outcome' => 'processing']);
     expect(Checkout::freshLink($link)->status)->toBe(PaymentLinkStatus::Active)
         ->and(Checkout::attempts($link)[0]->leaseHeld())->toBeFalse();
 

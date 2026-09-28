@@ -199,7 +199,8 @@ it('continues from the current state when a confirmation is retried after a lost
     [, $link, $fake] = Checkout::scenario();
     $fake->capturesAs(ProviderPaymentStatus::RequiresCapture)->loseNextResponse('confirmPayment');
 
-    Checkout::pay($link, 'ctoken_success_first')->assertStatus(503);
+    // The answer was lost: the payment may be under way, so the page says processing, never an error.
+    Checkout::pay($link, 'ctoken_success_first')->assertOk()->assertJson(['outcome' => 'processing']);
     [$attempt] = Checkout::attempts($link);
     expect($fake->paymentStatus((string) $attempt->provider_payment_id))->toBe(ProviderPaymentStatus::RequiresCapture);
 
