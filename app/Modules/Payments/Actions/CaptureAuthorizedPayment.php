@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Actions;
 
+use App\Modules\Gateways\Data\ProviderPayment;
+use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
@@ -17,6 +19,7 @@ use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\CaptureWindow;
 use App\Modules\Payments\Services\IdempotencyKeys;
+use App\Modules\Payments\Services\ServerErrorRetry;
 use App\Modules\Shared\Database\Transactions;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
@@ -153,7 +156,17 @@ final readonly class CaptureAuthorizedPayment
             $providerPaymentId = (string) $current->provider_payment_id;
 
             try {
-                $payment = $this->gateways->guard($connection, static fn () => $gateway->capturePayment($connection, $providerPaymentId, IdempotencyKeys::capture($current->id)));
+                $guard = $this->gateways;
+                $payment = ServerErrorRetry::run(
+                    IdempotencyKeys::capture($current->id),
+                    static fn (string $key) => $guard->guard($connection, static fn () => $gateway->capturePayment($connection, $providerPaymentId, $key)),
+                    static function () use ($guard, $connection, $gateway, $providerPaymentId): ?ProviderPayment {
+                        $now = $guard->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
+
+                        return $now->status === ProviderPaymentStatus::RequiresCapture ? null : $now;
+                    },
+                    ['payment_attempt_id' => $current->id, 'operation' => 'capture'],
+                );
             } catch (GatewayRequestException $e) {
                 // Refused (e.g. the authorization expired): apply what the gateway says now.
                 Log::warning('The gateway refused a capture.', ['payment_attempt_id' => $current->id, 'provider_code' => $e->providerCode]);

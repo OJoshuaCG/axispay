@@ -25,9 +25,17 @@ final class IdempotencyKeys
         return "axispay:update_pi:{$attemptId}:{$amount->minorAmount}{$amount->currency->value}";
     }
 
-    public static function confirm(string $attemptId, string $confirmationToken): string
+    /**
+     * Covers every parameter of the confirmation that can vary between two
+     * tries (the token, the receipt e-mail and whether one is sent, the
+     * return URL): the same key with other parameters is refused by the
+     * gateway. Hashed, so the key stays short whatever the token length.
+     */
+    public static function confirm(string $attemptId, string $confirmationToken, ?string $receiptEmail = null, string $returnUrl = ''): string
     {
-        return "axispay:confirm:{$attemptId}:{$confirmationToken}";
+        $parameters = hash('sha256', implode("\n", [$confirmationToken, $receiptEmail ?? '-', $returnUrl]));
+
+        return "axispay:confirm:{$attemptId}:{$parameters}";
     }
 
     public static function capture(string $attemptId): string

@@ -127,7 +127,8 @@ function initCheckout() {
         amount: config.amount,
         currency: config.currency,
         captureMethod: 'manual',
-        paymentMethodTypes: ['card'],
+        // Stripe.js option matching the server's `allowed_payment_method_types`.
+        allowedPaymentMethodTypes: ['card'],
         locale: config.locale,
         fonts: config.fonts,
         appearance: appearance(),
@@ -136,7 +137,8 @@ function initCheckout() {
     const never = Object.fromEntries((config.billingDetailsNever ?? []).map((field) => [field, 'never']));
     const paymentElement = elements.create('payment', {
         fields: { billingDetails: never },
-        wallets: { applePay: 'never', googlePay: 'never' },
+        // Card only (ADR-018): no wallets, no Link.
+        wallets: { applePay: 'never', googlePay: 'never', link: 'never' },
     });
 
     let ready = false;

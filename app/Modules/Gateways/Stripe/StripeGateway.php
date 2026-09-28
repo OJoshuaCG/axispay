@@ -130,7 +130,9 @@ final readonly class StripeGateway implements PaymentGateway
                 ? $context->client->paymentIntents->create([
                     ...$params,
                     'capture_method' => 'manual',
-                    'payment_method_types' => ['card'],
+                    // `allowed_payment_method_types` (2026-07-29.dahlia) replaces
+                    // `payment_method_types`, which later versions remove (ADR-0051).
+                    'allowed_payment_method_types' => ['card'],
                     'expand' => self::EXPAND,
                 ], $context->options($request->idempotencyKey))
                 : $context->client->paymentIntents->update($request->providerPaymentId, [...$params, 'expand' => self::EXPAND], $context->options($request->idempotencyKey));
@@ -188,13 +190,24 @@ final readonly class StripeGateway implements PaymentGateway
         return StripePaymentMapper::toProviderPayment($intent);
     }
 
-    /** POST /v1/payment_intents/{id}/capture: the full authorized amount. */
+    /**
+     * POST /v1/payment_intents/{id}/capture: the full authorized amount. A
+     * payment that is no longer capturable (captured by another process,
+     * canceled, expired) is re-read and returned as it is.
+     */
     public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
     {
         $context = $this->clients->for($connection);
 
         try {
             $intent = $context->client->paymentIntents->capture($providerPaymentId, ['expand' => self::EXPAND], $context->options($idempotencyKey));
+        } catch (InvalidRequestException $e) {
+            // Captured elsewhere, canceled or expired: the payment as it is now.
+            if ($e->getStripeCode() === 'payment_intent_unexpected_state') {
+                return $this->retrievePayment($connection, $providerPaymentId);
+            }
+
+            throw StripeErrorMapper::map($e, 'capturePayment');
         } catch (ApiErrorException $e) {
             throw StripeErrorMapper::map($e, 'capturePayment');
         }

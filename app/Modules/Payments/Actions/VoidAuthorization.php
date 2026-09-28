@@ -7,6 +7,8 @@ namespace App\Modules\Payments\Actions;
 use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Gateways\Data\ProviderPayment;
+use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
 use App\Modules\Gateways\Exceptions\GatewayException;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
@@ -19,6 +21,7 @@ use App\Modules\Payments\Services\AttemptGateway;
 use App\Modules\Payments\Services\AttemptLease;
 use App\Modules\Payments\Services\IdempotencyKeys;
 use App\Modules\Payments\Services\PaymentAttemptStateMachine;
+use App\Modules\Payments\Services\ServerErrorRetry;
 use App\Modules\Shared\Database\Transactions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -97,7 +100,17 @@ final readonly class VoidAuthorization
 
         try {
             $providerPaymentId = $attempt->provider_payment_id;
-            $payment = $this->gateways->guard($connection, static fn () => $gateway->cancelPayment($connection, $providerPaymentId, IdempotencyKeys::cancel($attempt->id)));
+            $guard = $this->gateways;
+            $payment = ServerErrorRetry::run(
+                IdempotencyKeys::cancel($attempt->id),
+                static fn (string $key) => $guard->guard($connection, static fn () => $gateway->cancelPayment($connection, $providerPaymentId, $key)),
+                static function () use ($guard, $connection, $gateway, $providerPaymentId): ?ProviderPayment {
+                    $now = $guard->guard($connection, static fn () => $gateway->retrievePayment($connection, $providerPaymentId));
+
+                    return in_array($now->status, [ProviderPaymentStatus::Canceled, ProviderPaymentStatus::Succeeded, ProviderPaymentStatus::Processing], true) ? $now : null;
+                },
+                ['payment_attempt_id' => $attempt->id, 'operation' => 'cancel'],
+            );
         } catch (GatewayConfigurationException $e) {
             // The connection lost its credentials (a disconnected api_key). A
             // payment that was never authorized cannot be charged any more and
