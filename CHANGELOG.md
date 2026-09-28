@@ -66,6 +66,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     attempt closes, from Phase 8), the card fingerprint for forensics.
   - Production refuses to start without the security-check keys or a
     trusted proxy, or with the sandbox on.
+  - `AXISPAY_TURNSTILE_ENABLED=false` temporarily turns the bot check off
+    until a Cloudflare account exists (ADR-0052): no Turnstile keys needed,
+    a warning in `axispay:doctor`, every other card-testing limit unchanged.
   - Checkout sandbox for local development and tests (a stand-in for Stripe
     on the server and in the browser, a demo command); never in production.
   - Stripe acceptance gate: contract tests for the automated items (both

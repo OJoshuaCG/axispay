@@ -93,6 +93,7 @@ The linear flow of ADR-0050: authorize, ask the merchant, then capture.
 | Superadmin alerts | Phase 9; until then an alert-level log line |
 
 - **Only real confirmations count**, the moment they are about to reach Stripe, and a burst of simultaneous requests can never exceed the limit. Answers of "a payment is in progress" never count, so tabs or a double click cannot pause a link without declines. Cards Stripe does not recognize, or cannot read because it is unavailable, count only against that client, so a stranger can pause only themselves.
+- **The bot check can be switched off temporarily**, until a Cloudflare account exists: [ADR-0052](0052-temporary-turnstile-switch.md). Every other limit in this section stays.
 - **Turnstile threshold:** Turnstile is required from the first payment try after a decline on the link or in the payer's session. Plan 11.7 rule 3 ("from the 2nd failed attempt") and critical case 16 ("after a decline") disagree; the stricter reading was chosen, configurable, pending the owner's confirmation.
 - **The security check is verified on the server** before Stripe is called and fails closed; it must have been solved on the pay host for a payment. A solved check is valid once: after any payment try the page asks for a new one. Production refuses to start without the security-check keys (without them a link would stop taking payments after its first decline).
 - **A card-testing pause tells the browser the real wait**, so Pay never comes back early; other request limits say "too many requests, try again in N seconds".

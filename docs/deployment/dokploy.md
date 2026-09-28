@@ -139,7 +139,8 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `CACHE_STORE` | yes | `database` | |
 | `QUEUE_CONNECTION` | yes | `database` | ADR-0016 |
 | `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). Required: the application refuses to start in production without it, and `axispay:doctor` fails on `*` (ADR-0051). |
-| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | yes | Cloudflare Turnstile keys of the pay host | Required: the application refuses to start in production without both, and `axispay:doctor` fails without them. Without Turnstile a link stops taking payments after its first decline (ADR-0051). |
+| `AXISPAY_TURNSTILE_ENABLED` | no | `true` | The bot check (Turnstile) after a decline. **`false` is a temporary measure until a Cloudflare account exists** ([ADR-0052](../adr/0052-temporary-turnstile-switch.md)): the check is never asked for, the two keys below are not needed, and `axispay:doctor` shows a warning (not an error). Every other card-testing limit still applies. Set it back to `true` (with the keys) as soon as the account exists. |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | yes (unless `AXISPAY_TURNSTILE_ENABLED=false`) | Cloudflare Turnstile keys of the pay host | Required while the check is on: the application refuses to start in production without both, and `axispay:doctor` fails without them. Without Turnstile a link stops taking payments after its first decline (ADR-0051). |
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5). `smtp` on 587 upgrades with STARTTLS; implicit TLS on 465 is `smtps`. `MAIL_ENCRYPTION` is **ignored** (Laravel 13 reads `MAIL_SCHEME` only). Example: [Outgoing mail](#outgoing-mail) |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | yes | **secret** | For a mailbox account, the username is the full address |
@@ -217,6 +218,7 @@ SESSION_SECURE_COOKIE=${{environment.SESSION_SECURE_COOKIE}}
 CACHE_STORE=${{environment.CACHE_STORE}}
 QUEUE_CONNECTION=${{environment.QUEUE_CONNECTION}}
 TRUSTED_PROXIES=${{environment.TRUSTED_PROXIES}}
+AXISPAY_TURNSTILE_ENABLED=${{environment.AXISPAY_TURNSTILE_ENABLED}}
 TURNSTILE_SITE_KEY=${{environment.TURNSTILE_SITE_KEY}}
 TURNSTILE_SECRET_KEY=${{environment.TURNSTILE_SECRET_KEY}}
 MAIL_MAILER=${{environment.MAIL_MAILER}}
@@ -696,7 +698,7 @@ One-time steps when a deployment moves to Phase 4 (checkout and card payments, [
 1. **Database update:** deploy `web`; it runs the migrations before it takes traffic.
 2. **Merchants' own webhook endpoints:** in the `web` terminal run `php artisan axispay:stripe-sync-webhook-endpoints`. It adds the payment events to the endpoint of every merchant connected with API keys (their Stripe accounts only send what their endpoint subscribes to).
 3. **The six payment events on both Connect destinations** (test and live): add `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` in the Stripe Dashboard ([Connect webhook destination](#connect-webhook-destination-required)). `php artisan axispay:doctor` prints the full list.
-4. **Security-check keys:** set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (Cloudflare Turnstile, a widget for the pay host). The application refuses to start in production without both: without them a link would stop taking payments after its first decline.
+4. **Security-check keys:** set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (Cloudflare Turnstile, a widget for the pay host). The application refuses to start in production without both: without them a link would stop taking payments after its first decline. Without a Cloudflare account yet, set `AXISPAY_TURNSTILE_ENABLED=false` instead (temporary, [ADR-0052](../adr/0052-temporary-turnstile-switch.md)): no keys are needed and the other card-testing limits still apply.
 5. **Sandbox off:** `AXISPAY_CHECKOUT_SANDBOX` must not be set. The application refuses to start with it outside local development and tests.
 6. **Trusted proxy:** `TRUSTED_PROXIES` is Traefik's network range, never `*` ([Trusted proxies](#trusted-proxies)). Without it every payer shares one address and the card-testing limits pause payments for everyone.
 7. Run `php artisan axispay:doctor`: no `ERROR` lines.
