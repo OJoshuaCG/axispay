@@ -109,6 +109,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     refuses to start without the Turnstile keys (and the doctor reports
     them); a spent Turnstile token is always replaced; the card fingerprint
     is kept for forensics; lifting a block needs re-authentication.
+  - Code quality and performance: the checkout orchestrates while the
+    Payments module owns claiming, payer details and confirmation of an
+    attempt; one lock order for link and attempt everywhere; void and review
+    reasons and the failure kind of a declined try are named values (the
+    failure kind is decided by the gateway adapter and stored); the page
+    script is split into small modules and never leaves the Pay button busy
+    after an error. A gateway event has at most one job at a time (duplicate
+    deliveries and the sweeper no longer queue a second one, and the sweeper
+    records no retry for a job still waiting); the unroutable sweep reads no
+    event bodies and looks each account up once; the status poll uses no
+    session and re-reads a 3D Secure step left open less and less often;
+    Stripe.js loads deferred with an early connection to Stripe's API; a page
+    load reads the tenant and its connection once; the card form loads two
+    font weights instead of three.
   - Stripe API correctness: `allowed_payment_method_types` replaces
     `payment_method_types`; Link is hidden in the payment form; a creation,
     capture or void that answered a stored server error is repeated under a
