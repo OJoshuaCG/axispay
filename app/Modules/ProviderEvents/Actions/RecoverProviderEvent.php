@@ -33,7 +33,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Every requeue is recorded in the tenant's audit log.
  */
-final readonly class RecoverProviderEvent
+final class RecoverProviderEvent
 {
     public const string REQUEUED = 'requeued';
 
@@ -41,11 +41,14 @@ final readonly class RecoverProviderEvent
 
     public const string SKIPPED = 'skipped';
 
+    /** @var array<string, GatewayConnection|null> connection per account, mode and attempt, for one run */
+    private array $connections = [];
+
     public function __construct(
-        private ProviderEventInbox $inbox,
-        private GatewayConnectionResolver $resolver,
-        private TenantContext $context,
-        private AuditLogger $audit,
+        private readonly ProviderEventInbox $inbox,
+        private readonly GatewayConnectionResolver $resolver,
+        private readonly TenantContext $context,
+        private readonly AuditLogger $audit,
     ) {}
 
     /**
@@ -106,7 +109,8 @@ final readonly class RecoverProviderEvent
     {
         $after = max(1, config()->integer('axispay.gateways.stripe.provider_events.redispatch_after_seconds'));
 
-        if ($event->tenant_id === null || $event->received_at->greaterThan(now()->subSeconds($after))) {
+        // Its job may still be waiting for a retry (backoff): not lost.
+        if ($event->tenant_id === null || $event->received_at->greaterThan(now()->subSeconds($after)) || ProcessProviderEventJob::inFlight($event->id)) {
             return self::SKIPPED;
         }
 
@@ -131,6 +135,15 @@ final readonly class RecoverProviderEvent
 
         if ($connection === null) {
             return self::SKIPPED;
+        }
+
+        // Listed without its payload (sweeper): read it now, for the routed copy.
+        if (! array_key_exists('payload', $event->getAttributes())) {
+            $event = $this->inbox->findById($event->id);
+
+            if ($event === null || $event->status !== ProviderEventStatus::Unroutable) {
+                return self::SKIPPED;
+            }
         }
 
         $routed = $this->context->runAsTenant($connection->tenant_id, $event->livemode, function () use ($event, $connection): ProviderEvent {
@@ -175,9 +188,21 @@ final readonly class RecoverProviderEvent
             return null;
         }
 
+        // Many events of one account: its connection is resolved once per run.
+        $key = implode('|', [$event->provider->value, $event->provider_account_id, $event->livemode ? '1' : '0', $event->payment_attempt_id ?? '-']);
+
+        if (array_key_exists($key, $this->connections)) {
+            return $this->connections[$key];
+        }
+
+        return $this->connections[$key] = $this->resolveConnection($event, $event->provider_account_id);
+    }
+
+    private function resolveConnection(ProviderEvent $event, string $accountId): ?GatewayConnection
+    {
         $connection = ($event->payment_attempt_id !== null
-            ? $this->resolver->forPaymentAttempt($event->provider, $event->payment_attempt_id, $event->provider_account_id, $event->livemode)
-            : null) ?? $this->resolver->forProviderAccount($event->provider, $event->provider_account_id, $event->livemode);
+            ? $this->resolver->forPaymentAttempt($event->provider, $event->payment_attempt_id, $accountId, $event->livemode)
+            : null) ?? $this->resolver->forProviderAccount($event->provider, $accountId, $event->livemode);
 
         return $connection !== null && $connection->connection_method->usesConnect() ? $connection : null;
     }

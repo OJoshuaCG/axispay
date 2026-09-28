@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Modules\ProviderEvents\Console;
 
 use App\Modules\ProviderEvents\Actions\RecoverProviderEvent;
-use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Services\ProviderEventInbox;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
@@ -31,7 +30,7 @@ final class SweepProviderEventsCommand extends Command
         $counts = [RecoverProviderEvent::REQUEUED => 0, RecoverProviderEvent::REROUTED => 0, RecoverProviderEvent::SKIPPED => 0];
         $events = [
             ...$inbox->staleReceived(CarbonImmutable::now()->subSeconds($after), self::BATCH)->all(),
-            ...$inbox->withStatus(ProviderEventStatus::Unroutable, self::BATCH, newestFirst: true)->all(),
+            ...$inbox->unroutableSummaries(self::BATCH)->all(),
         ];
 
         foreach ($events as $event) {

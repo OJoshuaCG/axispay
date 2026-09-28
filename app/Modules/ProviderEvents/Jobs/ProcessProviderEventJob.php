@@ -10,9 +10,12 @@ use App\Modules\ProviderEvents\Actions\ProcessProviderEvent;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\Middleware\RestoreTenantContext;
 use Illuminate\Bus\Queueable;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -20,8 +23,12 @@ use Throwable;
  * queue, in the tenant context of its connection (routing already happened
  * when it was stored). Only IDs are serialized. Five attempts with backoff,
  * then the event is marked `failed` (and logged for alerting).
+ *
+ * Unique per stored event for as long as all its tries can take (ADR-0051):
+ * a duplicate delivery, the sweeper or an operator retry never queues a
+ * second job while one is queued, running or waiting for its next try.
  */
-final class ProcessProviderEventJob implements ShouldQueue, TenantAware
+final class ProcessProviderEventJob implements ShouldBeUnique, ShouldQueue, TenantAware
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -32,12 +39,34 @@ final class ProcessProviderEventJob implements ShouldQueue, TenantAware
 
     public int $tries = 5;
 
+    /** Every try's time limit plus every backoff, with a margin (see backoff()). */
+    public int $uniqueFor = 1500;
+
     public function __construct(
         public readonly string $providerEventId,
         public readonly string $capturedTenantId,
         public readonly bool $capturedLivemode,
     ) {
         $this->onQueue('critical');
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->providerEventId;
+    }
+
+    /** Whether a job for this stored event is queued, running or waiting for its next try. */
+    public static function inFlight(string $providerEventId): bool
+    {
+        $lock = Cache::lock(UniqueLock::getKey(new self($providerEventId, '', false)), 1);
+
+        if (! $lock->get()) {
+            return true;
+        }
+
+        $lock->release();
+
+        return false;
     }
 
     public function tenantId(): string
