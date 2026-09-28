@@ -17,7 +17,6 @@ use App\Modules\Gateways\Data\RefundRequest;
 use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
-use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
@@ -25,6 +24,7 @@ use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
+use App\Modules\Gateways\Stripe\StripeFailureKinds;
 use Closure;
 use LogicException;
 use Throwable;
@@ -68,6 +68,9 @@ final class FakePaymentGateway implements PaymentGateway
 
     /** @var array<string, true> */
     private array $serverErrorNext = [];
+
+    /** Refuse operations the payment's state does not allow, as Stripe's raw API does. */
+    private bool $strictStates = false;
 
     /** @var array<string, true> keys whose stored answer is a 500 */
     private array $serverErrorKeys = [];
@@ -227,7 +230,7 @@ final class FakePaymentGateway implements PaymentGateway
         };
 
         if ($scenario === 'decline' || $scenario === 'funds') {
-            $payment['failure'] = new ProviderPaymentFailure('ch_fake_'.bin2hex(random_bytes(4)), 'card_declined', $scenario === 'funds' ? 'insufficient_funds' : 'generic_decline', 'Your card was declined.', $scenario === 'funds' ? ProviderFailureKind::InsufficientFunds : ProviderFailureKind::CardDeclined);
+            $payment['failure'] = new ProviderPaymentFailure('ch_fake_'.bin2hex(random_bytes(4)), 'card_declined', $declineCode = ($scenario === 'funds' ? 'insufficient_funds' : 'generic_decline'), 'Your card was declined.', StripeFailureKinds::of('card_declined', $declineCode));
         }
 
         $result = $this->toPayment($payment);
@@ -242,7 +245,8 @@ final class FakePaymentGateway implements PaymentGateway
         $this->calls[] = 'retrievePayment:'.$providerPaymentId;
         $this->throwIfFailing('retrievePayment');
 
-        return $this->toPayment($this->payments[$providerPaymentId] ?? throw new LogicException("FakePaymentGateway has no payment {$providerPaymentId}."));
+        // Like the Stripe adapter for `resource_missing`.
+        return $this->toPayment($this->payments[$providerPaymentId] ?? throw new GatewayRequestException('Fake: no such payment.', 'resource_missing', null, 404));
     }
 
     public function capturePayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
@@ -255,8 +259,14 @@ final class FakePaymentGateway implements PaymentGateway
         if (! isset($this->idempotent[$idempotencyKey])) {
             $this->idempotent[$idempotencyKey] = $providerPaymentId;
 
+            // Like the Stripe adapter: returned as it is now, unless a test
+            // asks for the raw gateway refusal (strictStates()).
             if ($this->payments[$providerPaymentId]['status'] !== ProviderPaymentStatus::RequiresCapture) {
-                throw new GatewayRequestException('Fake: not capturable.', 'payment_intent_unexpected_state', null, 400);
+                if ($this->strictStates) {
+                    throw new GatewayRequestException('Fake: not capturable.', 'payment_intent_unexpected_state', null, 400);
+                }
+
+                return $this->toPayment($this->payments[$providerPaymentId]);
             }
 
             $this->payments[$providerPaymentId]['status'] = $this->captureResult;
@@ -335,6 +345,14 @@ final class FakePaymentGateway implements PaymentGateway
         if (isset($this->serverErrorKeys[$idempotencyKey])) {
             throw new GatewayUnavailableException('Fake: a stored server error.', 'api_error', null, 500);
         }
+    }
+
+    /** Test seam: answer `payment_intent_unexpected_state` instead of the current payment. */
+    public function strictStates(): self
+    {
+        $this->strictStates = true;
+
+        return $this;
     }
 
     /** Test seam: the next call of `$method` throws. */

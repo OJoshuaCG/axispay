@@ -168,19 +168,33 @@ final class SandboxPaymentGateway implements PaymentGateway
     {
         self::assertTestMode($connection);
 
+        // Every capture call is counted atomically, before idempotency, so
+        // tests can prove how many times the platform asked (capturesOf()).
+        $counter = self::PREFIX.'capture-calls:'.$providerPaymentId;
+        $this->cache->add($counter, 0, 86_400);
+        $this->cache->increment($counter);
+
         return $this->idempotent($idempotencyKey, function () use ($providerPaymentId): array {
             $state = $this->load($providerPaymentId);
 
+            // Like the Stripe adapter: a payment no longer capturable
+            // (captured elsewhere, canceled) is returned as it is now.
             if ($state['status'] !== ProviderPaymentStatus::RequiresCapture->value) {
-                throw new GatewayRequestException('The sandbox payment is not authorized.', 'payment_intent_unexpected_state', null, 400);
+                return $state;
             }
 
             $state['status'] = ProviderPaymentStatus::Succeeded->value;
-            // Counted, so tests can prove a payment is captured at most once.
-            $state['captures'] = (is_int($state['captures'] ?? null) ? $state['captures'] : 0) + 1;
 
             return $this->store($state);
         });
+    }
+
+    /** How many capture calls the platform made for a sandbox payment (tests). */
+    public function captureCallsOf(string $providerPaymentId): int
+    {
+        $calls = $this->cache->get(self::PREFIX.'capture-calls:'.$providerPaymentId);
+
+        return is_numeric($calls) ? (int) $calls : 0;
     }
 
     public function cancelPayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment
