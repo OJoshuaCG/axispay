@@ -63,6 +63,16 @@ final class TurnstileVerifier
         }
 
         if (! $response->successful() || $response->json('success') !== true) {
+            $codes = $response->json('error-codes');
+
+            // Cloudflare accepts a token once and for 5 minutes: a reused or
+            // expired token is a page that must ask for a fresh one, not an attack.
+            if (is_array($codes) && in_array('timeout-or-duplicate', $codes, true)) {
+                Log::notice('A Turnstile token was expired or already used.');
+            } else {
+                Log::info('Turnstile refused a token.', ['error_codes' => is_array($codes) ? array_values(array_filter($codes, 'is_string')) : []]);
+            }
+
             return false;
         }
 

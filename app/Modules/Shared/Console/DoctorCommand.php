@@ -48,6 +48,7 @@ final class DoctorCommand extends Command
         $this->checkSessionStorage();
         $this->checkCache();
         $this->checkProxies();
+        $this->checkTurnstile();
         $this->checkQueue();
         $this->checkMigrations($migrator);
         $this->checkStripeWebhooks($activity, $urls);
@@ -217,6 +218,21 @@ final class DoctorCommand extends Command
         };
 
         $this->row('TRUSTED_PROXIES', $status, $detail);
+    }
+
+    /** ADR-0051: without Turnstile a link stops taking payments after its first decline. */
+    private function checkTurnstile(): void
+    {
+        $missing = array_keys(array_filter([
+            'TURNSTILE_SITE_KEY' => trim(self::string(config('services.turnstile.site_key'))) === '',
+            'TURNSTILE_SECRET_KEY' => trim(self::string(config('services.turnstile.secret_key'))) === '',
+        ]));
+
+        [$status, $detail] = $missing === []
+            ? [self::OK, 'site and secret keys set']
+            : [app()->environment('production') ? self::ERROR : self::WARN, implode(', ', $missing).' unset: links stop taking payments after their first decline'];
+
+        $this->row('Turnstile', $status, $detail);
     }
 
     private function checkQueue(): void

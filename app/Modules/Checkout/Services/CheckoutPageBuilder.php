@@ -16,6 +16,7 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Builds the payment page of a link (plan 11.2, 11.3). The gateway SDK is
@@ -115,10 +116,7 @@ final readonly class CheckoutPageBuilder
                 'complete' => $this->urls->complete($link),
                 'sandboxNextAction' => SandboxMode::enabled() ? $this->urls->sandboxNextAction($link) : null,
             ],
-            'turnstile' => [
-                'siteKey' => $this->turnstile->siteKey(),
-                'required' => $this->guard->turnstileRequired($link, $sessionDeclines),
-            ],
+            'turnstile' => $this->turnstileConfig($link, $sessionDeclines),
             'pausedMinutes' => $this->guard->pausedMinutes($link),
             'poll' => [
                 'intervalMs' => max(1, config()->integer('axispay.checkout.poll_interval_seconds')) * 1000,
@@ -126,6 +124,23 @@ final readonly class CheckoutPageBuilder
             ],
             'billingDetailsNever' => self::collectedBillingDetails($fields),
         ];
+    }
+
+    /**
+     * @return array{siteKey: string|null, required: bool}
+     */
+    private function turnstileConfig(PaymentLink $link, int $sessionDeclines): array
+    {
+        $siteKey = $this->turnstile->siteKey();
+        $required = $this->guard->turnstileRequired($link, $sessionDeclines);
+
+        // The page cannot pay without the widget; production refuses to boot
+        // without the keys, so this only happens in a misconfigured non-production.
+        if ($required && $siteKey === null) {
+            Log::error('Turnstile is required on a payment page but TURNSTILE_SITE_KEY is not configured.', ['payment_link_id' => $link->id]);
+        }
+
+        return ['siteKey' => $siteKey, 'required' => $required];
     }
 
     /**

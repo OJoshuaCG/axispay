@@ -30,4 +30,10 @@ final readonly class CheckoutResult
     {
         return new self($outcome);
     }
+
+    /** The same answer, asking the page for a fresh Turnstile token. */
+    public function withTurnstileRequired(): self
+    {
+        return new self($this->outcome, $this->clientSecret, $this->minutes, $this->payerMessage, true, $this->declined, $this->attemptId);
+    }
 }

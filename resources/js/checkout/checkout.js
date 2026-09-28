@@ -296,10 +296,24 @@ function initCheckout() {
         });
     }
 
+    // Turnstile is required but the page has no site key: never skip the
+    // check silently; the server would refuse the payment anyway.
+    function turnstileUnavailable() {
+        button.setAttribute('aria-disabled', 'true');
+        showAlert(strings.securityUnavailable || strings.errorMessage);
+        console.error('Turnstile is required but no site key is configured.');
+    }
+
     async function renderTurnstile(force = false) {
         turnstileRequired = true;
 
-        if (!config.turnstile?.siteKey || !turnstileSlot) {
+        if (!config.turnstile?.siteKey) {
+            turnstileUnavailable();
+
+            return;
+        }
+
+        if (!turnstileSlot) {
             return;
         }
 
@@ -471,7 +485,13 @@ function initCheckout() {
         hideAlerts();
         clearFieldErrors();
 
-        if (turnstileRequired && config.turnstile?.siteKey && !turnstileToken) {
+        if (turnstileRequired && !config.turnstile?.siteKey) {
+            turnstileUnavailable();
+
+            return;
+        }
+
+        if (turnstileRequired && !turnstileToken) {
             showAlert(strings.turnstileMessage, 'warning');
             turnstileTarget?.focus();
 

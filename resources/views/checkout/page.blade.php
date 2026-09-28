@@ -96,6 +96,7 @@
                      data-processing="{{ __('checkout.processing_payment') }}"
                      data-turnstile-message="{{ __('checkout.messages.turnstile') }}"
                      data-error-message="{{ __('checkout.messages.error') }}"
+                     data-security-unavailable="{{ __('checkout.messages.security_unavailable') }}"
                      data-fix-fields="{{ __('checkout.messages.fix_fields') }}"
                      data-auth-failed="{{ __('checkout.messages.authentication_failed') }}"
                      data-paused-message="{{ $page->client['pausedMinutes'] !== null ? __('checkout.messages.rate_limited', ['minutes' => $page->client['pausedMinutes']]) : '' }}"
