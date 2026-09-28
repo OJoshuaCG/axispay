@@ -11,151 +11,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Phase 4 — Checkout and card payments** (ADR-0051; acceptance conditional
   on the Stripe acceptance gate with real test-mode keys):
-  - Public payment page on the pay host (`/l/{token}`) in every state of plan
-    11.2, following the approved design: merchant header, order summary,
-    payer fields (the whole MVP catalog, stored encrypted), Stripe Payment
-    Element (card only), Turnstile when required, "Powered by" footer; EN and
-    ES (payer-facing Spanish uses *tú*); follows the OS theme; accessible
-    focus and live-region handling. Invalid tokens answer the same 404.
-  - Linear payment flow of ADR-0050: payment attempts (one active per link,
-    enforced by the database), manual-capture PaymentIntents confirmed with a
-    ConfirmationToken, 3D Secure through Stripe.js, the pre-payment
-    validation extension point (not configured until Phase 5), capture, and
-    the complete void path for rejections. Stable idempotency keys and a
-    lease per attempt: a second tab never pays twice.
-  - Stripe `payment_intent.*` events re-read and applied (duplicates and
-    out-of-order events harmless); a late success wins over an expired or
-    canceled link and is flagged; payments the platform did not create are
-    ignored as `foreign_object` with a reduced payload. `api_key` endpoints
-    and the Connect destinations subscribe to the six payment events (run
-    `axispay:stripe-sync-webhook-endpoints` after deploying).
-  - Reconciliation every 15 minutes (`axispay:payments:reconcile`): open
-    attempts re-read, authorizations left uncaptured voided, links stuck in
-    processing released. Expiring or canceling a link cancels its waiting
-    payment.
-  - Card-testing protection: 5 confirmations per link in 15 minutes (then 30
-    minutes paused), 10 per IP per hour, Turnstile after a decline (verified
-    on the server), 24-hour block after 10 declines with an e-mail to the
-    tenant and an **Unblock payments** action (`links:cancel`).
-  - Openings counted with previewers excluded; `payment_link.opened`,
-    `payment.failed`, `payment.succeeded` and `payment_link.paid` recorded for
-    Phase 5's webhooks.
-  - Checkout security headers: nonce-based CSP with Stripe's and
-    Cloudflare's origins, no framing, `no-referrer`, `no-store`, `noindex`,
-    two-year HSTS; nginx no longer duplicates headers the application sets
-    and serves font files with CORS for Stripe's iframe.
-  - Tenant panel: payment attempts on the link detail (`payments:read`), the
-    card-testing block and its unblock action.
-  - Checkout sandbox for local development and tests (fake gateway, Stripe.js
-    stub, `axispay:checkout:demo`), refused at boot outside local/testing; a
-    Playwright flow check in `tools/viewport-check`.
-  - Stripe acceptance-gate contract tests (`tests/Contract/StripeCheckoutContractTest.php`).
-  - Hardening: the link is reserved (`processing`) while a payment is
-    confirmed, so it cannot expire or be canceled mid-payment; closing a
-    tenant cancels its active links (`tenant_closed`) and its checkout stops
-    taking payments; creation of the Stripe payment carries only link-fixed
-    values (payer receipt e-mail moves to the confirmation) so a retry after
-    a lost answer never meets a refused idempotency key; the merchant's
-    decision is kept on the attempt; capture and void errors show
-    "processing" instead of an error; stale reads and mismatched amounts are
-    not applied; leases have owner tokens; payer data is collected only when
-    the tenant has a privacy notice URL; informative pages no longer show the
-    amount; `/status` returns the return URL once paid; declines and payer
-    data carry `livemode`.
-  - Payment security: bogus confirmation tokens can no longer pause a link
-    for other payers; per-IP limits use the /64 network for IPv6; only the
-    session handed the 3D Secure step may continue it (debounced); payment
-    events are stored without payer data and every stored gateway event is
-    encrypted at rest; production refuses to boot without `TRUSTED_PROXIES`
-    (and the doctor fails on `*`); Turnstile answers must name the pay host
-    and the `checkout` action; the sandbox refuses live mode; every pay-host
-    response (404, 419) carries the checkout headers; client secrets inside
-    URLs are masked in logs.
-  - Concurrency and double charge: abandoned 3D Secure steps are canceled by
-    the reconciliation after 30 minutes; Stripe calls are bounded (42 s worst
-    case) below the 90 s attempt lease, which is renewed before every call
-    and re-checked before capture or void; the first stored merchant
-    decision wins; stale reads without a new decline no longer move a
-    payment back; claims avoid gap-lock deadlocks between links (and retry
-    them); a dead confirmation's reservation is taken over; retried
-    confirmations continue from Stripe's current state; attempts closed
-    without Stripe are flagged "needs review".
-  - Webhooks and reconciliation: an authorization is captured only within
-    the capture window (15 minutes from authorization); past it, it is
-    voided, unless Stripe already reports the payment as succeeded. Events
-    stuck in `received` are queued again (on a new delivery and by
-    `axispay:provider-events:sweep`, every 5 minutes); unroutable events are
-    routed once their connection exists; `axispay:provider-events:retry
-    {id?} {--failed}` retries failed events (audited, idempotent); failed
-    events raise an alert and an audit entry. Refused credentials and 4xx
-    answers fail at once instead of retrying, and refused credentials of an
-    `api_key` connection mark it `invalid_credentials`. Payment events are
-    routed by their attempt's connection, never to another tenant's old
-    connection; an account reached through Connect cannot also be connected
-    with API keys. The reconciliation only visits payments under way, oldest
-    visit first, within a batch and a 25 s budget. Recorded business events
-    freeze the link and payment snapshots Phase 5 needs (new
-    `payment.processing`; generic failure codes, never the raw decline
-    code). A closed attempt whose payment later succeeds is flagged for
-    review. Adoption of a payment by its metadata requires it to be created
-    within the attempt's window. Queue `retry_after` is 150 s, the workers'
-    default timeout 120 s and every job has its own limit below it (see the
-    deployment guides for the new stop grace periods).
-  - Card testing and abuse: confirmations are counted atomically when they
-    reach Stripe (in-progress answers never count), unrecognized tokens are
-    also limited per client network across links and Stripe failures while
-    reading a token count per client; each group of pay-host pages has its
-    own request limit, with a "too many requests" message; production
-    refuses to start without the Turnstile keys (and the doctor reports
-    them); a spent Turnstile token is always replaced; the card fingerprint
-    is kept for forensics; lifting a block needs re-authentication.
-  - Code quality and performance: the checkout orchestrates while the
-    Payments module owns claiming, payer details and confirmation of an
-    attempt; one lock order for link and attempt everywhere; void and review
-    reasons and the failure kind of a declined try are named values (the
-    failure kind is decided by the gateway adapter and stored); the page
-    script is split into small modules and never leaves the Pay button busy
-    after an error. A gateway event has at most one job at a time (duplicate
-    deliveries and the sweeper no longer queue a second one, and the sweeper
-    records no retry for a job still waiting); the unroutable sweep reads no
-    event bodies and looks each account up once; the status poll uses no
-    session and re-reads a 3D Secure step left open less and less often;
-    Stripe.js loads deferred with an early connection to Stripe's API; a page
-    load reads the tenant and its connection once; the card form loads two
-    font weights instead of three.
-  - Checkout UI and accessibility: the phone country is shown in full;
-    the card form's reserved space goes away once it loads and matches the
-    sandbox; a card form that cannot load says so and keeps Pay disabled;
-    alerts sit before the card form and are announced once; one heading per
-    state and no heading repeated in its body; a shorter page title; a
-    solved security check survives a theme switch; the browser color comes
-    from one place. Language: e-mails go in the tenant's language (the
-    blocked-link e-mail with a single "mode" and a button to the link),
-    request limits answer in the link's language, waits have singular and
-    plural forms, a card-testing pause sends its real wait, the payer never
-    sees framework text (own pages for 404, 419, 429, 500 and 503 and an
-    "expired session" answer), Laravel's mail and error strings are in
-    Spanish, and the panel explains decline codes, review reasons, card
-    countries and brands in words.
-  - Tests and flakiness: claiming a link's attempt no longer fails under
-    MariaDB's snapshot isolation (the attempt is found before locking and
-    checked again under the locks; conflicts are retried with a short pause
-    and answered "in progress"), and a lock conflict while freeing the link
-    never replaces the payer's answer. The concurrency tests order their
-    processes with signal files instead of timing (a payer held inside the
-    gateway, cancellations before or during a payment), cover both the void
-    and the capture race (exactly one capture call), and reproduce the
-    snapshot conflict deterministically. New tests: the Pay, 3D Secure
-    continuation and completion request limits, isolation of the link detail
-    and its unblock action, continuation of another link's attempt, and a
-    reviewed list of pay-host routes. A gateway event's job is queued without
-    a window in which a concurrent delivery could be lost.
-  - Stripe API correctness: `allowed_payment_method_types` replaces
-    `payment_method_types`; Link is hidden in the payment form; a creation,
-    capture or void that answered a stored server error is repeated under a
-    derived key (bounded) when the payment has not moved; the confirmation
-    key covers the receipt e-mail and return URL; a capture that finds the
-    payment no longer capturable applies Stripe's current state.
+  - Payment page on the pay host in every state of plan 11.2, following the
+    approved design (`docs/frontend/checkout-design.md`): merchant header,
+    order summary, payer fields (the whole MVP catalog, encrypted), Stripe's
+    card form (card only, no wallets or Link), a security check when
+    required, platform footer. EN and ES (payer-facing Spanish uses *tú*);
+    follows the device's light or dark setting.
+  - Authorize, validate, capture (ADR-0050): one payment under way per link,
+    3D Secure in the page, the pre-payment validation point (not configured
+    until Phase 5), capture, and a complete void path for rejections.
+  - A payer is never charged twice: repeated requests (lost answers,
+    retries, a second tab, a crash) continue from the payment's real state.
+  - Capture window: an authorization is captured within 15 minutes of being
+    authorized, otherwise voided (a payment Stripe reports as succeeded
+    wins).
+  - The link is reserved while a payment is confirmed (it cannot expire or be
+    canceled mid-payment); a late success on a closed link wins and is
+    flagged; closing a tenant cancels its active links.
+  - If Stripe is slow, the page answers "your payment is processing" within
+    50 seconds instead of failing; a confirmation whose answer was lost is
+    never shown as an error.
+  - Stripe's six payment events are read back from Stripe and applied
+    (duplicates and out-of-order events are harmless); payments the platform
+    did not create are ignored; stored events carry no payer data and are
+    encrypted.
+  - Event recovery: stuck events are queued again every 5 minutes, events of
+    not-yet-connected accounts are routed once connected, and failed events
+    can be retried by the operator (audited); an event is processed once at
+    a time.
+  - Reconciliation every 15 minutes of the payments under way (oldest visit
+    first, bounded per run): missed events, authorizations past their window,
+    3D Secure left open for 30 minutes, links left reserved.
+  - Card testing: 5 confirmations per link in 15 minutes (then 30 minutes
+    paused), 10 per IP per hour (IPv6 /64), 20 unrecognized cards per network
+    per hour, the security check from the first try after a decline, and a
+    24-hour block after 10 declines within 24 hours; only confirmations that
+    reach Stripe count.
+  - Pay-host request limits per group (page and completion 60/min, status
+    90/min, Pay and 3D Secure continuation 30/min), answered in the link's
+    language with the real wait.
+  - Tenant panel: payments on the link detail (card brand and country by
+    name, declines explained in words, "needs review" reasons), the
+    card-testing block and **Unblock payments** with re-authentication.
+  - E-mails in the tenant's language: the blocked-link e-mail (with a button
+    to the link) and the gateway connection e-mails.
+  - Business events recorded for Phase 5 as frozen snapshots: link opened,
+    payment processing, payment failed (generic failure code), payment
+    succeeded, link paid.
+  - Page security: nonce-based CSP with Stripe's and Cloudflare's origins, no
+    framing, no referrer, no caching, no indexing, two-year HSTS; the
+    payer never sees framework text (own 404, 419, 429, 500 and 503 pages).
+  - Data: payer data kept 24 months (purge in Phase 8), the payer's IP and
+    browser for card-testing investigations (cleared 90 days after the
+    attempt closes, from Phase 8), the card fingerprint for forensics.
+  - Production refuses to start without the security-check keys or a
+    trusted proxy, or with the sandbox on.
+  - Checkout sandbox for local development and tests (a stand-in for Stripe
+    on the server and in the browser, a demo command); never in production.
+  - Stripe acceptance gate: contract tests for the automated items (both
+    connection methods) and a list of items checked by hand (ADR-0051,
+    section 12).
+  - Deployment: queue and worker time limits realigned (`retry_after` 150 s,
+    jobs 115 s, workers 120 s) with longer stop grace periods; an "Upgrading
+    to Phase 4" list, a scheduler table and a Phase 4 operations section in
+    the deployment guide.
 
 - Incoming Stripe webhooks are mandatory (ADR-0050, owner decision
   2026-09-27): disputes, Dashboard refunds, payers who close the tab after
