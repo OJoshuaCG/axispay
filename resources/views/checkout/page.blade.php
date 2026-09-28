@@ -27,7 +27,8 @@
 @endphp
 
 <x-layouts.checkout
-    :title="$heading.' · '.$merchant"
+    {{-- The page title names the merchant once: "Pay · Acme", never "Pay Acme · Acme". --}}
+    :title="($page->state === CheckoutState::Active ? __('checkout.title.pay_short') : $heading).' · '.$merchant"
     :load-stripe="$page->state === CheckoutState::Active && $page->client !== null"
     :sandbox="$page->sandbox"
     :numeric-font="$fonts->numericPreloadUrl()"
@@ -48,15 +49,17 @@
             <div id="checkout-live" role="status" aria-live="polite" class="sr-only"></div>
 
             @if ($page->state === CheckoutState::Active && $page->client !== null)
-                <h1 class="sr-only" tabindex="-1">{{ $heading }}</h1>
-
                 <form id="checkout-form" class="checkout-fields flex flex-col gap-stack-lg" novalidate data-checkout-form>
-                    <x-alert variant="error" data-checkout-alert="error" tabindex="-1" hidden><span data-alert-text></span></x-alert>
-                    <x-alert variant="warning" data-checkout-alert="warning" tabindex="-1" hidden><span data-alert-text></span></x-alert>
+                    {{-- Inside the form: a rejection replaces the form, and its panel brings the page's only h1. --}}
+                    <h1 class="sr-only" tabindex="-1">{{ $heading }}</h1>
 
                     @if ($page->collectsPayerData())
                         @include('checkout.payer-fields', ['page' => $page])
                     @endif
+
+                    {{-- Right before the card form (DESIGN.md). role="group": the script moves focus to them, which announces them once. --}}
+                    <x-alert variant="error" role="group" data-checkout-alert="error" tabindex="-1" hidden><span data-alert-text></span></x-alert>
+                    <x-alert variant="warning" role="group" data-checkout-alert="warning" tabindex="-1" hidden><span data-alert-text></span></x-alert>
 
                     <x-checkout.payment-element :sandbox="$page->sandbox" />
 
@@ -73,7 +76,7 @@
                             :loading-label="__('checkout.processing_payment')"
                         >{!! __('checkout.pay_amount', ['amount' => '<span class="amount">'.e($amountText).'</span>']) !!}</x-button>
 
-                        <p class="flex items-start justify-center gap-1.5 text-center text-sm text-fg-secondary">
+                        <p class="flex items-start justify-start gap-1.5 text-start text-sm text-fg-secondary">
                             <x-icon name="lock-closed" variant="mini" size="sm" class="mt-0.5 shrink-0" />
                             <span class="break-words">{{ __('checkout.trust') }}</span>
                         </p>
@@ -97,9 +100,9 @@
                      data-turnstile-message="{{ __('checkout.messages.turnstile') }}"
                      data-error-message="{{ __('checkout.messages.error') }}"
                      data-security-unavailable="{{ __('checkout.messages.security_unavailable') }}"
+                     data-session-expired="{{ __('checkout.messages.session_expired') }}"
                      data-fix-fields="{{ __('checkout.messages.fix_fields') }}"
-                     data-auth-failed="{{ __('checkout.messages.authentication_failed') }}"
-                     data-paused-message="{{ $page->client['pausedMinutes'] !== null ? __('checkout.messages.rate_limited', ['minutes' => $page->client['pausedMinutes']]) : '' }}"
+                     data-paused-message="{{ $page->client['pausedMinutes'] !== null ? trans_choice('checkout.messages.rate_limited', $page->client['pausedMinutes'], ['minutes' => $page->client['pausedMinutes']]) : '' }}"
                      data-checkout-strings></div>
 
                 {{-- Probe for Stripe's Appearance API: colors read from real utilities (DESIGN.md). --}}
@@ -122,7 +125,7 @@
                         @case(CheckoutState::Processing)
                             <p data-poll-body>{{ $page->phase === \App\Modules\Checkout\Enums\CheckoutPhase::Validating ? __('checkout.phase.validating') : __('checkout.states.processing.body') }}</p>
                             <div data-poll-timeout hidden class="flex flex-col gap-stack-sm">
-                                <x-alert variant="warning" :title="__('checkout.states.timeout.heading')">{{ __('checkout.states.timeout.body') }}</x-alert>
+                                <x-alert variant="warning" tabindex="-1" :title="__('checkout.states.timeout.heading')">{{ __('checkout.states.timeout.body') }}</x-alert>
                                 <x-button variant="secondary" data-poll-retry>{{ __('checkout.states.timeout.action') }}</x-button>
                             </div>
                             @break
@@ -132,7 +135,7 @@
                                 <p><x-amount :value="$page->money->minorAmount" :currency="$page->money->currency->value" minor :signed="false" class="text-xl font-semibold" /></p>
                             @endif
                             @if ($page->paidAt)
-                                <p class="text-fg-secondary"><time datetime="{{ $page->paidAt->toIso8601String() }}">{{ __('checkout.states.paid.paid_on', ['date' => $page->paidAt->isoFormat('LLL').' '.$page->paidAt->format('T')]) }}</time></p>
+                                <p class="text-fg-secondary">{!! __('checkout.states.paid.paid_on', ['date' => '<time datetime="'.e($page->paidAt->toIso8601String()).'">'.e($page->paidAt->isoFormat('LLL').' '.$page->paidAt->format('T')).'</time>']) !!}</p>
                             @endif
                             @break
 
@@ -144,7 +147,7 @@
                             @break
 
                         @case(CheckoutState::Canceled)
-                            <p>{{ __('checkout.states.canceled.body') }}</p>
+                            {{-- The heading says it all. --}}
                             @break
 
                         @default

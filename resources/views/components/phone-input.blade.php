@@ -37,17 +37,18 @@
         @endif
     </label>
 
-    <div class="flex w-full gap-stack-sm">
+    {{-- Stacked on phones, side by side from `sm`: the country is never truncated. --}}
+    <div class="flex w-full flex-col gap-stack-xs sm:flex-row sm:gap-stack-sm">
         <label for="{{ $countryId }}" class="sr-only">{{ __('checkout.payer.phone_country') }}</label>
         <select
             id="{{ $countryId }}"
             name="{{ $countryName }}"
             autocomplete="tel-country-code"
-            class="min-h-touch w-28 shrink-0 rounded-md border border-line-strong bg-page px-2 text-base text-fg hover:border-fg-secondary"
+            class="min-h-touch w-full shrink-0 rounded-md border border-line-strong bg-page px-3 text-base text-fg hover:border-fg-secondary sm:w-64"
         >
             @foreach ($countries as $code => $countryLabel)
-                {{-- `label` (ISO code + calling code, e.g. "MX +52") is what the select shows, so it fits next to the number at 320px; options are ordered by country name in the payer's language. --}}
-                <option value="{{ $code }}" label="{{ $code }} +{{ $codes[$code] ?? '' }}" @selected($code === $country)>{{ $countryLabel }} (+{{ $codes[$code] ?? '' }})</option>
+                {{-- "{country} (+{code})", ordered by country name in the payer's language. --}}
+                <option value="{{ $code }}" @selected($code === $country)>{{ $countryLabel }} (+{{ $codes[$code] ?? '' }})</option>
             @endforeach
         </select>
 

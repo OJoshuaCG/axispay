@@ -8,5 +8,6 @@
 --}}
 <div {{ $attributes->class('flex flex-col gap-stack-xs') }} data-turnstile-slot hidden>
     <p class="text-sm font-medium text-fg" id="turnstile-label">{{ __('checkout.turnstile.label') }}</p>
-    <div data-turnstile class="min-h-16" role="group" aria-labelledby="turnstile-label" tabindex="-1"></div>
+    {{-- Turnstile's own sizes: flexible 65px high, compact 140px (the script marks `data-compact` below 340px wide). --}}
+    <div data-turnstile class="min-h-17 data-compact:min-h-35" role="group" aria-labelledby="turnstile-label" tabindex="-1"></div>
 </div>

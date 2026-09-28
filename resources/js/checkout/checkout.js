@@ -19,21 +19,37 @@ import { initPolling } from './polling';
 import { createState } from './state';
 import { createStripeElements } from './stripe-elements';
 import { createTurnstile } from './turnstile';
-import { announce, createAlerts, createFieldErrors, createPayButton, initAutofocus, showRejected } from './ui';
+import { createAlerts, createFieldErrors, createPayButton, initAutofocus, showRejected } from './ui';
 
 function initCheckout() {
     const form = document.querySelector('[data-checkout-form]');
     const configElement = document.getElementById('checkout-config');
 
-    if (!form || !configElement || typeof window.Stripe !== 'function') {
+    if (!form || !configElement) {
         return;
     }
 
     const config = JSON.parse(configElement.textContent);
     const strings = document.querySelector('[data-checkout-strings]')?.dataset ?? {};
     const alerts = createAlerts(form);
-    const fieldErrors = createFieldErrors(form);
     const button = createPayButton(form.querySelector('[data-pay-button]'), strings);
+
+    // The card form cannot load (Stripe.js blocked or failed): never a
+    // skeleton forever. The message stays and Pay stays disabled.
+    const cardFormUnavailable = () => {
+        form.querySelector('[data-payment-skeleton]')?.remove();
+        form.querySelector('[data-payment-loading]')?.remove();
+        button.disable();
+        alerts.show(strings.securityUnavailable || strings.errorMessage);
+    };
+
+    if (typeof window.Stripe !== 'function') {
+        cardFormUnavailable();
+
+        return;
+    }
+
+    const fieldErrors = createFieldErrors(form);
     const { stripe, elements, paymentElement, never } = createStripeElements(config);
     const { get, setState } = createState({ ready: false, inFlight: false });
 
@@ -73,6 +89,7 @@ function initCheckout() {
             button.enable();
         }
     });
+    paymentElement.on('loaderror', cardFormUnavailable);
     paymentElement.mount(form.querySelector('[data-payment-element]'));
 
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
@@ -102,12 +119,8 @@ function initCheckout() {
         switch (data.outcome) {
             case 'requires_action': {
                 setBusy(true, strings.phaseThreeDs);
-                const next = await stripe.handleNextAction({ clientSecret: data.client_secret });
-
-                if (next.error) {
-                    announce(strings.authFailed);
-                }
-
+                // A failed verification is reported by the server's answer (authentication_failed).
+                await stripe.handleNextAction({ clientSecret: data.client_secret });
                 setBusy(true, strings.phaseValidating);
 
                 return handle(await postJson(config.endpoints.continue, {}));
@@ -149,6 +162,13 @@ function initCheckout() {
                 alerts.show(data.message);
 
                 return false;
+            case 'session_expired':
+                // The anonymous session (CSRF) expired: only a reload helps.
+                setBusy(false);
+                button.disable();
+                alerts.show(strings.sessionExpired || data.message, 'warning');
+
+                return false;
             default:
                 if (data.redirect_url) {
                     window.location.assign(data.redirect_url);
@@ -157,7 +177,8 @@ function initCheckout() {
                 }
 
                 setBusy(false);
-                alerts.show(data.message ?? strings.errorMessage);
+                // Only the checkout's own messages reach the payer, never framework text.
+                alerts.show(data.outcome === 'error' && data.message ? data.message : strings.errorMessage);
 
                 return false;
         }

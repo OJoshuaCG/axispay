@@ -50,7 +50,10 @@ export function createAlerts(form) {
 
 /** Field errors: the text under the field and `aria-invalid` (styled by the `checkout-fields` utility). */
 export function createFieldErrors(form) {
-    const input = (name) => document.getElementById(`payer-${name.replace(/\./g, '-')}`) ?? (name === 'phone' ? document.getElementById('payer-phone') : null);
+    // Field ids follow the input names: payer-email, payer-billing_address-city,
+    // payer-phone and its country select payer-phone-country.
+    const ids = { phone_country: 'payer-phone-country' };
+    const input = (name) => document.getElementById(ids[name] ?? `payer-${name.replace(/\./g, '-')}`);
 
     const clear = () => {
         form.querySelectorAll('[data-field-error]').forEach((element) => {

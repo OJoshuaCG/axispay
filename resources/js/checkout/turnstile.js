@@ -52,14 +52,22 @@ export function createTurnstile({ siteKey, slot, target, nonce, onUnavailable, o
 
         try {
             const turnstile = await load(nonce);
+            const compact = target.clientWidth < 340;
+
+            if (widget !== null) {
+                turnstile.remove(widget);
+            }
+
             target.innerHTML = '';
+            // The reserved height follows the widget's size (turnstile.blade.php).
+            target.toggleAttribute('data-compact', compact);
             token = null;
             widget = turnstile.render(target, {
                 sitekey: siteKey,
                 // Checked by the server with the hostname (TurnstileVerifier).
                 action: 'checkout',
                 appearance: 'always',
-                size: target.clientWidth < 340 ? 'compact' : 'flexible',
+                size: compact ? 'compact' : 'flexible',
                 theme: prefersDark() ? 'dark' : 'light',
                 language: document.documentElement.lang || 'auto',
                 callback: (value) => {
@@ -79,11 +87,12 @@ export function createTurnstile({ siteKey, slot, target, nonce, onUnavailable, o
 
     return {
         render,
-        /** A new color scheme: the widget is drawn again. */
+        /**
+         * A new color scheme: the widget is drawn again in the new theme,
+         * unless the payer already solved it (a solved token is never thrown away).
+         */
         redraw() {
-            widget = null;
-
-            if (required) {
+            if (required && token === null) {
                 render(true);
             }
         },
