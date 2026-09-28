@@ -217,6 +217,8 @@ SESSION_SECURE_COOKIE=${{environment.SESSION_SECURE_COOKIE}}
 CACHE_STORE=${{environment.CACHE_STORE}}
 QUEUE_CONNECTION=${{environment.QUEUE_CONNECTION}}
 TRUSTED_PROXIES=${{environment.TRUSTED_PROXIES}}
+TURNSTILE_SITE_KEY=${{environment.TURNSTILE_SITE_KEY}}
+TURNSTILE_SECRET_KEY=${{environment.TURNSTILE_SECRET_KEY}}
 MAIL_MAILER=${{environment.MAIL_MAILER}}
 MAIL_HOST=${{environment.MAIL_HOST}}
 MAIL_PORT=${{environment.MAIL_PORT}}
@@ -239,6 +241,8 @@ GATEWAY_CREDENTIALS_KEY_VERSION=${{environment.GATEWAY_CREDENTIALS_KEY_VERSION}}
 ```
 
 The workers and the scheduler need the Stripe and `GATEWAY_CREDENTIALS_*` variables too: they process the incoming webhooks and run the daily api_key health check.
+
+Every Application starts the application, so every one of them needs `TRUSTED_PROXIES` and both Turnstile keys. Without them the container refuses to start in production. The image build itself needs none of them.
 
 `web`-only settings:
 
@@ -615,6 +619,7 @@ Dokploy regenerates a domain's routers when you edit that domain, which drops th
 | Assets load over `http://` (mixed content), redirects go to `http://` | The proxy is not trusted, so `X-Forwarded-Proto` is ignored | Set `TRUSTED_PROXIES` (see below) and redeploy |
 | Container exits at boot: `SESSION_DOMAIN must be empty (null)` | `SESSION_DOMAIN` is set (ADR-0034) | Remove the variable |
 | `Missing required environment variable APP_KEY` | A variable is not set, or the `${{environment.…}}` reference is wrong | Check the Environment tab and the shared variables |
+| A container stops at start with `TRUSTED_PROXIES must be set in production` or `TURNSTILE_SITE_KEY must be set in production` | That Application's Environment tab does not reference the variable, or the shared value is empty | Add the `${{environment.…}}` line from 4.2 to every Application (web, workers and scheduler), then redeploy. If it appears during the image build instead, the image predates the fix that builds dependencies outside production mode: redeploy from the current branch |
 | Migrations fail: `CREATE command denied` / `ALTER command denied` | Migrations are running as `axispay_app` | Set `DB_MIGRATOR_USERNAME` / `DB_MIGRATOR_PASSWORD` on `web` and check the migrator grants |
 | Migrations fail with error 1419 on `CREATE TRIGGER` (`You do not have the SUPER privilege and binary logging is enabled`) | Binary logging is on and the migrator is not trusted to create triggers | On the database server, set `log_bin_trust_function_creators = 1`, or have the DBA grant the required privilege (verify with the DBA for your MariaDB version) |
 | Workers or scheduler log `Migrations are still pending…` and restart | `web` has not finished migrating, or it runs without `RUN_MIGRATIONS=true` | Check the `web` deploy log; deploy `web` |
