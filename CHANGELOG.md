@@ -123,6 +123,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Stripe.js loads deferred with an early connection to Stripe's API; a page
     load reads the tenant and its connection once; the card form loads two
     font weights instead of three.
+  - Checkout UI and accessibility: the phone country is shown in full;
+    the card form's reserved space goes away once it loads and matches the
+    sandbox; a card form that cannot load says so and keeps Pay disabled;
+    alerts sit before the card form and are announced once; one heading per
+    state and no heading repeated in its body; a shorter page title; a
+    solved security check survives a theme switch; the browser color comes
+    from one place. Language: e-mails go in the tenant's language (the
+    blocked-link e-mail with a single "mode" and a button to the link),
+    request limits answer in the link's language, waits have singular and
+    plural forms, a card-testing pause sends its real wait, the payer never
+    sees framework text (own pages for 404, 419, 429, 500 and 503 and an
+    "expired session" answer), Laravel's mail and error strings are in
+    Spanish, and the panel explains decline codes, review reasons, card
+    countries and brands in words.
   - Tests and flakiness: claiming a link's attempt no longer fails under
     MariaDB's snapshot isolation (the attempt is found before locking and
     checked again under the locks; conflicts are retried with a short pause
