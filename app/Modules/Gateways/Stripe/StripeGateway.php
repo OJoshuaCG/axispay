@@ -21,6 +21,8 @@ use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayCredentialsEncrypter;
+use Closure;
+use LogicException;
 use Stripe\Account;
 use Stripe\Event;
 use Stripe\Exception\ApiErrorException;
@@ -41,6 +43,9 @@ final readonly class StripeGateway implements PaymentGateway
 {
     /** Stripe's PaymentIntent `description` is kept short (ours is at most 500 characters). */
     private const int DESCRIPTION_MAX = 500;
+
+    /** Stripe's error code for an operation the payment's current state does not allow. */
+    private const string UNEXPECTED_STATE = 'payment_intent_unexpected_state';
 
     /** Card brand, country and last four; authorization expiry (capture_before). */
     private const array EXPAND = ['payment_method', 'latest_charge'];
@@ -126,69 +131,50 @@ final readonly class StripeGateway implements PaymentGateway
             'metadata' => $request->metadata,
         ];
 
-        try {
-            $intent = $request->providerPaymentId === null
-                ? $context->client->paymentIntents->create([
-                    ...$params,
-                    'capture_method' => 'manual',
-                    // `allowed_payment_method_types` (2026-07-29.dahlia) replaces
-                    // `payment_method_types`, which later versions remove (ADR-0051).
-                    'allowed_payment_method_types' => ['card'],
-                    'expand' => self::EXPAND,
-                ], $context->options($request->idempotencyKey))
-                : $context->client->paymentIntents->update($request->providerPaymentId, [...$params, 'expand' => self::EXPAND], $context->options($request->idempotencyKey));
-        } catch (ApiErrorException $e) {
-            throw StripeErrorMapper::map($e, 'createOrUpdatePayment');
-        }
-
-        return StripePaymentMapper::toProviderPayment($intent);
+        return $this->callIntent('createOrUpdatePayment', static fn (): PaymentIntent => $request->providerPaymentId === null
+            ? $context->client->paymentIntents->create([
+                ...$params,
+                'capture_method' => 'manual',
+                // `allowed_payment_method_types` (2026-07-29.dahlia) replaces
+                // `payment_method_types`, which later versions remove (ADR-0051).
+                'allowed_payment_method_types' => ['card'],
+                'expand' => self::EXPAND,
+            ], $context->options($request->idempotencyKey))
+            : $context->client->paymentIntents->update($request->providerPaymentId, [...$params, 'expand' => self::EXPAND], $context->options($request->idempotencyKey)));
     }
 
     /**
      * POST /v1/payment_intents/{id}/confirm with the ConfirmationToken
      * (deferred intent, confirmed on the server). `use_stripe_sdk` lets
      * Stripe.js `handleNextAction` run 3D Secure in the page. A declined card
-     * answers 402: the payment is re-read and returned with its failure.
+     * answers 402: the payment is re-read and returned with its failure. An
+     * already confirmed payment (a retry after a lost answer) is returned as
+     * it is now.
      */
     public function confirmPayment(GatewayConnection $connection, string $providerPaymentId, string $confirmationToken, string $idempotencyKey, string $returnUrl, ?string $receiptEmail = null): ProviderPayment
     {
         $context = $this->clients->for($connection);
 
-        try {
-            $intent = $context->client->paymentIntents->confirm($providerPaymentId, array_filter([
-                'confirmation_token' => $confirmationToken,
-                'return_url' => $returnUrl,
-                'use_stripe_sdk' => true,
-                'receipt_email' => $receiptEmail,
-                'expand' => self::EXPAND,
-            ], static fn (mixed $value): bool => $value !== null), $context->options($idempotencyKey));
-        } catch (CardException) {
-            return $this->retrievePayment($connection, $providerPaymentId);
-        } catch (InvalidRequestException $e) {
-            // Already confirmed (a retry after a lost answer): the payment as it is now.
-            if ($e->getStripeCode() === 'payment_intent_unexpected_state') {
-                return $this->retrievePayment($connection, $providerPaymentId);
+        return $this->callIntent('confirmPayment', static function () use ($context, $providerPaymentId, $confirmationToken, $returnUrl, $receiptEmail, $idempotencyKey): ?PaymentIntent {
+            try {
+                return $context->client->paymentIntents->confirm($providerPaymentId, array_filter([
+                    'confirmation_token' => $confirmationToken,
+                    'return_url' => $returnUrl,
+                    'use_stripe_sdk' => true,
+                    'receipt_email' => $receiptEmail,
+                    'expand' => self::EXPAND,
+                ], static fn (mixed $value): bool => $value !== null), $context->options($idempotencyKey));
+            } catch (CardException) {
+                return null; // declined: re-read with its failure
             }
-
-            throw StripeErrorMapper::map($e, 'confirmPayment');
-        } catch (ApiErrorException $e) {
-            throw StripeErrorMapper::map($e, 'confirmPayment');
-        }
-
-        return StripePaymentMapper::toProviderPayment($intent);
+        }, $connection, $providerPaymentId);
     }
 
     public function retrievePayment(GatewayConnection $connection, string $providerPaymentId): ProviderPayment
     {
         $context = $this->clients->for($connection);
 
-        try {
-            $intent = $context->client->paymentIntents->retrieve($providerPaymentId, ['expand' => self::EXPAND], $context->options());
-        } catch (ApiErrorException $e) {
-            throw StripeErrorMapper::map($e, 'retrievePayment');
-        }
-
-        return StripePaymentMapper::toProviderPayment($intent);
+        return $this->callIntent('retrievePayment', static fn (): PaymentIntent => $context->client->paymentIntents->retrieve($providerPaymentId, ['expand' => self::EXPAND], $context->options()));
     }
 
     /**
@@ -200,20 +186,7 @@ final readonly class StripeGateway implements PaymentGateway
     {
         $context = $this->clients->for($connection);
 
-        try {
-            $intent = $context->client->paymentIntents->capture($providerPaymentId, ['expand' => self::EXPAND], $context->options($idempotencyKey));
-        } catch (InvalidRequestException $e) {
-            // Captured elsewhere, canceled or expired: the payment as it is now.
-            if ($e->getStripeCode() === 'payment_intent_unexpected_state') {
-                return $this->retrievePayment($connection, $providerPaymentId);
-            }
-
-            throw StripeErrorMapper::map($e, 'capturePayment');
-        } catch (ApiErrorException $e) {
-            throw StripeErrorMapper::map($e, 'capturePayment');
-        }
-
-        return StripePaymentMapper::toProviderPayment($intent);
+        return $this->callIntent('capturePayment', static fn (): PaymentIntent => $context->client->paymentIntents->capture($providerPaymentId, ['expand' => self::EXPAND], $context->options($idempotencyKey)), $connection, $providerPaymentId);
     }
 
     /**
@@ -225,19 +198,36 @@ final readonly class StripeGateway implements PaymentGateway
     {
         $context = $this->clients->for($connection);
 
+        return $this->callIntent('cancelPayment', static fn (): PaymentIntent => $context->client->paymentIntents->cancel($providerPaymentId, ['expand' => self::EXPAND], $context->options($idempotencyKey)), $connection, $providerPaymentId);
+    }
+
+    /**
+     * One PaymentIntent call: Stripe errors mapped to the port's errors
+     * (StripeErrorMapper). With `$connection` and `$providerPaymentId`, a
+     * payment in an unexpected state for this call is re-read and returned
+     * as it is now instead, as it is when the call answers null.
+     *
+     * @param  Closure(): (PaymentIntent|null)  $call
+     */
+    private function callIntent(string $operation, Closure $call, ?GatewayConnection $connection = null, ?string $providerPaymentId = null): ProviderPayment
+    {
         try {
-            $intent = $context->client->paymentIntents->cancel($providerPaymentId, ['expand' => self::EXPAND], $context->options($idempotencyKey));
+            $intent = $call();
         } catch (InvalidRequestException $e) {
-            if ($e->getStripeCode() === 'payment_intent_unexpected_state') {
+            if ($connection !== null && $providerPaymentId !== null && $e->getStripeCode() === self::UNEXPECTED_STATE) {
                 return $this->retrievePayment($connection, $providerPaymentId);
             }
 
-            throw StripeErrorMapper::map($e, 'cancelPayment');
+            throw StripeErrorMapper::map($e, $operation);
         } catch (ApiErrorException $e) {
-            throw StripeErrorMapper::map($e, 'cancelPayment');
+            throw StripeErrorMapper::map($e, $operation);
         }
 
-        return StripePaymentMapper::toProviderPayment($intent);
+        if ($intent === null && $connection !== null && $providerPaymentId !== null) {
+            return $this->retrievePayment($connection, $providerPaymentId);
+        }
+
+        return StripePaymentMapper::toProviderPayment($intent ?? throw new LogicException('A PaymentIntent call answered nothing.'));
     }
 
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund

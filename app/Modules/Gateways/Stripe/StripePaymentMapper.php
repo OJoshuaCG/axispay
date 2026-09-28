@@ -101,12 +101,15 @@ final class StripePaymentMapper
             ?? $intent->id.':'.hash('sha256', (string) json_encode([$error['code'] ?? null, $error['decline_code'] ?? null, self::child($error, 'payment_method')?->offsetGet('id')]));
 
         $message = self::string($error['message'] ?? null);
+        $code = self::string($error['code'] ?? null);
+        $declineCode = self::string($error['decline_code'] ?? null);
 
         return new ProviderPaymentFailure(
             reference: $reference,
-            code: self::string($error['code'] ?? null),
-            declineCode: self::string($error['decline_code'] ?? null),
+            code: $code,
+            declineCode: $declineCode,
             message: $message !== null ? mb_substr($message, 0, self::MESSAGE_MAX) : null,
+            kind: StripeFailureKinds::of($code, $declineCode),
         );
     }
 

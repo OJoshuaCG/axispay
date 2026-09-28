@@ -21,6 +21,7 @@ use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Gateways\Stripe\StripeFailureKinds;
 use App\Modules\Gateways\Stripe\StripeGateway;
 use App\Modules\Shared\Ids\SecureToken;
 use Carbon\CarbonImmutable;
@@ -334,7 +335,7 @@ final class SandboxPaymentGateway implements PaymentGateway
             clientSecret: $status === ProviderPaymentStatus::RequiresAction ? self::str($state['client_secret'] ?? null) : null,
             cardPreview: $card !== null ? new PaymentMethodPreview(self::str($card['country'] ?? null), self::str($card['brand'] ?? null), self::str($card['last4'] ?? null), 'fp_sandbox_'.(self::str($card['last4'] ?? null) ?? '0000')) : null,
             failure: $failure !== null && $status === ProviderPaymentStatus::RequiresPaymentMethod
-                ? new ProviderPaymentFailure(self::str($failure['reference'] ?? null) ?? 'ch_sandbox', self::str($failure['code'] ?? null), self::str($failure['decline_code'] ?? null), self::str($failure['message'] ?? null))
+                ? new ProviderPaymentFailure(self::str($failure['reference'] ?? null) ?? 'ch_sandbox', self::str($failure['code'] ?? null), self::str($failure['decline_code'] ?? null), self::str($failure['message'] ?? null), StripeFailureKinds::of(self::str($failure['code'] ?? null), self::str($failure['decline_code'] ?? null)))
                 : null,
             attemptReference: self::str($metadata['axispay_attempt_id'] ?? null),
             captureBefore: $status === ProviderPaymentStatus::RequiresCapture ? CarbonImmutable::now()->addDays(7)->toIso8601String() : null,

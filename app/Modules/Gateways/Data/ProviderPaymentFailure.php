@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Gateways\Data;
 
+use App\Modules\Gateways\Enums\ProviderFailureKind;
+
 /**
  * The last payment error the gateway reports for a payment (plan 9.2, 12.6).
  * `reference` identifies this decline at the gateway (Stripe: the failed
  * charge), so the same decline seen twice is recorded once. `message` is the
  * gateway's explanation for the merchant, already shortened; payers only ever
- * see a generic text (plan 11.7 rule 7).
+ * see a generic text (plan 11.7 rule 7). `kind` is the adapter's
+ * provider-neutral reading of the codes: the domain decides with it and
+ * keeps the raw codes only for the tenant panel.
  */
 final readonly class ProviderPaymentFailure
 {
@@ -18,5 +22,6 @@ final readonly class ProviderPaymentFailure
         public ?string $code,
         public ?string $declineCode,
         public ?string $message,
+        public ProviderFailureKind $kind = ProviderFailureKind::CardDeclined,
     ) {}
 }
