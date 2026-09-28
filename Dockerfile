@@ -49,7 +49,11 @@ WORKDIR /var/www/html
 FROM base AS vendor
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-ENV COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_NO_INTERACTION=1
+# APP_ENV=build: the artisan calls below boot the app with no runtime
+# environment. Without it Laravel defaults to production and the production
+# boot guards (TRUSTED_PROXIES, Turnstile keys) abort the build. The runtime
+# stage sets APP_ENV=production, so the guards still run on every start.
+ENV COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_NO_INTERACTION=1 APP_ENV=build
 
 COPY composer.json composer.lock ./
 RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-progress \
