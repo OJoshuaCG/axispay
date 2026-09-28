@@ -50,7 +50,7 @@
             @if ($page->state === CheckoutState::Active && $page->client !== null)
                 <h1 class="sr-only" tabindex="-1">{{ $heading }}</h1>
 
-                <form id="checkout-form" class="flex flex-col gap-stack-lg" novalidate data-checkout-form>
+                <form id="checkout-form" class="checkout-fields flex flex-col gap-stack-lg" novalidate data-checkout-form>
                     <x-alert variant="error" data-checkout-alert="error" tabindex="-1" hidden><span data-alert-text></span></x-alert>
                     <x-alert variant="warning" data-checkout-alert="warning" tabindex="-1" hidden><span data-alert-text></span></x-alert>
 

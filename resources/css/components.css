@@ -82,3 +82,14 @@
         min-height: calc(var(--spacing) * 7.5);
     }
 }
+
+/*
+ * Payer fields of the checkout form: a field the page script marks invalid
+ * (aria-invalid="true") takes the error border, so the script only sets the
+ * state and the look stays in the tokens.
+ */
+@utility checkout-fields {
+    & [aria-invalid='true'] {
+        border-color: var(--color-error);
+    }
+}
