@@ -42,9 +42,11 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\View as SchemaView;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontFamily;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
 use Illuminate\Validation\ValidationException;
 use Locale;
 use LogicException;
@@ -173,7 +175,7 @@ final class StripeConnection extends Page
                         ->warning()
                         ->icon(Heroicon::OutlinedExclamationTriangle)
                         ->description(__('gateways.connect.api_key.warning')),
-                    Actions::make([$this->connectApiKeyAction()]),
+                    Actions::make([$this->connectApiKeyAction(), $this->apiKeyPermissionsAction()]),
                 ]);
         }
 
@@ -448,6 +450,34 @@ final class StripeConnection extends Page
             });
     }
 
+    /**
+     * "View required permissions": read-only help for the api_key method
+     * (the restricted key's permissions and how to create it). No submit and
+     * no server-side effect.
+     */
+    public function apiKeyPermissionsAction(): Action
+    {
+        return Action::make('apiKeyPermissions')
+            ->label(__('gateways.permissions_help.action'))
+            ->icon(Heroicon::OutlinedInformationCircle)
+            ->color('gray')
+            ->outlined()
+            ->visible(static fn (): bool => ConnectionMethod::ApiKey->isEnabled())
+            ->modalHeading(__('gateways.permissions_help.heading'))
+            ->modalIcon(Heroicon::OutlinedInformationCircle)
+            ->modalWidth('3xl')
+            ->modalContent(fn (): View => $this->permissionsHelpView())
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel(__('gateways.permissions_help.close'));
+    }
+
+    private function permissionsHelpView(): View
+    {
+        return view('filament.gateways.stripe-key-permissions', [
+            'mode' => self::text('gateways.mode.'.($this->livemode() ? 'live' : 'test')),
+        ]);
+    }
+
     private function apiKeyAction(string $name, string $label): Action
     {
         $mode = $this->livemode() ? 'live' : 'test';
@@ -464,6 +494,20 @@ final class StripeConnection extends Page
                     ->warning()
                     ->icon(Heroicon::OutlinedShieldExclamation)
                     ->description(__('gateways.api_key.risk.body')),
+                // The permissions help, collapsed, inside the form. Not a
+                // nested modal: opening one is a server round-trip, and this
+                // page erases the typed key on every response (case 19), so
+                // the merchant would lose what they pasted. Expanding a
+                // section happens in the browser only.
+                Section::make(__('gateways.permissions_help.form_heading'))
+                    ->icon(Heroicon::OutlinedInformationCircle)
+                    ->collapsible()
+                    ->collapsed()
+                    ->compact()
+                    ->schema([
+                        SchemaView::make('filament.gateways.stripe-key-permissions')
+                            ->viewData(['mode' => self::text('gateways.mode.'.$mode)]),
+                    ]),
                 PasswordField::make('restricted_key')
                     ->forSecret(__('gateways.api_key.show_key'), __('gateways.api_key.hide_key'))
                     ->label(__('gateways.api_key.restricted_key'))
