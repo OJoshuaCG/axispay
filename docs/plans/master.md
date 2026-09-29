@@ -895,7 +895,7 @@ Toda transición se ejecuta dentro de una transacción con `lockForUpdate()` sob
 
 | Desde | Hacia | Disparador | Reglas |
 |---|---|---|---|
-| — | `active` | `CreatePaymentLink` | Tenant `active` o `grace`; conexión de pasarela `active` con `charges_enabled`. |
+| — | `active` | `CreatePaymentLink` | Tenant `active` o `grace`; conexión de pasarela `active` con `charges_enabled` (excepto la conexión `api_key` en modo test, ADR-0055). |
 | `active` | `processing` | Intento pasa a `processing` o `requires_action` | Bloquea nuevos intentos. |
 | `processing` | `active` | Intento falla o se cancela | Si `expires_at` ya pasó → `expired` en su lugar. |
 | `active`/`processing` | `paid` | Intento `succeeded` | Guarda `paid_at`. Cancela cualquier otro PaymentIntent residual del link. |
@@ -986,7 +986,7 @@ Los estados internos son un espejo normalizado de los de Stripe (el adaptador ha
 | `invalid_api_key` | 401 | Key ausente, inválida, revocada o expirada. |
 | `insufficient_scope` | 403 | La key no tiene el permiso necesario. |
 | `tenant_suspended` | 403 | El tenant no puede crear recursos. |
-| `gateway_not_ready` | 409 | La cuenta de Stripe no está conectada o no tiene `charges_enabled`. |
+| `gateway_not_ready` | 409 | La cuenta de Stripe no está conectada o no tiene `charges_enabled` (no se exige a la conexión `api_key` en modo test, ADR-0055). |
 | `parameter_missing` | 400 | Falta un parámetro obligatorio. |
 | `parameter_invalid` | 400 | Formato inválido (genérico, con `param`). |
 | `amount_must_be_string` | 400 | El monto se envió como número JSON. |
@@ -1054,6 +1054,7 @@ Request:
 Validaciones de negocio al crear:
 1. Tenant en estado `active` o `grace`.
 2. Conexión de pasarela del modo correspondiente en `active` con `charges_enabled = true`.
+   > **Nota (2026-09-29, [ADR-0055](../adr/0055-test-mode-api-key-charging-without-activation.md)):** la conexión `api_key` en modo test no necesita `charges_enabled`: Stripe acepta cobros de prueba en una cuenta sin activar. En modo live y en los métodos `platform_onboarding` y `oauth` (ambos modos) se sigue exigiendo.
 3. Si `fx.mode != none` y la moneda es `MXN` → `fx_not_available` (no hay conversión que hacer).
 4. Si `fx.mode != none` pero la conversión no está habilitada en el tenant → `fx_not_available`.
 
@@ -1421,6 +1422,7 @@ La pantalla "Conectar Stripe" del panel (permiso `gateway:manage`, con re-autent
 #### 12.3.4 Reglas comunes a los tres métodos
 
 - `status = restricted` cuando `charges_enabled` pasa a `false` (requisitos vencidos): se notifica al tenant y la creación de links se bloquea (`gateway_not_ready`). Los links existentes muestran un aviso en el checkout.
+  > **Nota (2026-09-29, [ADR-0055](../adr/0055-test-mode-api-key-charging-without-activation.md)):** excepción única: la conexión `api_key` en **modo test** queda `active` aunque Stripe no haya activado la cuenta (`charges_enabled = false`), porque Stripe acepta cobros de prueba en ese caso. Se guardan los valores reales de Stripe, no se envía el aviso de pagos pausados y el panel muestra un aviso informativo. El modo live y los métodos `platform_onboarding` y `oauth` no cambian.
 - Desconexión (por cualquier vía): `status = disconnected`, se bloquea la creación de links, se cancelan los links activos (webhook `payment_link.canceled` con `reason: gateway_disconnected`) y se notifica.
 - **Cambio de método** (por ejemplo, de `api_key` a `platform_onboarding`): requiere desconectar primero. Si hay links activos, el panel lo advierte y ofrece cancelarlos. **No se migran links entre conexiones:** un PaymentIntent vive en una cuenta concreta.
 - Los intentos de pago guardan el `provider_account_id` y el `connection_id` con el que se crearon, para que los reembolsos y las consultas usen siempre la misma cuenta, aunque luego cambie la conexión.

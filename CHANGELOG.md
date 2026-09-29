@@ -214,6 +214,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Stripe connection, API keys method, test mode** (ADR-0055): a test-mode
+  connection made with API keys is active, and payment links and the payment
+  page work, even when the Stripe account is not activated yet (Stripe
+  accepts test payments on it). The Stripe connection page shows an
+  informational notice ("your Stripe account is not activated; test payments
+  work") instead of "Stripe paused payments", and no "payments paused" e-mail
+  is sent. Stripe's own values are still stored and shown as reported. Live
+  mode, and connections made through the platform in either mode, still need
+  Stripe to enable charges. A test-mode connection already marked restricted
+  for this reason becomes active at the next daily key check, the next account
+  update from Stripe, or at once with "Refresh status" on the Stripe connection page.
+- Stripe connection page: the pending requirements section also lists the
+  items Stripe is still verifying, apart from the items that are due.
+
 - Creating a tenant requires an **owner e-mail** (ADR-0045, plan 17.2), in the
   admin panel and in the `CreateTenant` action. An address that already
   belongs to a user is refused before anything is written. Existing tenants
