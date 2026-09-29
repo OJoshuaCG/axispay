@@ -92,6 +92,8 @@ final class PanelDefaults
                 DispatchServingFilamentEvent::class,
             ])
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.theme-bridge'))
+            // Platform favicon, or the default one (ADR-0053).
+            ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('components.favicon-links'))
             // 419 auto-reload and session keep-alive (ADR-0040).
             ->renderHook(PanelsRenderHook::HEAD_END, static fn (): View => view('filament.partials.session-resilience'))
             // One control bar per page. Topbar: panel-controls. Simple

@@ -94,6 +94,8 @@ return [
         'platform_logo_updated' => 'Platform logo updated',
         'platform_logo_removed' => 'Platform logo removed',
         'platform_brand_display_mode_changed' => 'Platform brand display changed',
+        'platform_favicon_updated' => 'Platform favicon updated',
+        'platform_favicon_removed' => 'Platform favicon removed',
     ],
 
 ];

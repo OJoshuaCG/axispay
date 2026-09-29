@@ -39,6 +39,7 @@
         --}}
         <x-theme-color-meta />
 
+        <x-favicon-links />
         <title>{{ filled($title) ? $title.' · '.$appName : $appName }}</title>
 
         {{--

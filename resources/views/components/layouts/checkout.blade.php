@@ -46,6 +46,7 @@
         {{-- Page background per scheme (--color-page: neutral-0 / neutral-900), before CSS loads. --}}
         <x-theme-color-meta />
 
+        <x-favicon-links />
         <title>{{ $title }}</title>
 
         @if ($loadStripe && ! $sandbox)

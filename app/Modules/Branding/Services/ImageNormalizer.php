@@ -11,14 +11,14 @@ use GdImage;
 
 /**
  * The upload rules of plan section 18 for every brand image (the platform
- * logo now, tenant logos in Phase 8; ADR-0038, ADR-0053):
+ * logo and favicon now, tenant logos in Phase 8; ADR-0038, ADR-0053):
  *
  *  - PNG, JPEG or WebP only, recognized by their magic bytes (never by the
- *    file name or the declared type); SVG and anything else are refused;
- *  - at most 1 MB and 2000 × 2000 pixels;
- *  - decoded and re-encoded with GD to a PNG (transparency kept), scaled
- *    down to fit the requested box (never up). Re-encoding drops every
- *    metadata block (EXIF, XMP, comments) and anything hidden in the file.
+ *    file name or the declared type); SVG, ICO and anything else are refused;
+ *  - at most 1 MB and 2000 × 2000 pixels (icons: at least 32 × 32);
+ *  - decoded and re-encoded with GD to a PNG (transparency kept). Re-encoding
+ *    drops every metadata block (EXIF, XMP, comments) and anything hidden in
+ *    the file.
  *
  * Storage and serving are the caller's concern.
  */
@@ -33,10 +33,77 @@ final class ImageNormalizer
 
     public const int LOGO_MAX_HEIGHT = 120;
 
+    /** Smallest favicon source: the browser tab size. */
+    public const int ICON_MIN_SOURCE_PIXELS = 32;
+
     /**
+     * A logo: scaled down to fit the box (never up).
+     *
      * @throws InvalidImageException
      */
     public function normalize(string $bytes, int $maxWidth = self::LOGO_MAX_WIDTH, int $maxHeight = self::LOGO_MAX_HEIGHT): NormalizedImage
+    {
+        [$source, $width, $height] = $this->decode($bytes, 1);
+
+        $scale = min(1.0, $maxWidth / $width, $maxHeight / $height);
+        $targetWidth = max(1, (int) round($width * $scale));
+        $targetHeight = max(1, (int) round($height * $scale));
+
+        $target = self::transparentCanvas($targetWidth, $targetHeight);
+        imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
+
+        return self::encode($target, $targetWidth, $targetHeight);
+    }
+
+    /**
+     * Square icons (favicon): the image is centered on a transparent square
+     * canvas (its longer side), then resized to each size, up or down.
+     *
+     * @param  list<int>  $sizes
+     * @return array<int, NormalizedImage> size => image
+     *
+     * @throws InvalidImageException
+     */
+    public function squareIcons(string $bytes, array $sizes, int $minSource = self::ICON_MIN_SOURCE_PIXELS): array
+    {
+        [$source, $width, $height] = $this->decode($bytes, $minSource);
+        $side = max($width, $height);
+        $icons = [];
+
+        foreach ($sizes as $size) {
+            $size = max(1, $size);
+            $scale = $size / $side;
+            $drawWidth = max(1, (int) round($width * $scale));
+            $drawHeight = max(1, (int) round($height * $scale));
+
+            $target = self::transparentCanvas($size, $size);
+            imagecopyresampled(
+                $target,
+                $source,
+                intdiv($size - $drawWidth, 2),
+                intdiv($size - $drawHeight, 2),
+                0,
+                0,
+                $drawWidth,
+                $drawHeight,
+                $width,
+                $height,
+            );
+
+            $icons[$size] = self::encode($target, $size, $size);
+        }
+
+        return $icons;
+    }
+
+    /**
+     * Every check before and while decoding.
+     *
+     * @return array{0: GdImage, 1: int<1, max>, 2: int<1, max>}
+     *
+     * @throws InvalidImageException
+     */
+    private function decode(string $bytes, int $minPixels): array
     {
         if ($bytes === '') {
             throw new InvalidImageException(ImageRejection::Empty);
@@ -59,8 +126,13 @@ final class ImageNormalizer
             throw new InvalidImageException(ImageRejection::Unreadable);
         }
 
+        // Checked before decoding: a huge image is never expanded in memory.
         if ($width > self::MAX_SOURCE_PIXELS || $height > self::MAX_SOURCE_PIXELS) {
             throw new InvalidImageException(ImageRejection::DimensionsTooLarge);
+        }
+
+        if ($width < $minPixels || $height < $minPixels) {
+            throw new InvalidImageException(ImageRejection::DimensionsTooSmall);
         }
 
         $source = @imagecreatefromstring($bytes);
@@ -69,11 +141,18 @@ final class ImageNormalizer
             throw new InvalidImageException(ImageRejection::Unreadable);
         }
 
-        $scale = min(1.0, $maxWidth / $width, $maxHeight / $height);
-        $targetWidth = max(1, (int) round($width * $scale));
-        $targetHeight = max(1, (int) round($height * $scale));
+        return [$source, $width, $height];
+    }
 
-        $target = imagecreatetruecolor($targetWidth, $targetHeight);
+    /**
+     * @param  int<1, max>  $width
+     * @param  int<1, max>  $height
+     *
+     * @throws InvalidImageException
+     */
+    private static function transparentCanvas(int $width, int $height): GdImage
+    {
+        $target = imagecreatetruecolor($width, $height);
 
         if (! $target instanceof GdImage) {
             throw new InvalidImageException(ImageRejection::Unreadable);
@@ -88,16 +167,19 @@ final class ImageNormalizer
             imagefill($target, 0, 0, $transparent);
         }
 
-        imagecopyresampled($target, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $width, $height);
-
-        ob_start();
-        imagepng($target, null, 9);
-        $encoded = (string) ob_get_clean();
-
-        return new NormalizedImage($encoded, 'image/png', $targetWidth, $targetHeight, hash('sha256', $encoded));
+        return $target;
     }
 
-    /** The real type from the first bytes, or null (SVG, GIF, anything else). */
+    private static function encode(GdImage $image, int $width, int $height): NormalizedImage
+    {
+        ob_start();
+        imagepng($image, null, 9);
+        $encoded = (string) ob_get_clean();
+
+        return new NormalizedImage($encoded, 'image/png', $width, $height, hash('sha256', $encoded));
+    }
+
+    /** The real type from the first bytes, or null (SVG, ICO, GIF, anything else). */
     private static function sniff(string $bytes): ?int
     {
         return match (true) {

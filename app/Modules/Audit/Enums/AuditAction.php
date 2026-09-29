@@ -61,6 +61,8 @@ enum AuditAction: string
     case PlatformLogoUpdated = 'platform.logo_updated';
     case PlatformLogoRemoved = 'platform.logo_removed';
     case PlatformBrandDisplayModeChanged = 'platform.brand_display_mode_changed';
+    case PlatformFaviconUpdated = 'platform.favicon_updated';
+    case PlatformFaviconRemoved = 'platform.favicon_removed';
 
     public function label(): string
     {

@@ -54,6 +54,27 @@ return [
         'remove_help' => 'Without a logo the name is shown everywhere.',
     ],
 
+    'favicon' => [
+        'heading' => 'Favicon',
+        'description' => 'The small icon of browser tabs, bookmarks and home-screen shortcuts, in both panels and the payment page. Without one, the default icon is used.',
+        'default_in_use' => 'The default favicon is in use.',
+        'upload' => 'Upload favicon',
+        'upload_heading' => 'Upload a favicon',
+        'upload_help' => 'A square image works best; any other shape is centered on a transparent square. The image is checked and converted to PNG in three sizes, without hidden data. PNG, JPEG or WebP, up to :max_mb MB, from :min_px × :min_px to :max_px × :max_px pixels.',
+        'file_help' => 'PNG, JPEG or WebP, up to :max_mb MB, from :min_px × :min_px to :max_px × :max_px pixels. SVG and ICO are not accepted.',
+        'remove' => 'Remove favicon',
+        'remove_heading' => 'Remove the favicon',
+        'remove_help' => 'The default favicon will be used again.',
+        'updated' => 'Favicon updated.',
+        'removed' => 'Favicon removed.',
+        'preview_alt' => 'Favicon at :size × :size pixels',
+        'size' => [
+            '32' => ':px × :px · browser tab',
+            '180' => ':px × :px · Apple devices',
+            '192' => ':px × :px · Android and home screen',
+        ],
+    ],
+
     'preview' => [
         'alt' => ':variant of :name',
         'empty' => 'No logo',
@@ -72,6 +93,7 @@ return [
         'unsupported_type' => 'Only PNG, JPEG or WebP images are accepted.',
         'unreadable' => 'The image could not be read. Check that the file is not damaged and that its content matches its type.',
         'dimensions_too_large' => 'The image is larger than :max_px × :max_px pixels.',
+        'dimensions_too_small' => 'The image is smaller than :min_px × :min_px pixels.',
         'reauthentication_required' => 'Confirm your identity to continue.',
     ],
 

@@ -12,9 +12,10 @@ enum ImageRejection: string
     case UnsupportedType = 'unsupported_type';
     case Unreadable = 'unreadable';
     case DimensionsTooLarge = 'dimensions_too_large';
+    case DimensionsTooSmall = 'dimensions_too_small';
 
     public function message(): string
     {
-        return __('branding.errors.'.$this->value, ['max_mb' => 1, 'max_px' => 2000]);
+        return __('branding.errors.'.$this->value, ['max_mb' => 1, 'max_px' => 2000, 'min_px' => 32]);
     }
 }

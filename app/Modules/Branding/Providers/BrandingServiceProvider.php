@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Branding\Providers;
 
+use App\Modules\Branding\Models\PlatformFavicon;
 use App\Modules\Branding\Models\PlatformLogo;
 use App\Modules\Branding\Policies\PlatformBrandingPolicy;
 use App\Modules\Branding\Services\PlatformBrand;
@@ -26,5 +27,6 @@ final class BrandingServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(PlatformLogo::class, PlatformBrandingPolicy::class);
+        Gate::policy(PlatformFavicon::class, PlatformBrandingPolicy::class);
     }
 }

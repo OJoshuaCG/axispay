@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Modules\Branding\Services;
 
 use App\Modules\Branding\Enums\BrandDisplayMode;
+use App\Modules\Branding\Enums\FaviconSize;
 use App\Modules\Branding\Enums\LogoVariant;
+use App\Modules\Branding\Models\PlatformFavicon;
 use App\Modules\Branding\Models\PlatformLogo;
 use App\Modules\Branding\Models\PlatformSetting;
 use App\Modules\Shared\Support\Brand;
@@ -13,22 +15,27 @@ use Illuminate\Contracts\Cache\Repository;
 
 /**
  * How the platform brand is shown now (ADR-0053): the logo URLs (light,
- * and dark falling back to light), the display mode, and the name
- * (Brand::displayName(), ADR-0037). Without a logo the name is always shown,
- * whatever the mode.
+ * and dark falling back to light), the favicon URLs (the default favicon
+ * without an upload), the display mode, and the name (Brand::displayName(),
+ * ADR-0037). Without a logo the name is always shown, whatever the mode.
  *
- * Read from the cache (never the logo bytes), and remembered for the rest of
+ * Read from the cache (never the image bytes), and remembered for the rest of
  * the request, so rendering a page does not query the database; every
  * change calls forget().
  */
 final class PlatformBrand
 {
-    private const string CACHE_KEY = 'branding:platform:v1';
+    private const string CACHE_KEY = 'branding:platform:v2';
 
     /** Relative path: served same-origin on every host that shows it. */
     public const string LOGO_PATH = '/branding/platform-logo';
 
-    /** @var array{mode: string, logos: array<string, string>}|null */
+    public const string FAVICON_PATH = '/branding/favicon';
+
+    /** The favicon shipped with the application, used until one is uploaded. */
+    public const string DEFAULT_FAVICON = '/favicon.ico';
+
+    /** @var array{mode: string, logos: array<string, string>, favicons: array<int, string>}|null */
     private ?array $state = null;
 
     public function __construct(private readonly Repository $cache) {}
@@ -84,7 +91,23 @@ final class PlatformBrand
         return $version !== null ? self::LOGO_PATH.'/'.$chosen->value.'/'.$version.'.png' : null;
     }
 
-    /** Drops what is remembered (a logo or the mode changed). */
+    /** Every favicon size exists (they are always generated together). */
+    public function hasFavicon(): bool
+    {
+        return count(array_intersect_key($this->state()['favicons'], array_flip(FaviconSize::pixels()))) === count(FaviconSize::cases());
+    }
+
+    /** The favicon's URL (relative, versioned) for a size; null without an uploaded favicon. */
+    public function faviconUrl(FaviconSize $size): ?string
+    {
+        if (! $this->hasFavicon()) {
+            return null;
+        }
+
+        return self::FAVICON_PATH.'/'.$size->value.'/'.$this->state()['favicons'][$size->value].'.png';
+    }
+
+    /** Drops what is remembered (a logo, the favicon or the mode changed). */
     public function forget(): void
     {
         $this->cache->forget(self::CACHE_KEY);
@@ -92,7 +115,7 @@ final class PlatformBrand
     }
 
     /**
-     * @return array{mode: string, logos: array<string, string>}
+     * @return array{mode: string, logos: array<string, string>, favicons: array<int, string>}
      */
     private function state(): array
     {
@@ -108,21 +131,32 @@ final class PlatformBrand
                 $logos[$logo->variant->value] = $logo->version;
             }
 
+            $favicons = [];
+
+            foreach (PlatformFavicon::query()->select(['size', 'version'])->get() as $favicon) {
+                $favicons[$favicon->size->value] = $favicon->version;
+            }
+
             $mode = PlatformSetting::query()->whereKey(PlatformSetting::BRAND_DISPLAY_MODE)->value('value');
 
-            return ['mode' => is_string($mode) ? $mode : BrandDisplayMode::LogoAndName->value, 'logos' => $logos];
+            return [
+                'mode' => is_string($mode) ? $mode : BrandDisplayMode::LogoAndName->value,
+                'logos' => $logos,
+                'favicons' => $favicons,
+            ];
         });
 
         return $this->state = self::shape($cached);
     }
 
     /**
-     * @return array{mode: string, logos: array<string, string>}
+     * @return array{mode: string, logos: array<string, string>, favicons: array<int, string>}
      */
     private static function shape(mixed $cached): array
     {
         $mode = is_array($cached) && is_string($cached['mode'] ?? null) ? $cached['mode'] : BrandDisplayMode::LogoAndName->value;
         $logos = [];
+        $favicons = [];
 
         foreach (is_array($cached) && is_array($cached['logos'] ?? null) ? $cached['logos'] : [] as $variant => $version) {
             if (is_string($variant) && is_string($version)) {
@@ -130,6 +164,12 @@ final class PlatformBrand
             }
         }
 
-        return ['mode' => $mode, 'logos' => $logos];
+        foreach (is_array($cached) && is_array($cached['favicons'] ?? null) ? $cached['favicons'] : [] as $size => $version) {
+            if (is_int($size) && is_string($version)) {
+                $favicons[$size] = $version;
+            }
+        }
+
+        return ['mode' => $mode, 'logos' => $logos, 'favicons' => $favicons];
     }
 }

@@ -94,6 +94,8 @@ return [
         'platform_logo_updated' => 'Logo de la plataforma actualizado',
         'platform_logo_removed' => 'Logo de la plataforma eliminado',
         'platform_brand_display_mode_changed' => 'Visualización de la marca de la plataforma cambiada',
+        'platform_favicon_updated' => 'Favicon de la plataforma actualizado',
+        'platform_favicon_removed' => 'Favicon de la plataforma eliminado',
     ],
 
 ];

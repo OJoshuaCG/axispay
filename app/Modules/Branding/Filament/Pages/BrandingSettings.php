@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Modules\Branding\Filament\Pages;
 
 use App\Modules\Branding\Actions\ChangeBrandDisplayMode;
+use App\Modules\Branding\Actions\RemovePlatformFavicon;
 use App\Modules\Branding\Actions\RemovePlatformLogo;
+use App\Modules\Branding\Actions\UpdatePlatformFavicon;
 use App\Modules\Branding\Actions\UpdatePlatformLogo;
 use App\Modules\Branding\Enums\BrandDisplayMode;
+use App\Modules\Branding\Enums\FaviconSize;
 use App\Modules\Branding\Enums\LogoVariant;
 use App\Modules\Branding\Exceptions\InvalidImageException;
+use App\Modules\Branding\Models\PlatformFavicon;
 use App\Modules\Branding\Models\PlatformLogo;
 use App\Modules\Branding\Services\ImageNormalizer;
 use App\Modules\Branding\Services\PlatformBrand;
@@ -26,6 +30,7 @@ use Filament\Forms\Components\Select;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\View;
@@ -36,7 +41,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * "Branding" (ADR-0053): the platform logo (light and optional dark
- * variant) and what the brand shows (logo and name, logo only, name only).
+ * variant), what the brand shows (logo and name, logo only, name only) and
+ * the favicon.
  * Only for platform admins holding `platform:branding:manage`; every change
  * needs the re-authentication window and is audited by its action.
  *
@@ -46,6 +52,8 @@ use Illuminate\Validation\ValidationException;
 final class BrandingSettings extends Page
 {
     private const string UPLOAD_FIELD = 'logo';
+
+    private const string FAVICON_FIELD = 'favicon';
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedPaintBrush;
 
@@ -105,6 +113,17 @@ final class BrandingSettings extends Page
                         ->label(__('branding.fields.mode'))
                         ->state($brand->configuredMode()->label())
                         ->helperText($brand->hasLogo() ? null : (string) __('branding.display.no_logo')),
+                ]),
+            Section::make(__('branding.favicon.heading'))
+                ->description(__('branding.favicon.description'))
+                ->icon(Heroicon::OutlinedSquare2Stack)
+                ->schema([
+                    View::make('filament.branding.favicon-preview')->viewData([
+                        'urls' => $brand->hasFavicon()
+                            ? array_map(static fn (FaviconSize $size): ?string => $brand->faviconUrl($size), array_combine(FaviconSize::pixels(), FaviconSize::cases()))
+                            : [],
+                    ]),
+                    Actions::make([$this->uploadFaviconAction(), $this->removeFaviconAction()]),
                 ]),
         ]);
     }
@@ -223,6 +242,67 @@ final class BrandingSettings extends Page
 
                 $this->refreshContent();
                 Notification::make()->success()->title(__('branding.notifications.removed', ['variant' => $variant->label()]))->send();
+            });
+    }
+
+    public function uploadFaviconAction(): Action
+    {
+        return Action::make('uploadFavicon')
+            ->label(__('branding.favicon.upload'))
+            ->icon(Heroicon::OutlinedArrowUpTray)
+            ->authorize('manage', PlatformFavicon::class)
+            ->modalHeading(__('branding.favicon.upload_heading'))
+            ->modalDescription(__('branding.favicon.upload_help', ['max_mb' => 1, 'min_px' => ImageNormalizer::ICON_MIN_SOURCE_PIXELS, 'max_px' => ImageNormalizer::MAX_SOURCE_PIXELS]))
+            ->modalSubmitActionLabel(__('branding.actions.upload_submit'))
+            ->schema([
+                FileUpload::make(self::FAVICON_FIELD)
+                    ->label(__('branding.fields.file'))
+                    ->helperText(__('branding.favicon.file_help', ['max_mb' => 1, 'min_px' => ImageNormalizer::ICON_MIN_SOURCE_PIXELS, 'max_px' => ImageNormalizer::MAX_SOURCE_PIXELS]))
+                    ->acceptedFileTypes(['image/png', 'image/jpeg', 'image/webp'])
+                    ->maxSize(ImageNormalizer::MAX_BYTES / 1024)
+                    ->storeFiles(false)
+                    ->required(),
+                Reauthentication::field(),
+            ])
+            ->action(function (array $data, Action $action): void {
+                $file = self::uploadedFile($data[self::FAVICON_FIELD] ?? null);
+
+                if ($file === null) {
+                    throw ValidationException::withMessages([DomainErrors::fieldPath($action, self::FAVICON_FIELD) => __('branding.errors.empty')]);
+                }
+
+                try {
+                    $this->run($data, fn (PlatformAdmin $admin): array => app(UpdatePlatformFavicon::class)->handle($admin, (string) $file->get()));
+                } catch (InvalidImageException $e) {
+                    throw ValidationException::withMessages([DomainErrors::fieldPath($action, self::FAVICON_FIELD) => $e->rejection->message()]);
+                } finally {
+                    @unlink((string) $file->getRealPath());
+                }
+
+                $this->refreshContent();
+                Notification::make()->success()->title(__('branding.favicon.updated'))->send();
+            });
+    }
+
+    public function removeFaviconAction(): Action
+    {
+        return Action::make('removeFavicon')
+            ->label(__('branding.favicon.remove'))
+            ->icon(Heroicon::OutlinedTrash)
+            ->color('danger')
+            ->outlined()
+            ->visible(fn (): bool => app(PlatformBrand::class)->hasFavicon())
+            ->authorize('manage', PlatformFavicon::class)
+            ->requiresConfirmation()
+            ->modalHeading(__('branding.favicon.remove_heading'))
+            ->modalDescription(__('branding.favicon.remove_help'))
+            ->modalSubmitActionLabel(__('branding.favicon.remove'))
+            ->schema([Reauthentication::field()])
+            ->action(function (array $data): void {
+                $this->run($data, fn (PlatformAdmin $admin): bool => app(RemovePlatformFavicon::class)->handle($admin));
+
+                $this->refreshContent();
+                Notification::make()->success()->title(__('branding.favicon.removed'))->send();
             });
     }
 

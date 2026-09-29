@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\LocaleController;
 use App\Http\Middleware\SetLocale;
+use App\Modules\Branding\Http\Controllers\PlatformFaviconController;
 use App\Modules\Branding\Http\Controllers\PlatformLogoController;
 use App\Modules\Gateways\Http\Controllers\OnboardingRefreshController;
 use App\Modules\Gateways\Http\Controllers\OnboardingReturnController;
@@ -83,7 +84,7 @@ foreach (['admin', 'app'] as $panel) {
 
 /*
 |--------------------------------------------------------------------------
-| Platform logo (ADR-0053): admin, app and pay hosts
+| Platform logo and favicon (ADR-0053): admin, app and pay hosts
 |--------------------------------------------------------------------------
 |
 | Same-origin on every host that shows it (the checkout allows images from
@@ -108,6 +109,19 @@ foreach (['admin', 'app', 'pay'] as $surface) {
         ->get('/branding/platform-logo/{variant}/{version}.png', PlatformLogoController::class)
         ->where(['variant' => 'light|dark', 'version' => '[0-9a-z]{26}'])
         ->name("{$surface}.branding.platform-logo");
+
+    Route::domain(is_string($surfaceHost) ? $surfaceHost : "{$surface}.localhost")
+        ->withoutMiddleware([
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            PreventRequestForgery::class,
+            SetLocale::class,
+        ])
+        ->get('/branding/favicon/{size}/{version}.png', PlatformFaviconController::class)
+        ->where(['size' => '32|180|192', 'version' => '[0-9a-z]{26}'])
+        ->name("{$surface}.branding.favicon");
 }
 
 /*

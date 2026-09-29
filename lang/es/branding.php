@@ -54,6 +54,27 @@ return [
         'remove_help' => 'Sin logo, se muestra el nombre en todas partes.',
     ],
 
+    'favicon' => [
+        'heading' => 'Favicon',
+        'description' => 'El icono pequeño de las pestañas del navegador, los marcadores y los accesos directos, en ambos paneles y en la página de pago. Sin uno, se usa el icono predeterminado.',
+        'default_in_use' => 'Se está usando el favicon predeterminado.',
+        'upload' => 'Subir favicon',
+        'upload_heading' => 'Subir un favicon',
+        'upload_help' => 'Lo mejor es una imagen cuadrada; cualquier otra forma se centra sobre un cuadrado transparente. La imagen se revisa y se convierte a PNG en tres tamaños, sin datos ocultos. PNG, JPEG o WebP, hasta :max_mb MB, de :min_px × :min_px a :max_px × :max_px píxeles.',
+        'file_help' => 'PNG, JPEG o WebP, hasta :max_mb MB, de :min_px × :min_px a :max_px × :max_px píxeles. No se aceptan SVG ni ICO.',
+        'remove' => 'Eliminar favicon',
+        'remove_heading' => 'Eliminar el favicon',
+        'remove_help' => 'Se volverá a usar el favicon predeterminado.',
+        'updated' => 'Favicon actualizado.',
+        'removed' => 'Favicon eliminado.',
+        'preview_alt' => 'Favicon de :size × :size píxeles',
+        'size' => [
+            '32' => ':px × :px · pestaña del navegador',
+            '180' => ':px × :px · dispositivos Apple',
+            '192' => ':px × :px · Android y pantalla de inicio',
+        ],
+    ],
+
     'preview' => [
         'alt' => ':variant de :name',
         'empty' => 'Sin logo',
@@ -72,6 +93,7 @@ return [
         'unsupported_type' => 'Solo se aceptan imágenes PNG, JPEG o WebP.',
         'unreadable' => 'No se pudo leer la imagen. Compruebe que el archivo no esté dañado y que su contenido corresponda a su tipo.',
         'dimensions_too_large' => 'La imagen supera :max_px × :max_px píxeles.',
+        'dimensions_too_small' => 'La imagen es menor de :min_px × :min_px píxeles.',
         'reauthentication_required' => 'Confirme su identidad para continuar.',
     ],
 
