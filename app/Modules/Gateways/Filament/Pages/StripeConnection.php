@@ -213,6 +213,15 @@ final class StripeConnection extends Page
 
     private function statusCallout(GatewayConnection $connection): ?Callout
     {
+        // ADR-0055: test payments work although Stripe has not activated the account.
+        if ($connection->status === ConnectionStatus::Active && $connection->awaitsLiveActivation()) {
+            return Callout::make(__('gateways.callout.not_activated.heading'))
+                ->description(__('gateways.callout.not_activated.body'))
+                ->info()
+                ->icon(Heroicon::OutlinedInformationCircle)
+                ->columnSpanFull();
+        }
+
         $key = match ($connection->status) {
             ConnectionStatus::Onboarding => 'onboarding',
             ConnectionStatus::Restricted => 'restricted',
@@ -264,7 +273,11 @@ final class StripeConnection extends Page
                 ->label(__('gateways.fields.charges_enabled'))
                 ->state($connection->charges_enabled)
                 ->boolean()
-                ->tooltip($connection->charges_enabled ? __('gateways.fields.yes') : __('gateways.fields.no')),
+                ->tooltip(match (true) {
+                    $connection->charges_enabled => __('gateways.fields.yes'),
+                    $connection->awaitsLiveActivation() => __('gateways.fields.charges_not_activated'),
+                    default => __('gateways.fields.no'),
+                }),
             IconEntry::make('payouts_enabled')
                 ->label(__('gateways.fields.payouts_enabled'))
                 ->state($connection->payouts_enabled)
@@ -305,27 +318,21 @@ final class StripeConnection extends Page
     private function requirementsSection(GatewayConnection $connection): ?Section
     {
         $requirements = $connection->requirements ?? [];
-        $due = [];
-
-        foreach (['past_due', 'currently_due', 'eventually_due'] as $group) {
-            $values = $requirements[$group] ?? [];
-
-            foreach (is_array($values) ? $values : [] as $value) {
-                if (is_string($value)) {
-                    $due[$value] = true;
-                }
-            }
-        }
-
+        $due = self::requirementIds($requirements, ['past_due', 'currently_due', 'eventually_due']);
+        // Submitted items Stripe is still checking; listed apart, never as due.
+        $pending = array_diff_key(self::requirementIds($requirements, ['pending_verification']), $due);
         $reason = $requirements['disabled_reason'] ?? null;
 
-        if ($due === [] && ! is_string($reason)) {
+        if ($due === [] && $pending === [] && ! is_string($reason)) {
             return null;
         }
 
         $schema = [];
 
-        if (is_string($reason)) {
+        if ($connection->awaitsLiveActivation()) {
+            // ADR-0055: informative only, test payments are not affected.
+            $schema[] = Text::make(__('gateways.requirements.reason.live_activation'));
+        } elseif (is_string($reason)) {
             $schema[] = Text::make(__('gateways.requirements.reason.'.self::reasonGroup($reason)));
         }
 
@@ -343,6 +350,16 @@ final class StripeConnection extends Page
                 ->bulleted()
                 ->fontFamily(FontFamily::Mono)
                 // Requirement IDs are long dotted tokens: break them anywhere at 320px.
+                ->extraAttributes(['class' => 'break-all']);
+        }
+
+        if ($pending !== []) {
+            $schema[] = TextEntry::make('requirements_pending')
+                ->label(__('gateways.requirements.pending_intro', ['count' => count($pending)]))
+                ->state(array_keys($pending))
+                ->listWithLineBreaks()
+                ->bulleted()
+                ->fontFamily(FontFamily::Mono)
                 ->extraAttributes(['class' => 'break-all']);
         }
 
@@ -695,6 +712,30 @@ final class StripeConnection extends Page
         $name = Locale::getDisplayRegion('-'.$country, app()->getLocale());
 
         return $name !== '' && $name !== $country ? "{$name} ({$country})" : $country;
+    }
+
+    /**
+     * The requirement IDs of the given Stripe groups, as keys (deduplicated).
+     *
+     * @param  array<string, mixed>  $requirements
+     * @param  list<string>  $groups
+     * @return array<string, true>
+     */
+    private static function requirementIds(array $requirements, array $groups): array
+    {
+        $ids = [];
+
+        foreach ($groups as $group) {
+            $values = $requirements[$group] ?? [];
+
+            foreach (is_array($values) ? $values : [] as $value) {
+                if (is_string($value)) {
+                    $ids[$value] = true;
+                }
+            }
+        }
+
+        return $ids;
     }
 
     /** Stripe's `disabled_reason` values grouped into a few plain messages. */

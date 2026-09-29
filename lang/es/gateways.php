@@ -73,6 +73,10 @@ return [
             'heading' => 'Stripe pausó los pagos de esta cuenta',
             'body' => 'No se pueden crear links de pago hasta que Stripe vuelva a habilitar los cobros. Revise los requisitos pendientes abajo.',
         ],
+        'not_activated' => [
+            'heading' => 'Su cuenta de Stripe no está activada',
+            'body' => 'Los pagos de prueba funcionan. Active la cuenta en Stripe antes de conectar llaves de modo real.',
+        ],
         'invalid_credentials' => [
             'heading' => 'Sus llaves de API dejaron de funcionar',
             'body' => 'Stripe rechazó la llave guardada. Es posible que se haya revocado o cambiado. Actualice sus llaves para volver a recibir pagos.',
@@ -90,6 +94,7 @@ return [
         'last_synced_at' => 'Última actualización desde Stripe',
         'restricted_key' => 'Llave restringida',
         'last_health_check_at' => 'Última revisión de la llave',
+        'charges_not_activated' => 'Aún no: Stripe no ha activado esta cuenta. Los pagos de prueba funcionan.',
         'yes' => 'Sí',
         'no' => 'No',
     ],
@@ -99,11 +104,13 @@ return [
         'description' => 'Stripe le pide esta información cuando continúa el registro.',
         'intro' => 'Stripe aún necesita :count dato(s):',
         'deadline' => 'Stripe los solicita antes del :date.',
+        'pending_intro' => 'Stripe está verificando :count dato(s):',
         'reason' => [
             'information_needed' => 'Stripe necesita más información para habilitar los pagos.',
             'rejected' => 'Stripe rechazó esta cuenta. Contacte al soporte de Stripe para conocer los detalles.',
             'under_review' => 'Stripe está revisando esta cuenta.',
             'paused' => 'Stripe pausó esta cuenta. Revise su panel de Stripe para conocer los detalles.',
+            'live_activation' => 'Stripe lo necesita antes de activar la cuenta para pagos reales. Los pagos de prueba no se ven afectados.',
         ],
     ],
 

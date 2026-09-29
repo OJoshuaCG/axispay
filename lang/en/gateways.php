@@ -73,6 +73,10 @@ return [
             'heading' => 'Stripe paused payments on this account',
             'body' => 'Payment links cannot be created until Stripe enables charges again. Review the pending requirements below.',
         ],
+        'not_activated' => [
+            'heading' => 'Your Stripe account is not activated',
+            'body' => 'Test payments work. Activate the account in Stripe before you connect live keys.',
+        ],
         'invalid_credentials' => [
             'heading' => 'Your API keys stopped working',
             'body' => 'Stripe rejected the stored key. It may have been revoked or changed. Update your keys to receive payments again.',
@@ -90,6 +94,7 @@ return [
         'last_synced_at' => 'Last updated from Stripe',
         'restricted_key' => 'Restricted key',
         'last_health_check_at' => 'Last key check',
+        'charges_not_activated' => 'Not yet: Stripe has not activated this account. Test payments work.',
         'yes' => 'Yes',
         'no' => 'No',
     ],
@@ -99,11 +104,13 @@ return [
         'description' => 'Stripe asks for this information when you continue the onboarding.',
         'intro' => 'Stripe still needs :count item(s):',
         'deadline' => 'Stripe asks for them before :date.',
+        'pending_intro' => 'Stripe is verifying :count item(s):',
         'reason' => [
             'information_needed' => 'Stripe needs more information before it can enable payments.',
             'rejected' => 'Stripe rejected this account. Contact Stripe support for details.',
             'under_review' => 'Stripe is reviewing this account.',
             'paused' => 'Stripe paused this account. Check your Stripe dashboard for details.',
+            'live_activation' => 'Stripe needs this before it activates the account for live payments. Test payments are not affected.',
         ],
     ],
 
