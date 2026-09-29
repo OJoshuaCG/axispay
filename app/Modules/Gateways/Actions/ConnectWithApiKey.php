@@ -171,7 +171,7 @@ final readonly class ConnectWithApiKey
                 'provider_webhook_endpoint_id' => $endpoint['id'],
                 'provider_webhook_secret' => $webhookSecret->ciphertext,
                 'credentials_key_version' => $webhookSecret->keyVersion,
-                'status' => $account->chargesEnabled ? ConnectionStatus::Active : ConnectionStatus::Restricted,
+                'status' => SyncGatewayConnection::statusFor($locked, $account),
                 'charges_enabled' => $account->chargesEnabled,
                 'payouts_enabled' => $account->payoutsEnabled,
                 'details_submitted' => $account->detailsSubmitted,

@@ -9,7 +9,8 @@ use App\Modules\Gateways\Models\GatewayConnection;
 /**
  * Whether the current tenant can charge in the current mode (plan 10.5
  * business validation 2, 12.3.4, 21.3): its connection in this mode is
- * `active` and the gateway reports charges enabled. Used before creating a
+ * `active` and the gateway account allows charges (Stripe's flag, except for
+ * test-mode api_key connections, ADR-0055). Used before creating a
  * link; answers from our database (ADR-017), never by calling the gateway.
  */
 final class ChargeReadiness
@@ -41,7 +42,7 @@ final class ChargeReadiness
         return GatewayConnection::query()->current()->exists();
     }
 
-    /** Whether this connection can charge now: `active` and charges enabled at the gateway. */
+    /** Whether this connection can charge now: `active` and the gateway account allows it (ADR-0055). */
     public function isReady(?GatewayConnection $connection): bool
     {
         return self::ready($connection);
@@ -49,6 +50,6 @@ final class ChargeReadiness
 
     private static function ready(?GatewayConnection $connection): bool
     {
-        return $connection !== null && $connection->status->canCharge() && $connection->charges_enabled;
+        return $connection !== null && $connection->status->canCharge() && $connection->accountAllowsCharges($connection->charges_enabled);
     }
 }

@@ -26,9 +26,11 @@ use LogicException;
  * 12.3.1 steps 3 and 6, 12.3.4, 14.3 `account.updated`). The gateway is the
  * source of truth, never the redirect or the webhook payload (ADR-017).
  *
- * Status rule: charges enabled -> `active`; otherwise `restricted` once the
- * connection could charge before (or always for api_key, which has no
- * assisted onboarding), else it stays `onboarding`. Runs in the tenant
+ * Status rule: charges enabled (or a test-mode api_key connection, whose
+ * charges do not depend on the flag, ADR-0055) -> `active`; otherwise
+ * `restricted` once the connection could charge before (or always for
+ * api_key, which has no assisted onboarding), else it stays `onboarding`.
+ * Stripe's own flags are stored as reported either way. Runs in the tenant
  * context of the connection; the transition happens under a row lock.
  */
 final readonly class SyncGatewayConnection
@@ -122,7 +124,7 @@ final readonly class SyncGatewayConnection
 
     public static function statusFor(GatewayConnection $connection, ConnectedAccountData $account): ConnectionStatus
     {
-        if ($account->chargesEnabled) {
+        if ($connection->accountAllowsCharges($account->chargesEnabled)) {
             return ConnectionStatus::Active;
         }
 

@@ -108,6 +108,33 @@ final class GatewayConnection extends Model
         return $this->connection_method === ConnectionMethod::ApiKey;
     }
 
+    /**
+     * ADR-0055: whether the gateway's `charges_enabled` flag decides if this
+     * connection can charge. Not for a test-mode api_key connection: Stripe
+     * accepts test charges on an account that is not activated, while its
+     * Account object reports the live activation. Every other connection,
+     * and every live one, still needs the flag.
+     */
+    public function chargesFlagApplies(): bool
+    {
+        return ! ($this->isApiKey() && ! $this->livemode);
+    }
+
+    /** Whether the gateway account lets this connection charge, given Stripe's `charges_enabled` (ADR-0055). */
+    public function accountAllowsCharges(bool $chargesEnabled): bool
+    {
+        return $chargesEnabled || ! $this->chargesFlagApplies();
+    }
+
+    /**
+     * ADR-0055: a test-mode api_key connection that charges although Stripe
+     * has not activated the account yet (the panel says so, without alarm).
+     */
+    public function awaitsLiveActivation(): bool
+    {
+        return ! $this->charges_enabled && ! $this->chargesFlagApplies();
+    }
+
     /** `rk_live_…a1b2`: the only form of the secret the panel ever shows. */
     public function maskedSecret(): ?string
     {
