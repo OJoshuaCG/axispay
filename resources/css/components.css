@@ -93,3 +93,23 @@
         border-color: var(--color-error);
     }
 }
+
+/*
+ * Platform logo at the size of the sign-in-like pages (ADR-0053, ADR-0054),
+ * for the Blade pages that play that role (invitation acceptance): the same
+ * --brand-logo-simple-* tokens as the panels' sign-in pages. Used by
+ * <x-platform-brand>.
+ */
+@utility brand-logo-simple {
+    width: auto;
+    height: auto;
+    max-width: min(var(--brand-logo-simple-max-width), 100%);
+    max-height: var(--brand-logo-simple-max-height);
+    object-fit: contain;
+}
+
+@utility brand-mark-simple {
+    width: var(--brand-mark-simple-size);
+    height: var(--brand-mark-simple-size);
+    flex-shrink: 0;
+}

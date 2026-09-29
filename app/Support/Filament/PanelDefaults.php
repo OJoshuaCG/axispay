@@ -65,7 +65,10 @@ final class PanelDefaults
             ->darkModeBrandLogo(static fn (): ?Htmlable => app(PlatformBrand::class)->showsLogo() && app(PlatformBrand::class)->hasVariant(LogoVariant::Dark)
                 ? self::brandMark(LogoVariant::Dark)
                 : null)
-            ->brandLogoHeight('1.75rem')
+            // The height follows the place it is shown in (compact in the
+            // topbar, larger on the simple pages and the lg sidebar): set by
+            // resources/css/filament/theme.css from the --brand-logo-* tokens.
+            ->brandLogoHeight('var(--pl-brand-logo-height)')
             ->multiFactorAuthentication(
                 [AuditedAppAuthentication::make()->recoverable()->brandName(Brand::displayName())],
                 isRequired: $requireTwoFactor,

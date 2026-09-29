@@ -388,3 +388,189 @@ html.fi {
         color: inherit;
     }
 }
+
+/*
+ * Platform brand in the panels (ADR-0053, ADR-0054). One markup
+ * (resources/views/filament/partials/brand.blade.php) sized by where
+ * Filament renders it; the sizes are the --brand-logo-* tokens of theme.css.
+ * Filament's logo wrapper (.fi-logo) takes its height from
+ * --pl-brand-logo-height (PanelDefaults::brandLogoHeight()).
+ */
+html.fi {
+    --pl-brand-logo-height: var(--brand-logo-compact-height);
+}
+
+@layer components {
+    /* Compact: topbar and mobile drawer, one row. */
+    .fi .pl-brand {
+        display: flex;
+        min-width: 0;
+        height: 100%;
+        align-items: center;
+        gap: var(--spacing-stack-sm);
+    }
+
+    .fi .pl-brand-logo {
+        display: block;
+        height: 100%;
+        width: auto;
+        max-width: 12rem;
+        flex-shrink: 0;
+        object-fit: contain;
+    }
+
+    .fi .pl-brand-mark {
+        width: var(--brand-logo-compact-height);
+        height: var(--brand-logo-compact-height);
+        flex-shrink: 0;
+    }
+
+    .fi .pl-brand-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: var(--text-lg);
+        line-height: var(--text-lg--line-height);
+        font-weight: var(--font-weight-bold);
+        letter-spacing: var(--tracking-snug);
+        color: var(--color-fg);
+    }
+
+    /*
+     * Simple pages (sign-in, 2FA, invitation, password reset): the logo grows
+     * up to the token box (the card width on phones), the name stacked under
+     * it, centered. Without a logo, a larger tile beside a larger name.
+     */
+    .fi .fi-simple-header {
+        --pl-brand-logo-height: auto;
+
+        & .fi-logo {
+            max-width: 100%;
+            justify-content: center;
+        }
+
+        & .pl-brand {
+            height: auto;
+            max-width: 100%;
+            justify-content: center;
+            text-align: center;
+        }
+
+        & .pl-brand[data-brand-kind='logo'] {
+            flex-direction: column;
+        }
+
+        & .pl-brand-logo {
+            height: auto;
+            max-width: min(var(--brand-logo-simple-max-width), 100%);
+            max-height: var(--brand-logo-simple-max-height);
+        }
+
+        & .pl-brand-mark {
+            width: var(--brand-mark-simple-size);
+            height: var(--brand-mark-simple-size);
+        }
+
+        & .pl-brand-name {
+            font-size: var(--text-2xl);
+            line-height: var(--text-2xl--line-height);
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+    }
+}
+
+/*
+ * Full-height sidebar from lg (ADR-0054). Filament renders the full-width
+ * topbar before .fi-layout (sidebar + content). Without moving any element
+ * (DOM order, landmarks and the skip link unchanged):
+ *  - the banners (BODY_START) stay in normal flow, full width, on top;
+ *  - the topbar is pushed right by the sidebar width (sticky, as before);
+ *  - the sidebar is pulled up by the topbar height, so it starts where the
+ *    topbar starts, and sticks at the top with the full viewport height and
+ *    its own scroll; its header shows the logo, the topbar's is hidden.
+ * Below lg nothing changes (drawer sidebar, full-width topbar).
+ *
+ * Relies on Filament 5 class names and variables (.fi-topbar-ctn,
+ * .fi-layout, .fi-sidebar, .fi-sidebar-header, --sidebar-width,
+ * --topbar-height): re-check this block on every Filament upgrade.
+ */
+@layer components {
+    @variant lg {
+        .fi
+            .fi-body.fi-body-has-topbar.fi-body-has-navigation:not(.fi-body-has-top-navigation):not(
+                .fi-body-has-sidebar-collapsible-on-desktop
+            ):not(.fi-body-has-sidebar-fully-collapsible-on-desktop) {
+            & .fi-topbar-ctn {
+                margin-inline-start: var(--sidebar-width);
+            }
+
+            /* The topbar keeps exactly its height: the sidebar is pulled up by it. */
+            & .fi-topbar {
+                height: var(--topbar-height);
+            }
+
+            & .fi-topbar-start {
+                display: none;
+            }
+
+            & .fi-layout > :has(> .fi-sidebar) {
+                margin-top: calc(-1 * var(--topbar-height));
+            }
+
+            & .fi-sidebar {
+                top: 0;
+                height: 100dvh;
+            }
+
+            & .fi-sidebar-header {
+                display: flex;
+                height: auto;
+                min-height: var(--topbar-height);
+                padding-block: var(--spacing-stack-md);
+                padding-inline: var(--brand-logo-sidebar-padding-inline);
+                background-color: transparent;
+                box-shadow: none;
+                --tw-ring-shadow: 0 0 #0000;
+                --pl-brand-logo-height: auto;
+            }
+
+            & .fi-sidebar-header-logo-ctn {
+                min-width: 0;
+
+                & > a {
+                    display: block;
+                    border-radius: var(--radius-md);
+                }
+            }
+
+            /* Aligned with the navigation (Filament adds ms-3 here). */
+            & .fi-sidebar-header .fi-logo {
+                max-width: 100%;
+                margin-inline-start: 0;
+            }
+
+            & .fi-sidebar-header .pl-brand {
+                height: auto;
+                max-width: 100%;
+            }
+
+            & .fi-sidebar-header .pl-brand[data-brand-kind='logo'] {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            & .fi-sidebar-header .pl-brand-logo {
+                height: auto;
+                max-width: 100%;
+                max-height: var(--brand-logo-sidebar-max-height);
+            }
+
+            & .fi-sidebar-header .pl-brand-name {
+                white-space: normal;
+                overflow-wrap: anywhere;
+            }
+        }
+    }
+}
