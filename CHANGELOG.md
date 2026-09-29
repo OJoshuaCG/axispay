@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Panel layout and favicon** (ADR-0054, ADR-0053 amendment):
+  - A larger platform logo on the sign-in, two-factor and invitation pages
+    (up to 320 px wide, the name centered under it).
+  - From 1024 px, both panels show a full-height sidebar with the platform
+    logo; the top bar sits beside it and the account notices stay full width
+    on top. Phones and tablets are unchanged.
+  - The logo sizes are design tokens, adjustable in one place.
+  - The superadmin can upload the platform favicon on the Branding page
+    (PNG, JPEG or WebP, 32 to 2000 px, SVG and ICO refused); three sizes are
+    generated and linked from every page, with the default favicon when none
+    is uploaded. Upload and removal need the password again and are audited.
+
 - **Stripe connection, API keys method:** a "View required permissions"
   help on the Stripe connection page (also available, collapsed, inside the
   connect and update keys forms) with the steps to create the restricted key

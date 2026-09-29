@@ -63,6 +63,9 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Autofocus of feedback on page load | `resources/js/focus.js` |
 | The payer-facing checkout: page, states, payer fields, Stripe appearance, sandbox stub | `resources/views/checkout/*`, `resources/views/components/checkout/*`, `resources/js/checkout/*` (copy: `lang/*/checkout.php`) |
 | Icon package registration | `config/blade-icons.php` |
+| Size of the platform logo in the panels (topbar, sign-in pages, full-height sidebar) | `resources/css/theme.css` (`--brand-logo-*`, see [tokens.md](tokens.md#brand-logo-sizes)); where it is applied: `resources/css/filament/theme.css` |
+| Panel layout from lg (full-height sidebar, topbar beside it) | `resources/css/filament/theme.css`, "Full-height sidebar from lg" (ADR-0054) |
+| Favicon tags | `resources/views/components/favicon-links.blade.php` (in every layout) |
 
 ## Documentation map
 

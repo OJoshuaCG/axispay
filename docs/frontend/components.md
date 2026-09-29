@@ -479,19 +479,27 @@ The states and their exact copy are in [payments-ui.md](payments-ui.md#checkout)
 
 ## Platform brand (logo and name)
 
-The platform brand (ADR-0053) is rendered in two places only. Never hand-write a logo `<img>` or the platform name next to one elsewhere.
+The platform brand (ADR-0053, ADR-0054) is rendered from three views only. Never hand-write a logo `<img>` or the platform name next to one elsewhere.
 
 | Where | File | Notes |
 |---|---|---|
-| Both panels (topbar, mobile sidebar, sign-in, 2FA, invitation) | `resources/views/filament/partials/brand.blade.php`, wired in `PanelDefaults` via `brandLogo()`, `darkModeBrandLogo()` (only when a dark variant exists) and `brandLogoHeight('1.75rem')` | Filament swaps the light and dark renders itself |
+| Both panels: topbar and mobile drawer (compact), sign-in and 2FA pages (large, name under the logo), full-height sidebar from lg (logo up to the sidebar width, name under it) | `resources/views/filament/partials/brand.blade.php`, wired in `PanelDefaults` via `brandLogo()`, `darkModeBrandLogo()` (only when a dark variant exists) and `brandLogoHeight('var(--pl-brand-logo-height)')` | One markup (`.pl-brand`, `data-brand-kind="logo|mark"`); size and stacking come from `resources/css/filament/theme.css` per place (`.fi-simple-header`, `.fi-sidebar-header` from lg) and the `--brand-logo-*` tokens. Filament swaps the light and dark renders itself |
+| Blade pages in the sign-in role (invitation acceptance, invalid invitation) | `<x-platform-brand>` (`resources/views/components/platform-brand.blade.php`) | Same size as the panels' sign-in page (`brand-logo-simple`, `brand-mark-simple`); dark variant via `hidden dark:block` |
 | Checkout "Powered by" | `resources/views/components/checkout/platform-brand.blade.php`, placed in the translated sentence by `components/checkout/footer.blade.php` | The sentence is escaped; only the brand markup replaces its placeholder. Dark variant via `dark:hidden` / `dark:inline-block` |
 
-Rules both follow, from `App\Modules\Branding\Services\PlatformBrand`:
+Rules all follow, from `App\Modules\Branding\Services\PlatformBrand`:
 
 - `mode()` is the effective mode: `name_only` whenever there is no light logo.
 - The logo's `alt` is always `Brand::displayName()`. When the visible name is shown next to it, the name is `aria-hidden="true"` so it is not read twice; in `logo_only` the alt carries the name.
 - No logo, or `name_only`: the stand-in mark tile (decorative) plus the name.
 - Logo URLs are relative (`/branding/platform-logo/{variant}/{version}.png`), served same-origin on the admin, app and pay hosts, so the checkout CSP (`img-src 'self'`) holds.
 - E-mails, page titles and the 2FA issuer use `Brand::displayName()` only.
-- The Branding settings page previews each variant on fixed `bg-neutral-0` / `bg-neutral-900` (`resources/views/filament/branding/logo-preview.blade.php`), so the preview is the same in either theme.
+- The Branding settings page previews each logo variant on fixed `bg-neutral-0` / `bg-neutral-900` (`resources/views/filament/branding/logo-preview.blade.php`), and the favicon sizes the same way (`favicon-preview.blade.php`), so the previews are the same in either theme.
 
+### Panel layout from lg (ADR-0054)
+
+From 1024px the panels show a full-height sidebar with the logo, the topbar beside it and the banners (`BODY_START`) full width on top. It is CSS only (`resources/css/filament/theme.css`, "Full-height sidebar from lg"): the topbar gets `margin-inline-start: var(--sidebar-width)`, the sidebar's wrapper is pulled up by `--topbar-height` and the sidebar sticks at `top: 0` with `height: 100dvh`. No element moves, so DOM order, landmarks and the skip link are unchanged. Below lg nothing changes. The block depends on Filament's class names and variables: re-check it (screenshots at 1024 and 1440, with a banner) on every Filament upgrade.
+
+### Favicon (`<x-favicon-links>`)
+
+`resources/views/components/favicon-links.blade.php` prints the favicon tags: the uploaded platform favicon (32 and 192 px `icon`, 180 px `apple-touch-icon`, versioned same-origin URLs), or `/favicon.ico` when none was uploaded. It is in every layout: both panels (`PanelDefaults`, `HEAD_END` render hook), `components/layouts/checkout.blade.php` (payment page and pay-host error pages) and `components/layouts/app.blade.php`. A new layout must include it.

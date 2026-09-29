@@ -46,3 +46,17 @@ The project owner wants the platform's own logo now, managed from the platform p
 - The stand-in mark stays for the "name only" display and whenever no logo exists.
 - The platform permission catalog now exists in the product (starting with "manage branding"); future platform permissions join it.
 - A JPEG photo's rotation flag is not applied when converting; a logo uploaded sideways must be uploaded upright.
+
+## Amendment (by the project owner, 2026-09-29): favicon and larger logo
+
+**Favicon.** The superadmin can also upload the platform favicon (the small icon of browser tabs, bookmarks and home-screen shortcuts) from the same Branding page, with a preview:
+
+- PNG, JPEG or WebP only, recognized from the file's content (SVG and ICO refused); at most 1 MB; at least 32 × 32 and at most 2000 × 2000 pixels;
+- an image that is not square is centered on a transparent square;
+- three icons are generated from it: 32 × 32 (browser tab), 180 × 180 (Apple devices) and 192 × 192 (Android and home screen), each converted to a clean PNG without hidden data, kept in the database like the logo, each with its own random address;
+- delivered by the platform's own address on the panels and the payment page, like the logo (long browser cache, a new address on every change, no cookies), and announced by every page: both panels, the payment page and its error pages, and the other public pages;
+- without an uploaded favicon, the default one shipped with the application is used, unchanged;
+- uploading and removing it need the "manage branding" permission and the password again, and are recorded in the platform audit log ("favicon uploaded", "favicon removed").
+
+**Larger logo.** The logo is shown larger on the sign-in pages and in a full-height sidebar on large screens: see [ADR-0054](0054-panel-layout-full-height-sidebar.md).
+
