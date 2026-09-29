@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Modules\Branding\Enums\BrandDisplayMode;
+use App\Modules\Branding\Enums\FaviconSize;
 use App\Modules\Branding\Enums\LogoVariant;
+use App\Modules\Branding\Models\PlatformFavicon;
 use App\Modules\Branding\Models\PlatformLogo;
 use App\Modules\Branding\Models\PlatformSetting;
 use App\Modules\Branding\Services\PlatformBrand;
@@ -95,6 +97,47 @@ final class BrandingTestHelpers
         app(PlatformBrand::class)->forget();
 
         return $logo;
+    }
+
+    /** An ICO file header (a real favicon.ico starts with these bytes). */
+    public static function ico(): string
+    {
+        return "\0\0\1\0\1\0\x10\x10\0\0\1\0\x20\0".str_repeat("\0", 64);
+    }
+
+    /**
+     * Stores a favicon directly (bypassing the action): one row per size,
+     * then drops the cached brand.
+     *
+     * @return array<int, PlatformFavicon> size => row
+     */
+    public static function storeFavicon(): array
+    {
+        $rows = [];
+
+        foreach (FaviconSize::cases() as $size) {
+            $bytes = self::png($size->value, $size->value);
+            $favicon = new PlatformFavicon;
+            $favicon->forceFill([
+                'size' => $size,
+                'version' => strtolower((string) Str::ulid()),
+                'mime_type' => 'image/png',
+                'size_bytes' => strlen($bytes),
+                'sha256' => hash('sha256', $bytes),
+                'content' => $bytes,
+            ])->save();
+            $rows[$size->value] = $favicon;
+        }
+
+        app(PlatformBrand::class)->forget();
+
+        return $rows;
+    }
+
+    /** The served URL of a stored favicon size. */
+    public static function faviconUrl(PlatformFavicon $favicon): string
+    {
+        return PlatformBrand::FAVICON_PATH.'/'.$favicon->size->value.'/'.$favicon->version.'.png';
     }
 
     /** Sets the display mode directly (bypassing the action), then drops the cached brand. */
