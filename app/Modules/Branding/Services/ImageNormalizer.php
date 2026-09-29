@@ -28,16 +28,26 @@ final class ImageNormalizer
 
     public const int MAX_SOURCE_PIXELS = 2000;
 
-    /** Plan 18: logos are normalized to at most 400 × 120. */
+    /** Plan 18: logos are normalized to at most 400 × 120 (tenant logos, Phase 8). */
     public const int LOGO_MAX_WIDTH = 400;
 
     public const int LOGO_MAX_HEIGHT = 120;
+
+    /**
+     * The platform logo is kept larger (ADR-0053 amendment of 2026-09-29), so
+     * it stays sharp across the full-height sidebar and the sign-in pages
+     * (ADR-0054), retina included.
+     */
+    public const int PLATFORM_LOGO_MAX_WIDTH = 1024;
+
+    public const int PLATFORM_LOGO_MAX_HEIGHT = 512;
 
     /** Smallest favicon source: the browser tab size. */
     public const int ICON_MIN_SOURCE_PIXELS = 32;
 
     /**
-     * A logo: scaled down to fit the box (never up).
+     * A logo: scaled down to fit the box (never up). The default box is the
+     * tenant one of plan 18; the platform logo passes PLATFORM_LOGO_MAX_*.
      *
      * @throws InvalidImageException
      */
