@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Access\Enums\SystemRole;
+use App\Modules\Gateways\Enums\ConnectionStatus;
 use App\Modules\Gateways\Filament\Pages\StripeConnection;
 use App\Modules\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\Notification;
@@ -157,4 +158,59 @@ it('disconnects from the page', function (): void {
         ->callAction('disconnect')
         ->assertHasNoActionErrors()
         ->assertSee(__('gateways.connect.onboarding.heading'));
+});
+
+it('tells a test-mode api_key connection that the account is not activated, without claiming payments are blocked (ADR-0055)', function (string $locale): void {
+    app()->setLocale($locale);
+    $owner = actingAsTenantUser(tenantUser());
+    GatewayTestHelpers::connection(tenantOf($owner), state: static fn ($factory) => $factory->apiKey()->state([
+        'charges_enabled' => false,
+        'payouts_enabled' => false,
+        'requirements' => ['currently_due' => [], 'eventually_due' => [], 'past_due' => [], 'pending_verification' => [], 'disabled_reason' => 'requirements.past_due', 'current_deadline' => null],
+    ]));
+
+    Livewire::test(StripeConnection::class)
+        ->assertSee(__('gateways.callout.not_activated.heading'))
+        ->assertSee(__('gateways.callout.not_activated.body'))
+        ->assertSee(__('gateways.requirements.reason.live_activation'))
+        ->assertSee(__('gateways.status.active'))
+        ->assertDontSee(__('gateways.callout.restricted.heading'))
+        ->assertDontSee(__('gateways.requirements.reason.information_needed'));
+})->with(['en', 'es']);
+
+it('keeps the paused-payments warning for a live api_key connection without charges (ADR-0055)', function (): void {
+    $owner = actingAsTenantUser(tenantUser(), livemode: true);
+    GatewayTestHelpers::connection(tenantOf($owner), livemode: true, state: static fn ($factory) => $factory->apiKey(GatewayTestHelpers::restrictedKey(true), GatewayTestHelpers::publishableKey(true))->state([
+        'status' => ConnectionStatus::Restricted,
+        'charges_enabled' => false,
+    ]));
+
+    Livewire::test(StripeConnection::class)
+        ->assertSee(__('gateways.callout.restricted.heading'))
+        ->assertDontSee(__('gateways.callout.not_activated.heading'));
+});
+
+it('lists the requirements Stripe is still verifying apart from the due ones', function (): void {
+    $owner = actingAsTenantUser(tenantUser());
+    GatewayTestHelpers::connection(tenantOf($owner), state: static fn ($factory) => $factory->onboarding()->state([
+        'requirements' => ['currently_due' => ['external_account'], 'eventually_due' => [], 'past_due' => [], 'pending_verification' => ['individual.verification.document'], 'disabled_reason' => null, 'current_deadline' => null],
+    ]));
+
+    Livewire::test(StripeConnection::class)
+        ->assertSee(__('gateways.requirements.intro', ['count' => 1]))
+        ->assertSee('external_account')
+        ->assertSee(__('gateways.requirements.pending_intro', ['count' => 1]))
+        ->assertSee('individual.verification.document');
+});
+
+it('shows the requirements section when Stripe is only verifying items', function (): void {
+    $owner = actingAsTenantUser(tenantUser());
+    GatewayTestHelpers::connection(tenantOf($owner), state: static fn ($factory) => $factory->state([
+        'requirements' => ['currently_due' => [], 'eventually_due' => [], 'past_due' => [], 'pending_verification' => ['company.verification.document'], 'disabled_reason' => null, 'current_deadline' => null],
+    ]));
+
+    Livewire::test(StripeConnection::class)
+        ->assertSee(__('gateways.requirements.heading'))
+        ->assertSee('company.verification.document')
+        ->assertDontSee(__('gateways.requirements.intro', ['count' => 1]));
 });

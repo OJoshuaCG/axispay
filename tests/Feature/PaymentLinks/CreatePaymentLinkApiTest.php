@@ -329,6 +329,22 @@ it('answers gateway_not_ready without a connection that can charge in this mode'
     'active without charges' => static fn (Tenant $tenant) => GatewayTestHelpers::connection($tenant, state: static fn ($f) => $f->state(['charges_enabled' => false])),
 ]);
 
+it('creates links with a test-mode api_key connection of an account Stripe has not activated (ADR-0055)', function (): void {
+    $tenant = Tenant::factory()->status(TenantStatus::Active)->create();
+    GatewayTestHelpers::connection($tenant, state: static fn ($f) => $f->apiKey()->state(['charges_enabled' => false, 'payouts_enabled' => false]));
+    [, $key] = ApiTestHelpers::key($tenant);
+
+    createLink($key, ApiTestHelpers::body())->assertCreated();
+});
+
+it('answers gateway_not_ready for a live api_key connection without charges (ADR-0055)', function (): void {
+    $tenant = Tenant::factory()->status(TenantStatus::Active)->create();
+    GatewayTestHelpers::connection($tenant, livemode: true, state: static fn ($f) => $f->apiKey(GatewayTestHelpers::restrictedKey(true), GatewayTestHelpers::publishableKey(true))->state(['charges_enabled' => false]));
+    [, $key] = ApiTestHelpers::key($tenant, livemode: true);
+
+    expectApiError(createLink($key, ApiTestHelpers::body()), ApiErrorCode::GatewayNotReady);
+});
+
 it('requires a JSON object body', function (string $contentType, string $raw): void {
     $tenant = ApiTestHelpers::readyTenant();
     [, $key] = ApiTestHelpers::key($tenant);

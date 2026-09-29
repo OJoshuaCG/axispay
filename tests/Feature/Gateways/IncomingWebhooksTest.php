@@ -188,7 +188,9 @@ it('accepts direct events signed with the connection secret and syncs with the r
         ->and(storedEvents()[0]->provider_account_id)->toBe('acct_Direct0001')
         ->and(stripeHttp()->requestsTo('get', '/v1/account')[0]['headers']['authorization'])->toBe('Bearer '.$secret)
         ->and(stripeHttp()->requestsTo('get', '/v1/account')[0]['headers'])->not->toHaveKey('stripe-account')
-        ->and(inTenant($connection, static fn () => $connection->refresh()->status))->toBe(ConnectionStatus::Restricted);
+        // ADR-0055: a test-mode api_key connection charges although Stripe has not activated the account.
+        ->and(inTenant($connection, static fn () => $connection->refresh()->status))->toBe(ConnectionStatus::Active)
+        ->and(inTenant($connection, static fn () => $connection->refresh()->charges_enabled))->toBeFalse();
 });
 
 it('refuses direct events of another account or mode', function (): void {

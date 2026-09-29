@@ -109,3 +109,36 @@ it('syncs the account and heals invalid credentials once the key works again', f
         ->and($checked->last_health_check_status)->toBe(HealthCheckStatus::Ok)
         ->and($checked->last_health_check_at)->not->toBeNull();
 });
+
+it('re-derives a restricted test-mode connection whose only blocker is the activation as active, silently (ADR-0055)', function (ConnectionStatus $stored): void {
+    $connection = GatewayTestHelpers::connection(activeTenant(), state: static fn ($factory) => $factory->apiKey()->state([
+        'provider_account_id' => 'acct_Health0004',
+        'status' => $stored,
+        'charges_enabled' => false,
+        'payouts_enabled' => false,
+    ]));
+    $owner = tenantUser($connection->tenant()->firstOrFail());
+    FakePaymentGateway::install()->withAccount('acct_Health0004', chargesEnabled: false);
+
+    $checked = runHealthCheck($connection);
+
+    expect($checked->status)->toBe(ConnectionStatus::Active)
+        ->and($checked->charges_enabled)->toBeFalse()
+        ->and($checked->requirements['disabled_reason'] ?? null)->toBe('requirements.past_due');
+
+    Notification::assertNothingSentTo($owner);
+})->with([
+    'restricted before ADR-0055' => ConnectionStatus::Restricted,
+    'already active' => ConnectionStatus::Active,
+]);
+
+it('still restricts a live-mode connection when Stripe disables charges, and notifies (ADR-0055)', function (): void {
+    $connection = GatewayTestHelpers::connection(activeTenant(), livemode: true, state: static fn ($factory) => $factory->apiKey(GatewayTestHelpers::restrictedKey(true), GatewayTestHelpers::publishableKey(true))->state(['provider_account_id' => 'acct_Health0005']));
+    $owner = tenantUser($connection->tenant()->firstOrFail());
+    FakePaymentGateway::install()->withAccount('acct_Health0005', chargesEnabled: false);
+
+    $checked = runHealthCheck($connection);
+
+    expect($checked->status)->toBe(ConnectionStatus::Restricted);
+    Notification::assertSentTo($owner, GatewayConnectionNotification::class, static fn (GatewayConnectionNotification $n): bool => $n->notice === ConnectionNotice::Restricted);
+});

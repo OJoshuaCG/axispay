@@ -20,6 +20,7 @@ use App\Modules\Gateways\Exceptions\ApiKeyValidationException;
 use App\Modules\Gateways\Exceptions\GatewayConnectionException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Notifications\GatewayConnectionNotification;
+use App\Modules\Gateways\Services\ChargeReadiness;
 use App\Modules\Gateways\Services\GatewayCredentialsEncrypter;
 use App\Modules\Identity\Models\User;
 use App\Modules\Tenancy\Enums\TenantStatus;
@@ -335,3 +336,33 @@ it('refuses a second connection in the same mode', function (): void {
 
     app(ConnectWithApiKey::class)->handle($owner, apiKeyData(GatewayTestHelpers::restrictedKey(suffix: 'Sec2')));
 })->throws(GatewayConnectionException::class);
+
+it('activates a test-mode key of an account Stripe has not activated, keeping Stripe\'s flags (ADR-0055)', function (): void {
+    $owner = apiKeyOwner();
+    apiKeyScenario()->chargesDisabled();
+
+    $connection = app(ConnectWithApiKey::class)->handle($owner, apiKeyData());
+
+    expect($connection->status)->toBe(ConnectionStatus::Active)
+        ->and($connection->charges_enabled)->toBeFalse()
+        ->and($connection->payouts_enabled)->toBeFalse()
+        ->and($connection->requirements['disabled_reason'] ?? null)->toBe('requirements.past_due')
+        ->and(app(ChargeReadiness::class)->isReady($connection))->toBeTrue()
+        ->and(app(ChargeReadiness::class)->canChargeInCurrentMode())->toBeTrue()
+        ->and(tenantOf($owner)->status)->toBe(TenantStatus::Active);
+
+    Notification::assertNotSentTo($owner, GatewayConnectionNotification::class, static fn (GatewayConnectionNotification $n): bool => $n->notice === ConnectionNotice::Restricted);
+});
+
+it('keeps a live-mode key of an account Stripe has not activated restricted (ADR-0055)', function (): void {
+    $owner = apiKeyOwner(livemode: true);
+    apiKeyScenario()->chargesDisabled();
+
+    $connection = app(ConnectWithApiKey::class)->handle($owner, apiKeyData(livemode: true));
+
+    expect($connection->livemode)->toBeTrue()
+        ->and($connection->status)->toBe(ConnectionStatus::Restricted)
+        ->and($connection->charges_enabled)->toBeFalse()
+        ->and(app(ChargeReadiness::class)->isReady($connection))->toBeFalse()
+        ->and(tenantOf($owner)->status)->toBe(TenantStatus::PendingOnboarding);
+});
