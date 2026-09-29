@@ -277,7 +277,7 @@ Use the named layers instead of numeric `z-*` values.
 
 ## Brand logo sizes
 
-Defined in `theme.css` (ADR-0053, ADR-0054). Plain variables, not utilities: the panel theme (`resources/css/filament/theme.css`) and two utilities in `components.css` (`brand-logo-simple`, `brand-mark-simple`) read them. Uploaded logos are normalized to fit 400 x 120 px, so every size here stays sharp; raising a size above that makes small logos no bigger, it never upscales them.
+Defined in `theme.css` (ADR-0053, ADR-0054). Plain variables, not utilities: the panel theme (`resources/css/filament/theme.css`) and two utilities in `components.css` (`brand-logo-simple`, `brand-mark-simple`) read them. The platform logo is stored at up to 1024 x 512 px (`ImageNormalizer::PLATFORM_LOGO_MAX_*`; tenant logos keep 400 x 120), so every size here stays sharp, retina included. The sidebar logo fills the header width, so a logo uploaded before the larger box existed is upscaled there until it is uploaded again.
 
 | Token | Value | Where |
 |---|---|---|
@@ -285,7 +285,7 @@ Defined in `theme.css` (ADR-0053, ADR-0054). Plain variables, not utilities: the
 | `--brand-logo-simple-max-width` | 20rem (320px) | Sign-in, 2FA and invitation pages: logo at most this wide, and never wider than the card on phones |
 | `--brand-logo-simple-max-height` | 7.5rem (120px, the upload cap) | Same pages: logo at most this high; the name is stacked under it |
 | `--brand-mark-simple-size` | 3rem | Same pages without a logo: size of the stand-in mark tile (the name beside it is `text-2xl`) |
-| `--brand-logo-sidebar-max-height` | 4.5rem | Full-height sidebar from lg: logo at most this high, as wide as the sidebar minus the padding below |
+| `--brand-logo-sidebar-max-height` | 10rem | Full-height sidebar from lg: the logo takes the whole sidebar width minus the padding below, and stops at this height (a tall or square logo does not push the navigation far down; it is then kept at the start) |
 | `--brand-logo-sidebar-padding-inline` | 1.5rem | Same sidebar header: side padding (lines the logo up with the navigation) |
 
 Filament's logo box takes its height from `--pl-brand-logo-height`, a private variable the panel theme sets per place from these tokens (`PanelDefaults::brandLogoHeight()`). Change sizes here, never there.

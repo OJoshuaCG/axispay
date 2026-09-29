@@ -60,3 +60,11 @@ The project owner wants the platform's own logo now, managed from the platform p
 
 **Larger logo.** The logo is shown larger on the sign-in pages and in a full-height sidebar on large screens: see [ADR-0054](0054-panel-layout-full-height-sidebar.md).
 
+## Amendment (by the project owner, 2026-09-29): the platform logo is kept larger
+
+The platform logo is now shown across the whole width of the sidebar on large screens and larger on the sign-in pages ([ADR-0054](0054-panel-layout-full-height-sidebar.md)). Reduced to fit 400 × 120, it would look blurry there, especially on high-resolution screens.
+
+- The **platform logo** is now kept at up to **1024 × 512** pixels (reduced to fit when larger, never enlarged), so it stays sharp in those areas.
+- **Tenant logos** (Phase 8) keep the size of plan section 18: up to 400 × 120.
+- The upload rules do not change: PNG, JPEG or WebP, at most 1 MB and 2000 × 2000 pixels.
+- A logo uploaded before this change keeps its smaller stored size; the superadmin must upload it again to get the sharper version.

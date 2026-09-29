@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Sharper, wider platform logo in the sidebar** (ADR-0053 amendment of
+  2026-09-29): the sidebar logo now takes the whole sidebar width, and the
+  platform logo is stored at up to 1024 × 512 (tenant logos keep 400 × 120).
+  A logo uploaded before this change must be uploaded again to benefit.
+
 - **Panel layout and favicon** (ADR-0054, ADR-0053 amendment):
   - A larger platform logo on the sign-in, two-factor and invitation pages
     (up to 320 px wide, the name centered under it).

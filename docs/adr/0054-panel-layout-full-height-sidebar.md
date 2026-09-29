@@ -19,7 +19,7 @@ With the platform logo in place (ADR-0053), the owner found it too small: in bot
 **Screens of 1024 px and wider** (both panels):
 
 - the notices that span the whole window (for example "you are viewing this account as support staff", or the account status notices) stay on top, full width;
-- the menu becomes a **sidebar that runs the full height of the window** on the left, with its own scroll, and shows the platform logo at the top (up to the sidebar's width and about 72 px high; in "logo and name" the name under it);
+- the menu becomes a **sidebar that runs the full height of the window** on the left, with its own scroll, and shows the platform logo at the top, centered and across the sidebar's width (a tall or square logo stops at about 160 px high, still centered; in "logo and name" the name sits centered under it; with the name alone, it is centered too);
 - the top bar sits to the right of the sidebar and keeps its controls (test/live mode, language, theme, user menu); it no longer shows the logo;
 - the page content sits below the top bar, to the right of the sidebar.
 
