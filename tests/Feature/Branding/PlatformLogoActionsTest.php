@@ -72,11 +72,12 @@ it('stores the re-encoded logo and audits the change in the platform log', funct
     app(ReauthenticationWindow::class)->confirm();
     $admin = platformAdmin();
 
-    $logo = app(UpdatePlatformLogo::class)->handle($admin, LogoVariant::Light, Images::jpegWithExif(800, 240));
+    $logo = app(UpdatePlatformLogo::class)->handle($admin, LogoVariant::Light, Images::jpegWithExif(1600, 900));
 
     expect($logo->variant)->toBe(LogoVariant::Light)
         ->and($logo->mime_type)->toBe('image/png')
-        ->and([$logo->width, $logo->height])->toBe([400, 120])
+        // The platform box (1024 × 512), not the tenant one (400 × 120).
+        ->and([$logo->width, $logo->height])->toBe([910, 512])
         ->and($logo->size_bytes)->toBe(strlen($logo->content))
         ->and($logo->sha256)->toBe(hash('sha256', $logo->content))
         ->and(str_contains($logo->content, Images::EXIF_MARKER))->toBeFalse()

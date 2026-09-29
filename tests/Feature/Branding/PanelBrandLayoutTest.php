@@ -160,6 +160,11 @@ it('defines the brand logo sizes as tokens in one place and uses them in the pan
             ->and((bool) preg_match('/^\s*'.preg_quote($token, '/').':/m', $panel))->toBeFalse("{$token} is redefined in the panel theme");
     }
 
+    // Sizes the owner asked for (ADR-0054, 2026-09-29 amendment).
+    expect((bool) preg_match('/--brand-logo-sidebar-max-height:\s*10rem;/', $tokens))->toBeTrue()
+        ->and((bool) preg_match('/--brand-logo-simple-max-width:\s*20rem;/', $tokens))->toBeTrue()
+        ->and((bool) preg_match('/--brand-logo-simple-max-height:\s*7\.5rem;/', $tokens))->toBeTrue();
+
     expect(str_contains($defaults, "->brandLogoHeight('var(--pl-brand-logo-height)')"))->toBeTrue()
         // The full-height sidebar only from lg, and only for the sidebar layout.
         ->and(str_contains($panel, 'margin-inline-start: var(--sidebar-width);'))->toBeTrue()

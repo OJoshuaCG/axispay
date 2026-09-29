@@ -114,3 +114,21 @@ it('explains each refusal in English and Spanish', function (string $locale): vo
         expect($rejection->message())->not->toStartWith('branding.');
     }
 })->with(['en', 'es']);
+
+it('fits platform logos into 1024 × 512 and keeps 400 × 120 as the default (tenant) box', function (int $width, int $height, array $platform, array $tenant): void {
+    $bytes = Images::png($width, $height);
+    $normalizer = new ImageNormalizer;
+
+    $asPlatform = $normalizer->normalize($bytes, ImageNormalizer::PLATFORM_LOGO_MAX_WIDTH, ImageNormalizer::PLATFORM_LOGO_MAX_HEIGHT);
+    $asTenant = $normalizer->normalize($bytes);
+
+    expect([$asPlatform->width, $asPlatform->height])->toBe($platform)
+        ->and([$asTenant->width, $asTenant->height])->toBe($tenant)
+        ->and([ImageNormalizer::PLATFORM_LOGO_MAX_WIDTH, ImageNormalizer::PLATFORM_LOGO_MAX_HEIGHT])->toBe([1024, 512])
+        ->and([ImageNormalizer::LOGO_MAX_WIDTH, ImageNormalizer::LOGO_MAX_HEIGHT])->toBe([400, 120]);
+})->with([
+    '16:9 (1600 × 900)' => [1600, 900, [910, 512], [213, 120]],
+    'wide (1200 × 300)' => [1200, 300, [1024, 256], [400, 100]],
+    'square (2000 × 2000)' => [2000, 2000, [512, 512], [120, 120]],
+    'small (300 × 100), never enlarged' => [300, 100, [300, 100], [300, 100]],
+]);
