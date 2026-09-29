@@ -536,40 +536,55 @@ html.fi {
                 --pl-brand-logo-height: auto;
             }
 
+            /* The brand is centered in the sidebar (owner decision, ADR-0054). */
             & .fi-sidebar-header-logo-ctn {
+                flex: 1 1 auto;
                 min-width: 0;
+                display: flex;
+                justify-content: center;
 
                 & > a {
                     display: block;
+                    width: 100%;
                     border-radius: var(--radius-md);
                 }
             }
 
-            /* Aligned with the navigation (Filament adds ms-3 here). */
+            /* Filament adds ms-3 here; the brand is centered instead. */
             & .fi-sidebar-header .fi-logo {
+                width: 100%;
                 max-width: 100%;
-                margin-inline-start: 0;
+                margin-inline: 0;
+                justify-content: center;
             }
 
             & .fi-sidebar-header .pl-brand {
                 height: auto;
                 max-width: 100%;
+                justify-content: center;
             }
 
+            /* The logo takes the whole header width (minus its inline padding);
+               a tall or square one stops at the max height, centered. With the
+               name, the name sits centered under the logo. */
             & .fi-sidebar-header .pl-brand[data-brand-kind='logo'] {
+                width: 100%;
                 flex-direction: column;
-                align-items: flex-start;
+                align-items: center;
             }
 
             & .fi-sidebar-header .pl-brand-logo {
+                width: 100%;
                 height: auto;
                 max-width: 100%;
                 max-height: var(--brand-logo-sidebar-max-height);
+                object-position: center;
             }
 
             & .fi-sidebar-header .pl-brand-name {
                 white-space: normal;
                 overflow-wrap: anywhere;
+                text-align: center;
             }
         }
     }

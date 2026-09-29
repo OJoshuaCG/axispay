@@ -168,8 +168,8 @@
     --size-icon-xl: 2rem;
 
     /* ---------- Brand logo (ADR-0053, ADR-0054) ---------- */
-    /* Platform logo sizes in the panels. Uploads are normalized to fit
-       400 x 120 px, so every size below stays sharp. */
+    /* Platform logo sizes in the panels. The platform logo is stored at up
+       to 1024 x 512 px, so every size below stays sharp. */
     /* Topbar and mobile drawer: one compact row. */
     --brand-logo-compact-height: 1.75rem;
     /* Sign-in, 2FA, invitation and password-reset pages: at most 320px wide
@@ -178,9 +178,10 @@
     --brand-logo-simple-max-height: 7.5rem;
     /* Stand-in mark tile on those pages when there is no logo. */
     --brand-mark-simple-size: 3rem;
-    /* Full-height sidebar from lg: sidebar width minus this inline padding,
-       at most this high, name stacked below. */
-    --brand-logo-sidebar-max-height: 4.5rem;
+    /* Full-height sidebar from lg: the whole sidebar width minus this inline
+       padding, at most this high (a tall or square logo does not push the
+       navigation far down), name stacked below. */
+    --brand-logo-sidebar-max-height: 10rem;
     --brand-logo-sidebar-padding-inline: 1.5rem;
 
     /* ---------- Radius ---------- */
