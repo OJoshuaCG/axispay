@@ -35,6 +35,9 @@ use Stripe\Exception\ApiErrorException;
  *  5. required permissions, probed without side effects;
  *  6. dangerous permissions (payouts, transfers, balance) are reported.
  *
+ * The permission lists live in StripeKeyPermissions, which the panel's
+ * help also reads.
+ *
  * Probes (ADR-0047): read permissions with `limit=1` lists or a GET of a
  * non-existent ID (404 = allowed, 403 = denied); write permissions with an
  * empty POST that Stripe must reject for missing parameters (400 = allowed,
@@ -44,27 +47,6 @@ use Stripe\Exception\ApiErrorException;
  */
 final readonly class ApiKeyFlow
 {
-    /** Permissions proved by steps 3 and 4 and by creating the webhook endpoint. */
-    public const array IMPLICIT_PERMISSIONS = ['connected_account_read', 'token_read', 'webhook_write'];
-
-    /** Stripe permission => [HTTP method, path] probed for it. */
-    private const array REQUIRED_PROBES = [
-        'payment_intent_write' => ['post', '/v1/payment_intents'],
-        'charge_write' => ['post', '/v1/refunds'],
-        'charge_read' => ['get', '/v1/charges?limit=1'],
-        'dispute_read' => ['get', '/v1/disputes?limit=1'],
-        'event_read' => ['get', '/v1/events?limit=1'],
-        'payment_method_read' => ['get', '/v1/payment_methods?limit=1'],
-        'confirmation_token_read' => ['get', '/v1/confirmation_tokens/axispay_permission_probe'],
-    ];
-
-    /** Permissions we never need and that can move or expose money. */
-    private const array DANGEROUS_PROBES = [
-        'payout_write' => ['post', '/v1/payouts'],
-        'transfer_write' => ['post', '/v1/transfers'],
-        'balance_read' => ['get', '/v1/balance'],
-    ];
-
     /** A dummy value: the PII token only proves which account the pk belongs to. */
     private const string PROBE_ID_NUMBER = '000000000';
 
@@ -122,9 +104,9 @@ final readonly class ApiKeyFlow
         }
 
         $missing = $this->verifyPublishableKey($context, $credentials->publishableKey, $operationId) ? [] : ['token_read'];
-        $granted = array_values(array_diff(self::IMPLICIT_PERMISSIONS, ['webhook_write'], $missing));
+        $granted = array_values(array_diff(StripeKeyPermissions::IMPLICIT, ['webhook_write'], $missing));
 
-        foreach (self::REQUIRED_PROBES as $permission => $probe) {
+        foreach (StripeKeyPermissions::REQUIRED_PROBES as $permission => $probe) {
             if ($this->probe($context, $probe, "{$operationId}-{$permission}")) {
                 $granted[] = $permission;
             } else {
@@ -138,7 +120,7 @@ final readonly class ApiKeyFlow
 
         $excessive = [];
 
-        foreach (self::DANGEROUS_PROBES as $permission => $probe) {
+        foreach (StripeKeyPermissions::DANGEROUS_PROBES as $permission => $probe) {
             if ($this->probe($context, $probe, "{$operationId}-{$permission}")) {
                 $excessive[] = $permission;
             }
