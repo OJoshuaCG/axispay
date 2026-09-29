@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Stripe connection, API keys method:** a "View required permissions"
+  help on the Stripe connection page (also available, collapsed, inside the
+  connect and update keys forms) with the steps to create the restricted key
+  in Stripe, each permission it needs and why, the permissions it must not
+  have (payouts, transfers, balance) and a link to Stripe's guide. EN and ES.
+  It lists exactly what the key validation checks.
+
 - **Platform logo** (ADR-0053, brought forward from Phase 8): a "Branding"
   page in the platform panel, for superadmins only (new platform permission
   "manage branding"), to upload the platform logo and an optional dark mode

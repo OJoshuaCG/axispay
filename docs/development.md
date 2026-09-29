@@ -357,6 +357,12 @@ want to receive payments in, for each mode (start with test mode):
    Do **not** grant Payouts, Transfers or Balance: the platform warns about
    them, and live mode asks for an extra confirmation. Never use a secret key
    (`sk_`): it is always refused.
+
+   The same list, with these steps, is in the panel: **View required
+   permissions** next to "Advanced: use my API keys", and collapsed inside the
+   connect and update keys forms. It is rendered from
+   `App\Modules\Gateways\Stripe\Connection\StripeKeyPermissions`, the catalog
+   `ApiKeyFlow` validates against; change permissions there, never in a view.
 3. Copy the restricted key (`rk_test_…`) and the publishable key (`pk_test_…`)
    of the **same account and mode**.
 4. In the tenant panel, switch to the matching mode (test/live selector),
