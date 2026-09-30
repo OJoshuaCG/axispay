@@ -65,10 +65,13 @@ final readonly class WebhookOutbox
             'payload' => WebhookPayload::encode($id, $type, $domainEvent->livemode, $domainEvent->occurred_at, $this->dataOf($domainEvent)),
         ])->save();
 
+        // Bound as a microsecond string: a Carbon binding goes through the
+        // query grammar's `Y-m-d H:i:s` and loses the fraction, so an endpoint
+        // created earlier in the same second would be skipped.
         $endpoints = WebhookEndpoint::query()
             ->enabled()
             ->where('livemode', $domainEvent->livemode)
-            ->where('created_at', '<=', $domainEvent->occurred_at)
+            ->where('created_at', '<=', $domainEvent->occurred_at->format('Y-m-d H:i:s.u'))
             ->orderBy('id')
             ->get()
             ->filter(static fn (WebhookEndpoint $endpoint): bool => $endpoint->subscribesTo($type));
