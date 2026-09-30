@@ -11,6 +11,7 @@ use App\Modules\Webhooks\Filament\Concerns\ShowsIssuedSecret;
 use App\Modules\Webhooks\Filament\Concerns\ShowsTestResult;
 use App\Modules\Webhooks\Filament\Contracts\PresentsTestResults;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\WebhookEndpointResource;
+use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
@@ -20,7 +21,8 @@ use Filament\Support\Icons\Heroicon;
  * Webhook endpoints of the current mode, with the create flow (plan 15.1).
  * The new endpoint's signing secret is shown ONCE (ShowsIssuedSecret) and
  * never kept in the page state; afterwards it can only be revealed again
- * with re-authentication, from the endpoint's detail.
+ * with re-authentication, from the endpoint's detail. "How it works"
+ * (IntegrationHelp) explains the events, their format and signature.
  */
 final class ListWebhookEndpoints extends ListRecords implements PresentsTestResults
 {
@@ -37,6 +39,7 @@ final class ListWebhookEndpoints extends ListRecords implements PresentsTestResu
     protected function getHeaderActions(): array
     {
         return [
+            IntegrationHelp::webhooksAction(),
             Action::make('create')
                 ->label(__('webhooks.actions.create'))
                 ->icon(Heroicon::OutlinedPlus)

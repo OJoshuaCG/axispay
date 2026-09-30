@@ -17,6 +17,7 @@ use App\Modules\Webhooks\Filament\Concerns\ShowsIssuedSecret;
 use App\Modules\Webhooks\Filament\Concerns\ShowsTestResult;
 use App\Modules\Webhooks\Filament\Contracts\PresentsTestResults;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\WebhookEndpointResource;
+use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -58,6 +59,7 @@ final class ViewWebhookEndpoint extends ViewRecord implements PresentsTestResult
     protected function getHeaderActions(): array
     {
         return [
+            IntegrationHelp::webhooksAction(),
             WebhookEndpointResource::sendTestAction(),
             $this->editAction(),
             $this->enableAction(),

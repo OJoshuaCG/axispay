@@ -18,6 +18,9 @@ final class WebhookSigner
 {
     public const string SECRET_PREFIX = 'whsec_';
 
+    /** Receivers reject a `webhook-timestamp` further than this from their clock. */
+    public const int TOLERANCE_SECONDS = 300;
+
     /** Plan 15.1: `whsec_` + base64 of 32 random bytes. */
     public function generateSecret(): string
     {
@@ -50,7 +53,7 @@ final class WebhookSigner
      * the header matches (constant-time) and the timestamp is within the
      * tolerance.
      */
-    public function verify(#[SensitiveParameter] string $secret, string $webhookId, int $timestamp, string $body, string $header, int $now, int $toleranceSeconds = 300): bool
+    public function verify(#[SensitiveParameter] string $secret, string $webhookId, int $timestamp, string $body, string $header, int $now, int $toleranceSeconds = self::TOLERANCE_SECONDS): bool
     {
         if (abs($now - $timestamp) > $toleranceSeconds) {
             return false;

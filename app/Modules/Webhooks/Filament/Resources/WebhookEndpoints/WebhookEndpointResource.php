@@ -18,6 +18,7 @@ use App\Modules\Webhooks\Filament\Contracts\PresentsTestResults;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ListWebhookEndpoints;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ViewWebhookEndpoint;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\RelationManagers\DeliveriesRelationManager;
+use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\WebhookDelivery;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
@@ -139,6 +140,7 @@ final class WebhookEndpointResource extends Resource
                     ->authorize('create', WebhookEndpoint::class)
                     ->outlined()
                     ->alpineClickHandler("\$wire.mountAction('create')"),
+                IntegrationHelp::hintAction('webhooksHelpFromEmptyState', IntegrationHelp::WEBHOOKS_ACTION),
             ])
             // An icon in the row (the label stays as its accessible name and tooltip).
             ->recordActions([self::sendTestAction()->iconButton()->tooltip(__('webhooks.actions.send_test'))]);

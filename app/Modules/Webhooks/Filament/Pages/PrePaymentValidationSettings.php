@@ -21,6 +21,7 @@ use App\Modules\Webhooks\Filament\Concerns\ShowsIssuedSecret;
 use App\Modules\Webhooks\Filament\Concerns\ShowsTestResult;
 use App\Modules\Webhooks\Filament\Contracts\PresentsTestResults;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\WebhookEndpointResource;
+use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\ValidationCall;
 use App\Modules\Webhooks\Models\ValidationEndpoint;
@@ -36,6 +37,7 @@ use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Grid;
@@ -58,6 +60,7 @@ use SensitiveParameter;
  * alert after repeated failures and the recent calls. `webhooks:manage`;
  * every change goes through a Webhooks action, which re-checks the
  * permission, the re-authentication window and the SSRF protection.
+ * "How it works" (IntegrationHelp) explains the call to the developer.
  *
  * Its own view renders the action modals: see the comment in
  * `filament.webhooks.pages.pre-payment-validation-settings`.
@@ -183,12 +186,14 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
             ->defaultPaginationPageOption(10)
             ->emptyStateIcon(Heroicon::OutlinedShieldCheck)
             ->emptyStateHeading(__('webhooks.validation.calls.empty_heading'))
-            ->emptyStateDescription(__('webhooks.validation.calls.empty_description'));
+            ->emptyStateDescription(__('webhooks.validation.calls.empty_description'))
+            ->emptyStateActions([IntegrationHelp::hintAction('validationHelpFromEmptyState', IntegrationHelp::VALIDATION_ACTION)]);
     }
 
     protected function getHeaderActions(): array
     {
         return [
+            IntegrationHelp::validationAction(),
             $this->configureAction(),
             $this->testAction(),
             // Less frequent, sensitive actions, as on the webhook endpoint page.
@@ -213,6 +218,7 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
                 TextEntry::make('how_it_works')
                     ->hiddenLabel()
                     ->state(__('webhooks.validation.page.how_it_works')),
+                Actions::make([IntegrationHelp::hintAction('validationHelpFromSection', IntegrationHelp::VALIDATION_ACTION)]),
             ]);
     }
 

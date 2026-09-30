@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **"How it works" in the webhook screens**: a help slide-over on the webhook
+  endpoints list, each endpoint's page and the pre-payment validation page,
+  also reachable from their empty states. For the merchant's developer:
+  when each call happens in the payment flow, the set-up step by step, the
+  headers and body with examples built by the same code as the real
+  requests, how to verify the Standard Webhooks signature, the delivery and
+  retry rules, the URL requirements, the answer the validation expects, its
+  limits and failure policies, and what "Test validation" sends. Every
+  number is read from the configuration.
+
 - **Phase 5 panel screens** (ADR-0059):
   - Settings → Webhooks: the endpoints of the current mode with their
     events, status and a "failing since" badge; create and edit (every event
@@ -404,6 +414,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-tenant invitation limit, which moved to `InvitationThrottle`.
 
 ### Fixed
+
+- Pre-payment validation page: "Configure" did nothing while validation was
+  not configured and had no calls. The page has a table, so Filament leaves
+  the action dialogs to the table, which that state hides; the page now
+  renders them itself.
+- The event descriptions of the webhook event picker showed their
+  translation key instead of the text (event names contain a dot).
 
 - Phase 5 review fixes (ADR-0057, ADR-0058):
   - Webhook and validation URLs are stored and called in one canonical form
