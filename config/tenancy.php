@@ -43,6 +43,13 @@ return [
         'tenant_legal_documents',
         // ADR-0056 part B: the merchant's logo (light and dark variants).
         'tenant_logos',
+        // Phase 5 (plan 7.6, 15; ADR-0057): outgoing webhooks.
+        'webhook_endpoints',
+        'webhook_events',
+        'webhook_deliveries',
+        // Phase 5 (plan 7.4, 7.6, 15.8; ADR-0058): pre-payment validation.
+        'validation_endpoints',
+        'validation_calls',
     ],
 
     /*
@@ -86,6 +93,13 @@ return [
         // ADR-0051: recovery of stored gateway events (stuck, unroutable,
         // failed) across tenants; acts on each row in its own tenant context.
         'App\\Modules\\ProviderEvents\\Services\\ProviderEventInbox',
+        // Phase 5 (ADR-0057): the outbox sweeper finds, across tenants, the
+        // unpublished domain events and the due webhook deliveries
+        // (identifiers only); each row is then handled in its tenant context.
+        'App\\Modules\\Webhooks\\Services\\WebhookOutboxLookup',
+        // Phase 5 (ADR-0058): deletes pre-payment validation calls of every
+        // tenant past their 30-day retention (by age only, never reads them).
+        'App\\Modules\\Webhooks\\Services\\ValidationCallRetention',
     ],
 
 ];

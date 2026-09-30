@@ -16,6 +16,7 @@ use App\Modules\PlatformAdmin\Providers\PlatformAdminServiceProvider;
 use App\Modules\ProviderEvents\Providers\ProviderEventsServiceProvider;
 use App\Modules\Shared\Providers\SharedServiceProvider;
 use App\Modules\Tenancy\Providers\TenancyServiceProvider;
+use App\Modules\Webhooks\Providers\WebhooksServiceProvider;
 use App\Providers\AppServiceProvider;
 use App\Providers\Filament\AdminPanelProvider;
 use App\Providers\Filament\AppPanelProvider;
@@ -36,6 +37,7 @@ return [
     PaymentLinksServiceProvider::class,
     PaymentsServiceProvider::class,
     CheckoutServiceProvider::class,
+    WebhooksServiceProvider::class,
     AdminPanelProvider::class,
     AppPanelProvider::class,
 ];

@@ -69,6 +69,21 @@ enum AuditAction: string
     case PlatformLegalDocumentRemoved = 'platform.legal_document_removed';
     case TenantLogoUpdated = 'tenant_logo.updated';
     case TenantLogoRemoved = 'tenant_logo.removed';
+    case WebhookEndpointCreated = 'webhook_endpoint.created';
+    case WebhookEndpointUpdated = 'webhook_endpoint.updated';
+    case WebhookEndpointSecretRotated = 'webhook_endpoint.secret_rotated';
+    case WebhookEndpointSecretRevealed = 'webhook_endpoint.secret_revealed';
+    case WebhookEndpointEnabled = 'webhook_endpoint.enabled';
+    case WebhookEndpointDisabled = 'webhook_endpoint.disabled';
+    case WebhookEndpointDisabledByFailures = 'webhook_endpoint.disabled_by_failures';
+    case WebhookEndpointDeleted = 'webhook_endpoint.deleted';
+    case WebhookEndpointTestSent = 'webhook_endpoint.test_sent';
+    case WebhookDeliveryResent = 'webhook_delivery.resent';
+    case ValidationEndpointConfigured = 'validation_endpoint.configured';
+    case ValidationEndpointUpdated = 'validation_endpoint.updated';
+    case ValidationEndpointSecretRotated = 'validation_endpoint.secret_rotated';
+    case ValidationEndpointRemoved = 'validation_endpoint.removed';
+    case ValidationEndpointTestSent = 'validation_endpoint.test_sent';
 
     public function label(): string
     {

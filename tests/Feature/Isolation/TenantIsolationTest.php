@@ -15,9 +15,21 @@ use App\Modules\Identity\Filament\Resources\Users\Pages\ListUsers;
 use App\Modules\Identity\Models\User;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ListPaymentLinks;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Payments\Filament\Resources\Payments\Pages\ListPayments;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
+use App\Modules\Webhooks\Actions\ResendWebhookDelivery;
+use App\Modules\Webhooks\Enums\WebhookDeliveryStatus;
+use App\Modules\Webhooks\Enums\WebhookDeliveryTrigger;
+use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ListWebhookEndpoints;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ViewWebhookEndpoint;
+use App\Modules\Webhooks\Models\ValidationCall;
+use App\Modules\Webhooks\Models\WebhookDelivery;
+use App\Modules\Webhooks\Models\WebhookEvent;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -25,6 +37,11 @@ use Livewire\Livewire;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\ApiTestHelpers;
 use Tests\Support\BrandingTestHelpers as Images;
+use Tests\Support\CheckoutTestHelpers;
+use Tests\Support\FakeHostResolver;
+use Tests\Support\GatewayTestHelpers;
+use Tests\Support\ValidationTestHelpers;
+use Tests\Support\WebhookTestHelpers;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\withHeaders;
@@ -56,6 +73,16 @@ function isolatedAppResources(): array
             static fn (): Model => Role::query()->create(['name' => 'custom-'.$tenant->id, 'guard_name' => TenantPermission::GUARD, 'team_id' => $tenant->id]),
         )],
         'audit-logs' => [ListAuditLogs::class, static fn (Tenant $tenant): Model => app(AuditLogger::class)->record(AuditAction::LivemodeSwitched, tenantId: $tenant->id)],
+        'settings/webhooks' => [ListWebhookEndpoints::class, static fn (Tenant $tenant): Model => WebhookTestHelpers::endpoint($tenant)],
+        'payments' => [ListPayments::class, static function (Tenant $tenant): Model {
+            GatewayTestHelpers::connection($tenant);
+            $link = ApiTestHelpers::link($tenant);
+
+            return CheckoutTestHelpers::inTenant($link, static fn (): PaymentAttempt => PaymentAttempt::factory()->createOne([
+                'payment_link_id' => $link->id,
+                'gateway_connection_id' => CheckoutTestHelpers::connectionOf($link)->id,
+            ]));
+        }],
     ];
 }
 
@@ -160,6 +187,59 @@ it('serves the platform logo and favicon identically to every tenant and to gues
                 ->and($response->headers->getCookies())->toBe([]);
         }
     }
+});
+
+it('never shows or resends another tenant\'s webhook deliveries (plan 6.6)', function (): void {
+    FakeHostResolver::install();
+    [$a, $b] = [activeTenant(), activeTenant()];
+    $viewer = tenantUser($a, [SystemRole::Owner]);
+    $foreignEndpoint = WebhookTestHelpers::endpoint($b);
+    $foreign = WebhookTestHelpers::in($b, false, static function () use ($foreignEndpoint): WebhookDelivery {
+        $event = new WebhookEvent;
+        $event->forceFill(['livemode' => false, 'type' => 'payment.succeeded', 'payload' => '{}'])->save();
+
+        $delivery = new WebhookDelivery;
+        $delivery->forceFill([
+            'livemode' => false,
+            'webhook_event_id' => $event->id,
+            'webhook_endpoint_id' => $foreignEndpoint->id,
+            'trigger' => WebhookDeliveryTrigger::Automatic,
+            'attempt_number' => 1,
+            'status' => WebhookDeliveryStatus::Abandoned,
+            'scheduled_at' => now(),
+        ])->save();
+
+        return $delivery;
+    });
+    actingAsTenantUser($viewer);
+
+    Livewire::test(ViewWebhookEndpoint::class, ['record' => $foreignEndpoint->getRouteKey()])->assertNotFound();
+
+    // The action reached directly: the foreign delivery's endpoint is invisible in A's tenant.
+    expect(fn () => app(ResendWebhookDelivery::class)->handle($viewer, $foreign))->toThrow(ModelNotFoundException::class)
+        ->and(WebhookTestHelpers::deliveries($b))->toHaveCount(1);
+});
+
+it('never lists another tenant\'s pre-payment validation calls (plan 6.6)', function (): void {
+    [$a, $b] = [activeTenant(), activeTenant()];
+    ValidationTestHelpers::endpoint($a);
+    $foreign = ValidationTestHelpers::in($b, false, static function (): ValidationCall {
+        $call = new ValidationCall;
+        $call->forceFill(['livemode' => false, 'is_test' => true, 'request_payload' => []])->save();
+
+        return $call;
+    });
+    $own = ValidationTestHelpers::in($a, false, static function (): ValidationCall {
+        $call = new ValidationCall;
+        $call->forceFill(['livemode' => false, 'is_test' => true, 'request_payload' => []])->save();
+
+        return $call;
+    });
+    actingAsTenantUser(tenantUser($a, [SystemRole::Owner]));
+
+    Livewire::test(PrePaymentValidationSettings::class)
+        ->assertCanSeeTableRecords([$own])
+        ->assertCanNotSeeTableRecords([$foreign]);
 });
 
 it('covers every tenant-panel route with an isolation test', function (): void {

@@ -59,6 +59,19 @@ Schedule::command('axispay:payments:reconcile')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Plan 15.4: the outgoing webhook outbox sweeper publishes domain events
+// left unpublished and queues due deliveries without a job (ADR-0057).
+Schedule::command('axispay:webhooks:sweep')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
+// Plan 7.6: pre-payment validation calls are kept 30 days (ADR-0058).
+Schedule::command('axispay:validation-calls:purge')
+    ->dailyAt('03:45')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Expired rows of the database cache store (per-IP failed-authentication
 // counters, locks) are otherwise only removed when read again.
 Schedule::command('axispay:cache:purge-expired')

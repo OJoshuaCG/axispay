@@ -14,9 +14,15 @@ use LogicException;
  * caller's transaction, so the event exists exactly when the change does
  * (outbox rule, rules.md rule 7). `data` must carry our identifiers and facts
  * only: never payer data or gateway identifiers.
+ *
+ * In the same transaction the event is published to the outgoing webhook
+ * outbox (plan 15.4, ADR-0057): its frozen webhook event and one pending
+ * delivery per subscribed endpoint; the jobs are queued after the commit.
  */
-final class DomainEventRecorder
+final readonly class DomainEventRecorder
 {
+    public function __construct(private WebhookOutbox $outbox) {}
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -34,6 +40,8 @@ final class DomainEventRecorder
             'data' => $data,
             'occurred_at' => now(),
         ])->save();
+
+        $this->outbox->publish($event);
 
         return $event;
     }

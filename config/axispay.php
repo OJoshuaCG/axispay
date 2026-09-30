@@ -175,7 +175,8 @@ return [
         // starts when its worst case still fits; otherwise the page says the
         // payment is processing (ADR-0051).
         'request_budget_seconds' => 50,
-        // Worst case of the merchant's pre-payment validation (Phase 5).
+        // Worst case of the merchant's pre-payment validation: equal to
+        // `pre_payment_validation.timeout_seconds` (plan 15.8.5).
         'pre_payment_validation_seconds' => 5,
         // The status polled by the page is re-read from the gateway when the
         // attempt has not changed for this long (webhooks stay the source of
@@ -219,6 +220,99 @@ return [
     */
     'fx' => [
         'available' => false,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Outgoing webhooks (plan 15.1-15.7, ADR-0008, ADR-0057)
+    |--------------------------------------------------------------------------
+    */
+
+    'webhooks' => [
+        // Plan 15.1: endpoints per tenant and per mode.
+        'max_endpoints_per_mode' => 5,
+        'description_max' => 255,
+
+        // Plan 15.6: POST with a 5 s connection timeout and 10 s in total.
+        'connect_timeout_seconds' => 5,
+        'timeout_seconds' => 10,
+        // Bytes of the answer kept (sanitized) in the delivery log, and the
+        // most read before the transfer is cut.
+        'response_excerpt_bytes' => 2048,
+        'max_response_bytes' => 65536,
+        'user_agent' => 'AxisPay-Webhooks/1.0',
+
+        // Plan 15.6: seconds to wait before each automatic attempt, counted
+        // from the previous failure (the first is immediate): 8 attempts in
+        // about 27 hours, then the delivery is `abandoned`.
+        'retry_schedule_seconds' => [0, 5, 300, 1800, 7200, 18000, 36000, 36000],
+        // Retries due within this many seconds are queued with a delay; later
+        // ones are queued by the sweeper (every minute) when they are due.
+        'delayed_dispatch_max_seconds' => 60,
+        // Plan 15.6: an endpoint failing continuously this long is disabled.
+        'disable_after_failing_days' => 5,
+
+        // Plan 15.5: the previous secret keeps signing this long after a rotation.
+        'previous_secret_hours' => 24,
+
+        // A delivery being sent holds this lease (above the HTTP timeout), so
+        // a duplicated job never sends it twice; a crashed worker frees it.
+        'send_lease_seconds' => 60,
+        // The sweeper queues again a pending delivery queued this long ago
+        // whose job never ran (lost between the commit and the queue).
+        'redispatch_after_seconds' => 120,
+        // Rows handled per sweeper run.
+        'sweep_batch_size' => 500,
+
+        // Plan 15.7 (SSRF). `http` is only ever allowed in test mode, and
+        // only when this flag is on; live always requires `https`.
+        'allow_http_in_test' => (bool) env('AXISPAY_WEBHOOKS_ALLOW_HTTP_IN_TEST', false),
+        'allowed_ports' => [443, 8443],
+        // Ports allowed for `http` URLs in test mode (with the flag above).
+        'allowed_http_ports' => [80, 8080],
+        'url_max' => 2048,
+        // Hostnames refused besides localhost, *.local, *.internal and the
+        // platform's own surface hosts (and their subdomains).
+        'blocked_host_suffixes' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Pre-payment validation (plan 15.8, ADR-024, ADR-0050, ADR-0058)
+    |--------------------------------------------------------------------------
+    |
+    | The synchronous callback to the merchant between the authorization and
+    | the capture. It shares the signature (WebhookSigner) and the SSRF
+    | protection (DestinationGuard, `axispay.webhooks.*` URL rules) with the
+    | outgoing webhooks.
+    |
+    */
+
+    'pre_payment_validation' => [
+        // Plan 15.8.5: 2 s to connect and 5 s in total, the one immediate
+        // retry after a connection failure included. Keep
+        // `checkout.pre_payment_validation_seconds` equal to the total.
+        'connect_timeout_seconds' => 2,
+        'timeout_seconds' => 5,
+        // Plan 15.8.4: an answer larger than this is invalid.
+        'max_response_bytes' => 4096,
+        // Bytes of the answer kept (sanitized) in `validation_calls`.
+        'response_excerpt_bytes' => 2048,
+        'payer_message_max' => 200,
+        'reason_code_max' => 64,
+        'user_agent' => 'AxisPay-Validation/1.0',
+
+        // Plan 15.8.1: the previous secret keeps signing this long after a rotation.
+        'previous_secret_hours' => 24,
+
+        // Plan 15.8.5: after this many failures in a row the users with
+        // `webhooks:manage` are e-mailed (at most once per interval) and the
+        // panel shows an alert. Validation is never switched off by itself.
+        'alert_after_failures' => 10,
+        'alert_interval_minutes' => 60,
+
+        // Plan 7.6: `validation_calls` rows are deleted after this many days.
+        'retention_days' => 30,
     ],
 
     /*

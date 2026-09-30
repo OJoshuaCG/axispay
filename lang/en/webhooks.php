@@ -1,0 +1,433 @@
+<?php
+
+declare(strict_types=1);
+
+/*
+ * Outgoing webhooks (plan 15.1-15.7).
+ */
+return [
+
+    /*
+     * Panel: webhook endpoints (plan 15.1). Settings → Webhooks.
+     */
+    'singular' => 'webhook endpoint',
+    'plural' => 'webhook endpoints',
+
+    'navigation' => [
+        'group' => 'Settings',
+    ],
+
+    'page' => [
+        'subheading' => [
+            'test' => 'Endpoints of test mode: they receive the events of test payments only. Up to :max per mode.',
+            'live' => 'Endpoints of live mode: they receive the events of real payments. Up to :max per mode.',
+        ],
+        'view_title' => 'Webhook endpoint',
+        'view_subheading' => [
+            'test' => 'Test mode endpoint.',
+            'live' => 'Live mode endpoint.',
+        ],
+    ],
+
+    'fields' => [
+        'url' => 'URL',
+        'url_help' => [
+            'test' => 'Where your server receives the events. It must start with https:// and use port 443 or 8443.',
+            'live' => 'Where your server receives the events of real payments. It must start with https:// and use port 443 or 8443.',
+        ],
+        'description' => 'Description',
+        'description_help' => 'Optional. For example "Order system".',
+        'all_events' => 'Send every event',
+        'all_events_help' => 'Includes the events added to the catalog later.',
+        'events' => 'Events',
+        'events_help' => 'Choose only the events your server uses.',
+        'status' => 'Status',
+        'health' => 'Deliveries',
+        'healthy' => 'No continuous failures',
+        'no_deliveries' => 'No deliveries yet',
+        'previous_secret' => 'Previous signing secret',
+        'created_at' => 'Created',
+    ],
+
+    'all_events' => 'All events',
+    'copied' => 'Copied.',
+    'failing_since' => 'Failing since :date',
+    'failing_help' => 'Every delivery to this endpoint has failed since then. After 5 days of continuous failures it is disabled and you are e-mailed.',
+    'previous_secret_until' => 'Also signs until :date (both signatures are sent).',
+
+    'status' => [
+        'enabled' => 'Enabled',
+        'disabled_by_user' => 'Disabled',
+        'disabled_by_failures' => 'Disabled by failures',
+    ],
+
+    'status_help' => [
+        'disabled_by_user' => 'No events are sent. Enable it to receive the new events; missed ones can be resent from the delivery log.',
+        'disabled_by_failures' => 'It failed continuously for 5 days. Fix your server, send a test event and enable it again.',
+    ],
+
+    'event_types' => [
+        'payment_link.created' => 'A link was created (API or panel).',
+        'payment_link.opened' => 'A link was opened (first time, then at most every 30 minutes).',
+        'payment_link.paid' => 'A link was paid.',
+        'payment_link.expired' => 'A link expired.',
+        'payment_link.canceled' => 'A link was canceled.',
+        'payment.processing' => 'A payment is being processed.',
+        'payment.succeeded' => 'A payment succeeded.',
+        'payment.failed' => 'A card was declined.',
+        'refund.created' => 'A refund was requested.',
+        'refund.succeeded' => 'A refund was completed.',
+        'refund.failed' => 'A refund failed.',
+        'dispute.created' => 'A dispute was opened.',
+        'dispute.closed' => 'A dispute was closed.',
+        'ping' => 'Test event sent from the panel.',
+    ],
+
+    'form' => [
+        'url_required' => 'Enter the URL.',
+        'events_required' => 'Choose at least one event, or send every event.',
+    ],
+
+    'actions' => [
+        'create' => 'Add endpoint',
+        'create_help' => [
+            'test' => 'The endpoint receives the events of test mode. A signing secret is generated and shown once.',
+            'live' => 'The endpoint receives the events of real payments. A signing secret is generated and shown once. The account owners are notified by e-mail.',
+        ],
+        'create_submit' => 'Add endpoint',
+        'edit' => 'Edit',
+        'edit_heading' => 'Edit the endpoint',
+        'save' => 'Save',
+        'more' => 'More',
+        'send_test' => 'Send test event',
+        'send_test_heading' => 'Send a test event?',
+        'send_test_help' => 'A signed "ping" event is sent now to :host and the answer is shown. It is not retried and does not affect the endpoint\'s status.',
+        'send_test_submit' => 'Send',
+        'rotate' => 'Rotate secret',
+        'rotate_heading' => 'Rotate the signing secret?',
+        'rotate_help' => 'A new secret is generated and shown once. The current secret keeps signing for 24 hours (both signatures are sent), so you can update your server without losing events.',
+        'rotate_submit' => 'Rotate',
+        'reveal' => 'Reveal secret',
+        'reveal_heading' => 'Reveal the signing secret?',
+        'reveal_help' => 'The current secret is shown once more. This is recorded in the audit log.',
+        'reveal_submit' => 'Reveal',
+        'disable' => 'Disable',
+        'disable_heading' => 'Disable the endpoint?',
+        'disable_help' => 'No more events are sent to it, and pending retries are dropped. You can enable it again later.',
+        'disable_submit' => 'Disable',
+        'enable' => 'Enable',
+        'enable_heading' => 'Enable the endpoint?',
+        'enable_help' => 'It receives the events created from now on. Missed events can be resent from the delivery log.',
+        'enable_submit' => 'Enable',
+        'delete' => 'Delete',
+        'delete_heading' => 'Delete the endpoint?',
+        'delete_help' => 'The endpoint for :host and its delivery log are deleted. Events stop being sent to it. This cannot be undone.',
+        'delete_submit' => 'Delete',
+    ],
+
+    'secret' => [
+        'label' => 'Signing secret',
+        'heading' => [
+            'created' => 'Copy the signing secret',
+            'rotated' => 'Copy the new signing secret',
+            'revealed' => 'Signing secret',
+        ],
+        'description' => 'Your server uses it to verify that each request comes from us.',
+        'warning_heading' => 'It is shown only now',
+        'warning' => 'Keep it on your server only, never in a browser or an app. If it leaks, rotate it.',
+        'copy' => 'Copy',
+        'copied' => 'Secret copied.',
+        'copy_failed' => 'It could not be copied. Select it and copy it by hand.',
+        'done' => 'I have copied the secret',
+    ],
+
+    'test_result' => [
+        'heading' => 'Test result',
+        'webhook_heading' => 'Test event to :host',
+        'validation_heading' => 'Validation test to :host',
+        'delivered' => 'Delivered',
+        'not_delivered' => 'Not delivered',
+        'validation_approved' => 'Your server approved the example payment',
+        'validation_rejected' => 'Your server rejected the example payment',
+        'validation_invalid' => 'Your server\'s answer is not in a valid format',
+        'http_status' => 'HTTP status',
+        'no_answer' => 'No answer',
+        'latency' => 'Time',
+        'latency_value' => ':ms ms',
+        'error' => 'Problem',
+        'decision' => 'Decision',
+        'decision_approve' => 'Approve',
+        'decision_reject' => 'Reject',
+        'decision_none' => 'None',
+        'errors' => 'Errors',
+        'warnings' => 'Warnings',
+        'excerpt' => 'Answer received',
+        'no_excerpt' => 'No answer body.',
+        'close' => 'Close',
+        'next_step' => [
+            'http_status' => 'Check that your server answers with a success code (200–299) without redirecting, then send the test event again.',
+            'timeout' => 'Your server must answer within 10 seconds: answer first and process the event afterwards.',
+            'dns_error' => 'Check that the URL\'s domain is spelled correctly and has public DNS records.',
+            'tls_error' => 'Check your server\'s certificate: it must be valid, current and issued for that domain.',
+            'connection_error' => 'Check that your server is online and accepts connections on that port from the internet.',
+            'response_too_large' => 'Answer with a short body (for example empty or "ok"); the content of the answer is not used.',
+            'blocked_destination' => 'Use a public URL: private, local and reserved addresses are not allowed.',
+            'endpoint_disabled' => 'Enable the endpoint, then send the test event again.',
+            'internal_error' => 'The error was on our side. Try again in a few minutes.',
+        ],
+    ],
+
+    'delivery_status' => [
+        'pending' => 'Pending',
+        'succeeded' => 'Delivered',
+        'failed' => 'Failed',
+        'abandoned' => 'Abandoned',
+    ],
+
+    'delivery_error' => [
+        'http_status' => 'Your server did not answer with a success code (200–299)',
+        'timeout' => 'No answer within 10 seconds',
+        'dns_error' => 'The domain could not be resolved',
+        'tls_error' => 'Secure connection (TLS) failed',
+        'connection_error' => 'The connection failed',
+        'response_too_large' => 'The answer was too large',
+        'blocked_destination' => 'Destination blocked by the security rules',
+        'endpoint_disabled' => 'The endpoint was disabled',
+        'internal_error' => 'Internal error',
+    ],
+
+    'delivery_trigger' => [
+        'automatic' => 'automatic',
+        'manual' => 'manual resend',
+        'test' => 'test',
+    ],
+
+    'deliveries' => [
+        'title' => 'Delivery log',
+        'singular' => 'delivery',
+        'plural' => 'deliveries',
+        'event' => 'Event',
+        'status' => 'Status',
+        'attempt' => 'Attempt',
+        'attempt_value' => '#:number (:trigger)',
+        'http_status' => 'HTTP',
+        'latency' => 'Time',
+        'time' => 'Sent',
+        'next_retry' => 'Next retry :since',
+        'details' => 'Details',
+        'details_heading' => 'Delivery of :type',
+        'resend' => 'Resend',
+        'resend_heading' => 'Resend this event?',
+        'resend_help' => 'The :type event is sent once more to :host, with the same ID and body (receivers deduplicate by webhook-id).',
+        'resend_submit' => 'Resend',
+        'empty_heading' => 'No deliveries yet',
+        'empty_description' => 'Deliveries appear here when an event is sent to this endpoint. The log keeps 30 days.',
+    ],
+
+    'empty' => [
+        'heading' => 'No webhook endpoints',
+        'description' => 'Add an endpoint so your server hears about payments, links and refunds as they happen.',
+    ],
+
+    'notifications' => [
+        'created' => 'Endpoint for :host added.',
+        'updated' => 'Endpoint saved.',
+        'rotated' => 'Secret rotated. The previous one keeps signing for 24 hours.',
+        'disabled' => 'Endpoint disabled.',
+        'enabled' => 'Endpoint enabled.',
+        'deleted' => 'Endpoint deleted.',
+        'resent' => 'Event queued to be sent again.',
+    ],
+
+    'errors' => [
+        'reauthentication_required' => 'Confirm your password to continue.',
+        'tenant_read_only' => 'Your account is read-only in its current state: webhook endpoints cannot be created or changed. You can still disable or delete them.',
+        'too_many_endpoints' => 'You have reached the maximum number of webhook endpoints for this mode.',
+        'no_events' => 'Choose at least one event, or all events.',
+        'unknown_event' => 'One of the chosen events does not exist.',
+        'description_too_long' => 'The description can have up to 255 characters.',
+        'endpoint_disabled' => 'The endpoint is disabled. Enable it before resending events.',
+    ],
+
+    'destination' => [
+        'invalid_url' => 'Enter a valid URL.',
+        'too_long' => 'The URL can have up to 2048 characters.',
+        'scheme_not_allowed' => 'The URL must start with https://.',
+        'credentials_in_url' => 'The URL cannot include a user name or password.',
+        'port_not_allowed' => 'The URL must use port 443 or 8443.',
+        'ip_literal_host' => 'Use a domain name, not an IP address.',
+        'forbidden_host' => 'This domain cannot receive webhooks.',
+        'unresolvable_host' => 'The domain of the URL does not resolve.',
+        'forbidden_address' => 'The domain resolves to a private or reserved address.',
+    ],
+
+    'mail' => [
+        'footer' => 'If you did not expect this change, review your webhook endpoints and your team\'s access.',
+        'created' => [
+            'subject' => 'A webhook endpoint was added (:mode)',
+            'line' => 'A webhook endpoint for :host was added in :mode.',
+        ],
+        'updated' => [
+            'subject' => 'A webhook endpoint was changed (:mode)',
+            'line' => 'The webhook endpoint for :host was changed in :mode.',
+        ],
+        'secret_rotated' => [
+            'subject' => 'A webhook secret was rotated (:mode)',
+            'line' => 'The signing secret of the webhook endpoint for :host was rotated in :mode. The previous secret stays valid for 24 hours.',
+        ],
+        'disabled_by_failures' => [
+            'subject' => 'A webhook endpoint was disabled after repeated failures (:mode)',
+            'line' => 'The webhook endpoint for :host failed continuously for 5 days and was disabled in :mode. Fix it and enable it again from the panel.',
+        ],
+        'deleted' => [
+            'subject' => 'A webhook endpoint was deleted (:mode)',
+            'line' => 'The webhook endpoint for :host was deleted in :mode.',
+        ],
+    ],
+
+    /*
+     * Pre-payment validation (plan 15.8, ADR-0058).
+     */
+    'validation' => [
+        'page' => [
+            'title' => 'Pre-payment validation',
+            'subheading' => [
+                'test' => 'Test mode. After the card is authorized and before it is charged, we ask your server whether to go ahead.',
+                'live' => 'Live mode. After the card is authorized and before it is charged, we ask your server whether to go ahead. It applies to real payments.',
+            ],
+            'not_configured' => 'Not configured',
+            'not_configured_help' => 'Payments in this mode are charged without asking your server.',
+            'how_it_works' => 'When configured, each payment waits up to 5 seconds for your server to answer "approve" or "reject" (for example, to check stock or the order). Links can use it by default or per link.',
+            'settings' => 'Settings',
+            'default_on' => 'Yes: new links ask your server unless the API says otherwise',
+            'default_off' => 'No: only links created with validation ask your server',
+            'never' => 'Never',
+        ],
+        'fields' => [
+            'url' => 'Validation URL',
+            'failure_policy' => 'If your server fails',
+            'failure_policy_help' => 'A failure is no answer in 5 seconds, an error, or an answer that is not valid.',
+            'enabled_by_default' => 'Use it for new links by default',
+            'enabled_by_default_help' => 'Applies when the API does not say whether a link uses validation. Links created in the panel follow this setting.',
+            'last_success_at' => 'Last valid answer',
+        ],
+        'actions' => [
+            'configure' => 'Configure',
+            'configure_help' => [
+                'test' => 'Validation of test mode. A signing secret of its own is generated and shown once.',
+                'live' => 'Validation of real payments. A signing secret of its own is generated and shown once. The account owners are notified by e-mail.',
+            ],
+            'edit' => 'Edit settings',
+            'save' => 'Save',
+            'test' => 'Test validation',
+            'test_heading' => 'Send a sample validation?',
+            'test_help' => 'Signed example data marked "test": true is sent now to :host, and the answer, the time and whether its format is valid are shown. It does not charge anything and does not count towards the failure alert.',
+            'test_submit' => 'Send',
+            'rotate_heading' => 'Rotate the validation secret?',
+            'rotate_help' => 'A new secret is generated and shown once. The current one keeps signing for 24 hours (both signatures are sent).',
+            'remove' => 'Remove',
+            'remove_heading' => 'Remove the pre-payment validation?',
+            'remove_help' => 'New links can no longer use it. Links already created with validation are NOT charged until a URL is configured again in this mode, whatever the failure policy was. The call log is kept 30 days.',
+            'remove_submit' => 'Remove',
+        ],
+        'alert' => [
+            'heading' => 'Your pre-payment validation is failing',
+            'description' => 'The last :failures calls failed in a row (last one: :date). Validation stays on and your policy is being applied: ":policy". Check your server and use "Test validation".',
+        ],
+        'notifications' => [
+            'configured' => 'Pre-payment validation configured.',
+            'updated' => 'Settings saved.',
+            'removed' => 'Pre-payment validation removed.',
+        ],
+        'outcome' => [
+            'approved' => 'Approved',
+            'rejected' => 'Rejected',
+            'failed' => 'Failed',
+        ],
+        'failure_kind' => [
+            'timeout' => 'No answer within 5 seconds',
+            'connection_error' => 'The connection failed',
+            'tls_error' => 'Secure connection (TLS) failed',
+            'http_error' => 'HTTP status other than 200',
+            'invalid_response' => 'The answer is not valid',
+            'blocked_destination' => 'Destination blocked by the security rules',
+            'endpoint_missing' => 'No validation URL configured',
+        ],
+        'final_decision' => [
+            'charge' => 'Charged',
+            'block' => 'Not charged',
+        ],
+        'calls' => [
+            'title' => 'Recent calls',
+            'description' => 'Every validation call of the last 30 days, newest first.',
+            'time' => 'Time',
+            'test' => 'Test',
+            'link' => 'Link',
+            'attempt_number' => 'Validation #:number of the link',
+            'attempt' => 'Validation number',
+            'outcome' => 'Result',
+            'reason' => 'Reason: :reason',
+            'reason_code' => 'Reason',
+            'failure' => 'Failure',
+            'failure_with_policy' => ':kind; applied: :policy',
+            'policy_applied' => 'Policy applied',
+            'final_decision' => 'Charge',
+            'http_status' => 'HTTP',
+            'latency' => 'Time',
+            'id' => 'Call',
+            'empty_heading' => 'No calls yet',
+            'empty_description' => 'Calls appear here when a payment is validated or you use "Test validation".',
+        ],
+        'link_calls' => [
+            'section' => 'Pre-payment validations',
+            'description' => 'Each time your server was asked about a payment of this link.',
+            'empty' => 'Your server has not been asked about this link yet.',
+        ],
+        'policy' => [
+            'fail_closed' => [
+                'label' => 'Do not charge (recommended)',
+                'explanation' => 'If your server does not answer in 5 seconds, answers with an error or sends an invalid answer, the payment is not charged: the card authorization is released and the payer is told to contact you. No money is taken without your approval, but an outage of your server stops your sales.',
+            ],
+            'fail_open' => [
+                'label' => 'Charge anyway',
+                'explanation' => 'If your server does not answer in 5 seconds, answers with an error or sends an invalid answer, the payment is charged anyway and marked in the payment and its webhook as "validation failed, charged". Your sales continue during an outage, but you must review those payments yourself and refund them if needed.',
+            ],
+        ],
+        'problems' => [
+            'status_not_200' => 'The answer must have HTTP status 200 (redirects are not followed).',
+            'body_too_large' => 'The answer is larger than 4 KB.',
+            'invalid_json' => 'The answer is not a JSON object.',
+            'decision_missing' => 'The answer has no "decision" field.',
+            'decision_invalid' => 'The "decision" field must be "approve" or "reject".',
+            'content_type_not_json' => 'The answer should have the header Content-Type: application/json.',
+            'reason_code_invalid' => 'The "reason_code" field must use lowercase letters, digits and underscores, up to 64 characters; it was ignored.',
+            'payer_message_too_long' => 'The "payer_message" field is longer than 200 characters; it was shortened.',
+            'payer_message_invalid' => 'The "payer_message" field must be text; it was ignored.',
+            'cancel_link_invalid' => 'The "cancel_link" field must be true or false; it was taken as false.',
+        ],
+        'mail' => [
+            'footer' => 'If you did not expect this, review your pre-payment validation settings and your team\'s access.',
+            'configured' => [
+                'subject' => 'A pre-payment validation URL was configured (:mode)',
+                'line' => 'Payments in :mode can now be validated by :host before they are charged.',
+            ],
+            'updated' => [
+                'subject' => 'The pre-payment validation settings were changed (:mode)',
+                'line' => 'The pre-payment validation settings in :mode were changed. The URL points to :host.',
+            ],
+            'secret_rotated' => [
+                'subject' => 'The pre-payment validation secret was rotated (:mode)',
+                'line' => 'The signing secret of the pre-payment validation for :host was rotated in :mode. The previous secret stays valid for 24 hours.',
+            ],
+            'removed' => [
+                'subject' => 'The pre-payment validation URL was removed (:mode)',
+                'line' => 'The pre-payment validation URL for :host was removed in :mode. Links created with validation are not charged until a URL is configured again.',
+            ],
+            'failing' => [
+                'subject' => 'Your pre-payment validation is failing (:mode)',
+                'line' => 'The last :failures pre-payment validation calls to :host in :mode failed in a row. Validation stays active and your failure policy is being applied. Check your server and use "Test validation" in the panel.',
+            ],
+        ],
+    ],
+
+];
