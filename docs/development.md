@@ -441,7 +441,7 @@ Production uses the keys of a Turnstile widget created in the Cloudflare dashboa
 
 ### Payer fields and the privacy notice
 
-The checkout collects payer data only when the tenant has a privacy notice URL; the demo tenant has one. Without it the page shows no payer fields and the link detail in the panel warns about it.
+The checkout collects payer data only when the tenant has a privacy notice (a text or a link, set on the tenant panel's Legal page, ADR-0056); the demo tenant has one as a link, and terms as a text (they open in a dialog under the amount). Without a privacy notice the page shows no payer fields and the link detail in the panel warns about it.
 
 ### Card-testing protection, locally
 

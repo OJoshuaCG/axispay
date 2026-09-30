@@ -116,6 +116,7 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 | `feature-subtle` | blue-50 | `rgb(34 181 115 / 0.12)` | Decorative background |
 | `brand-mark` | green-500 | same | Brand mark tile (`fill-brand-mark`): the panel stand-in shown when there is no platform logo or the display is "name only" (ADR-0053) |
 | `brand-mark-fg` | neutral-900 | same | Glyph on the brand mark tile (`stroke-brand-mark-fg`, 7.2:1). Decorative |
+| `logo-plate` | transparent | neutral-50 | Plate behind the merchant's logo on the payment page when the merchant has no dark variant (`bg-logo-plate`, ADR-0056), so a logo drawn for white backgrounds stays readable in dark. Decorative; never behind text |
 
 ### Status
 
@@ -277,7 +278,7 @@ Use the named layers instead of numeric `z-*` values.
 
 ## Brand logo sizes
 
-Defined in `theme.css` (ADR-0053, ADR-0054). Plain variables, not utilities: the panel theme (`resources/css/filament/theme.css`) and two utilities in `components.css` (`brand-logo-simple`, `brand-mark-simple`) read them. The platform logo is stored at up to 1024 x 512 px (`ImageNormalizer::PLATFORM_LOGO_MAX_*`; tenant logos keep 400 x 120), so every size here stays sharp, retina included. The sidebar logo fills the header width, so a logo uploaded before the larger box existed is upscaled there until it is uploaded again.
+Defined in `theme.css` (ADR-0053, ADR-0054). Plain variables, not utilities: the panel theme (`resources/css/filament/theme.css`) and two utilities in `components.css` (`brand-logo-simple`, `brand-mark-simple`) read them. The platform logo is stored at up to 1024 x 512 px (`ImageNormalizer::PLATFORM_LOGO_MAX_*`; merchant logos: 800 x 240, ADR-0056), so every size here stays sharp, retina included. The sidebar logo fills the header width, so a logo uploaded before the larger box existed is upscaled there until it is uploaded again.
 
 | Token | Value | Where |
 |---|---|---|

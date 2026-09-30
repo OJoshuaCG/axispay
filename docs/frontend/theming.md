@@ -15,8 +15,8 @@ This page explains how the light, dark and system themes work, how the preferenc
 |---|---|---|
 | `color-scheme` | `resources/css/tokens/semantic.css` | `:root { color-scheme: light dark }`, overridden to `light` / `dark` by `:root[data-theme=...]` |
 | `light-dark()` | `semantic.css` | Every semantic color is `light-dark(<light>, <dark>)` and resolves against `color-scheme` |
-| Pre-paint script | `resources/views/components/layouts/app.blade.php` | Reads `localStorage` and sets `data-theme` before first paint |
-| Toggle logic | `resources/js/theme.js` | Syncs toggles, handles keyboard, saves the preference, syncs other tabs |
+| Pre-paint script | `resources/views/components/theme-prepaint.blade.php`, included by both layouts (`layouts/app` and `layouts/checkout`) right after `<x-theme-color-meta />` | Reads `localStorage` and sets `data-theme` (and narrows `<meta name="color-scheme">`) before first paint |
+| Toggle logic | `resources/js/theme.js` | Syncs toggles, handles keyboard, saves the preference, syncs other tabs, dispatches `theme:change`, exposes `effectiveTheme()` |
 | Toggle UI | `resources/views/components/theme-toggle.blade.php` | Light / Dark / System radio group |
 
 ### Theme states
@@ -33,7 +33,7 @@ This page explains how the light, dark and system themes work, how the preferenc
 
 ### No flash on load
 
-The layout's `<head>` runs an inline script before CSS and fonts load:
+Every layout's `<head>` runs one shared inline script, `<x-theme-prepaint />`, before CSS and fonts load:
 
 ```html
 <script>
@@ -49,12 +49,21 @@ The layout's `<head>` runs an inline script before CSS and fonts load:
             return;
         }
         document.documentElement.setAttribute('data-theme', theme);
-        // ...then copies the chosen scheme's theme-color into both meta tags.
+        // ...then sets <meta name="color-scheme"> to that scheme and copies
+        // the chosen scheme's theme-color into both theme-color tags.
     })();
 </script>
 ```
 
-It carries the Vite CSP nonce when one is set. **Keep it in sync with `theme.js`** (same key, same values, same default) if either changes.
+It carries the Vite CSP nonce when one is set (the payment page's CSP allows only nonce'd inline scripts). **Keep it in sync with `theme.js`** (same key, same values, same default) if either changes. `theme.js` keeps `<meta name="color-scheme">` in step afterwards (`light`, `dark`, or `light dark` for System).
+
+### Reacting to a theme change
+
+Anything painted outside the CSS (the checkout's Stripe card form and Turnstile widget) listens for `theme:change` on `document` (`detail.preference` is `light`, `dark` or `system`), which `applyTheme()` dispatches on every change, other tabs included. Read the scheme on screen with `effectiveTheme()` (`light` or `dark`, System resolved against the OS). Under System, also listen to `matchMedia('(prefers-color-scheme: dark)')` and repaint only when `<html>` has no `data-theme`.
+
+## The payment page (ADR-0056 part C)
+
+The pay host has the same choice as the other Blade pages: `<x-site-controls>` in `<x-checkout.merchant-header>` (the theme options icon-only at every width), the shared pre-paint in `layouts/checkout`, light by default, saved in `localStorage['theme']` on the pay origin (its own storage; the panels' choice does not carry over). `resources/js/checkout/checkout.js`, the only script of every pay-host page (the 404 and error pages included), starts the toggle first. This amends ADR-0051's "follows the OS, no toggle".
 
 The toggle has nothing checked in the server-rendered HTML, because the server cannot know the saved preference. `theme.js` marks the correct option when it runs; until then the first option is the tab stop.
 
@@ -80,7 +89,7 @@ Defined in `resources/css/theme.css`:
 
 ### When to use `dark:`
 
-Rarely. No view or component uses it today.
+Rarely, and only to swap images: the platform logo's dark variant (`<x-platform-brand>`, the checkout footer) and the merchant's logo on the payment page (`<x-checkout.merchant-header>`: the dark variant with `dark:hidden` / `hidden dark:block`; without one, the light logo on the `logo-plate` token, ADR-0056). Colors never use it.
 
 | Situation | Use |
 |---|---|
@@ -122,7 +131,7 @@ The browser chrome follows the **effective** theme, manual choice included.
 <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)" data-theme-color="dark">
 ```
 
-The two hexes are the only copy of `page` outside the tokens: they are needed before any CSS loads. They live in one component, `<x-theme-color-meta />` (`components/theme-color-meta.blade.php`), which every layout (the app layout and the checkout layout) includes. If `page` changes in `primitives.css` / `semantic.css`, update them there. `theme.js` hardcodes no color.
+The two hexes are the only copy of `page` outside the tokens: they are needed before any CSS loads. They live in one component, `<x-theme-color-meta />` (`components/theme-color-meta.blade.php`), which every layout (the app layout and the checkout layout) includes. The payment page's body is `canvas` but its `<html>` stays `page`, so the browser chrome takes `page`. If `page` changes in `primitives.css` / `semantic.css`, update them there. `theme.js` hardcodes no color.
 
 ## Theme toggle labels
 

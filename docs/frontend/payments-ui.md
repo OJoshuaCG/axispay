@@ -192,13 +192,17 @@ The payer-facing payment page (plan 11, ADR-0051). Components: [components.md](c
 
 | Width | Layout |
 |---|---|
-| 320–767px | One column on the page background: header, summary, payer fields, card form, Pay, trust line, footer |
-| 768–1023px | The same, centred at the narrow width inside a hairline card (`border-line`, `rounded-xl`) |
-| 1024px and up | Checkout width, summary on the left (sticky), form on the right; the header spans both |
+Two cards on the `canvas` (ADR-0056 part C): the details (summary and legal links) and the form (payer fields, card form, Pay, trust line).
 
-- No card fill in dark mode (primary on a raised surface fails contrast); everything sits on `bg-page`.
+| Width | Layout |
+|---|---|
+| 320–1023px | Header (site controls, the merchant's logo or name), then the two cards stacked (details first), centred at the narrow width (640px), then the footer |
+| 1024px and up | Checkout width (960px): the details card on the left (2/5), the form card on the right (3/5), neither sticky; the header spans both |
+
+- Outcomes (paid, expired, canceled, blocked) are one card: the status, then the summary. Processing keeps both cards, the status in the right one.
+- The cards are `<x-checkout.card>` (`bg-page`), never `x-card`: primary on a raised surface fails contrast in dark. In dark the cards are flat and outlined.
 - The Pay button is `primary`, `size="lg"`, full width and **not sticky** (iOS keyboard, focus not obscured). It reads "Pay 1,500.00 MXN" with the amount in the numeric font, stays `aria-disabled` until the card form is ready, and switches to "Processing payment…" while a request is in flight.
-- The page follows the operating system's theme; Stripe's card form gets the page's own colors (read from the rendered utilities) and Mukta, and is updated when the scheme changes.
+- Light, dark or system, chosen in the header (light by default, ADR-0044); Stripe's card form gets the page's own colors (read from the rendered utilities) and Mukta, and is updated when the theme on screen changes.
 
 ### States and feedback
 

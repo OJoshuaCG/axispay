@@ -357,9 +357,12 @@ Formatted monetary value with tabular figures and an explicit sign.
 | `locale` | string\|null | `app()->getLocale()` | ICU locale. Belongs to the **viewer**: leave it unset |
 | `signed` | bool | `true` | Shows `+`/`−` and positive/negative color; zero is unsigned and neutral |
 | `minor` | bool | `false` | Value is in minor units; divided by the currency's ICU fraction digits |
+| `split` | bool | `false` | Number and ISO code as two pieces (`inline-flex flex-wrap items-baseline gap-x-2`, split at the last non-breaking space): the number never breaks, the code wraps below it in a narrow column. For large totals (the checkout's summary). The text read is the same |
+| `codeClass` | string | `''` | Classes of the code when `split` (e.g. `text-xl text-fg-secondary`); the weight is inherited, never set |
 
 ```blade
 <x-amount :value="1250.5" currency="USD" />
+<x-amount :value="150000000" currency="MXN" minor :signed="false" split class="text-3xl font-semibold" code-class="text-xl text-fg-secondary" />
 <x-amount :value="129900" currency="CLP" locale="es_CL" minor />
 <x-amount :value="$balance" currency="USD" :signed="false" />
 ```
@@ -444,6 +447,8 @@ Groups `<x-language-switcher>` and `<x-theme-toggle>` for page headers (`role="g
 </header>
 ```
 
+The payment page uses it in `<x-checkout.merchant-header>` (row 1, at the end); the theme toggle works there because the checkout's own script (`resources/js/checkout/checkout.js`) starts `theme.js` (ADR-0056 part C).
+
 ---
 
 ## Phone input: `<x-phone-input>`
@@ -466,16 +471,23 @@ The payer-facing payment page (ADR-0051, the approved checkout design). They are
 
 | Component | Purpose | Rules |
 |---|---|---|
-| `<x-layouts.checkout>` | Document of every checkout page | No theme toggle and no theme pre-paint: the page follows the operating system. Robots `noindex`, CSRF meta, CSP nonce on every script and style, Geist Mono 600 preloaded, Stripe.js from `js.stripe.com` only when the page takes payments (the sandbox stub replaces it locally) |
-| `<x-checkout.merchant-header>` | Merchant name (never truncated) and the language switcher | Phase 8 adds the logo; the name stays |
-| `<x-checkout.order-summary>` | "Payment to {merchant}", the description, the total (`<x-amount>`, 3xl semibold) and the expiry when it is less than 72 hours away | Never metadata or client references; the expiry is in the tenant's time zone with its abbreviation |
-| `<x-checkout.payment-element>` | Mount point of Stripe's card form with a three-bar skeleton | Reserves its height (no layout shift, no shimmer); the skeleton is removed when the form is ready |
+| `<x-layouts.checkout>` | Document of every checkout page | The shared theme pre-paint (`<x-theme-prepaint />`) and the light / dark / system choice (ADR-0056 part C, light by default); body `bg-canvas` (the `<html>` stays `page`); main `py-stack-md md:py-stack-lg`. Robots `noindex`, CSRF meta, CSP nonce on every script and style, Geist Mono 600 preloaded, Stripe.js from `js.stripe.com` only when the page takes payments (the sandbox stub replaces it locally) |
+| `<x-checkout.card>` | The payment page's cards (ADR-0056 part C) | Prop `as` (`section` default, `div`, `article`, `aside`). `rounded-xl border border-line bg-page p-inset-md shadow-sm sm:p-inset-lg`: white with a hairline and a small shadow on the canvas in light, flat with its border in dark. Not `<x-card>` (raised in dark fails the Pay button's contrast); the Stripe probe reads `page`, so the card form matches |
+| `<x-checkout.merchant-header>` | Row 1: `<x-site-controls>` at the end (language and theme, theme icon-only). Row 2: the merchant's logo (ADR-0056 part B) or, without one, its name (`text-center text-2xl font-semibold`, never truncated) | Props `merchant` (null on pages without a merchant: the controls only) and `logo` (`App\Modules\Checkout\Data\MerchantLogo`, null without a logo). The logo is centered, `alt` = merchant name, `width`/`height` set, `h-auto w-auto max-h-20 max-w-56 object-contain sm:max-h-24 sm:max-w-72 lg:max-w-80`; a dark variant is swapped in with `dark:hidden` / `hidden dark:block`, otherwise the light logo sits on `bg-logo-plate` (`rounded-lg p-inset-sm`). Never hand-write the merchant's logo elsewhere |
+| `<x-checkout.order-summary>` | "Payment to {merchant}", the description, a visible "Total to pay" and the total (`<x-amount split>`, 3xl/4xl semibold, the code xl fg-secondary), the expiry (clock icon) when it is less than 72 hours away; its slot comes last under a hairline (the page puts the legal links there) | Prop `bare`: `false` = the left card (`<x-checkout.card>`), `true` = no card, inside a single-card state. Never sticky. Never metadata or client references; the expiry is in the tenant's time zone with its abbreviation. Markup shared by both variants: `resources/views/checkout/order-summary-body.blade.php` |
+| `<x-checkout.legal-links>` | "Privacy notice · Terms" under the amount, for whichever the merchant published (ADR-0056), and one native `<dialog>` per text document | Props `documents` (kind => `LegalDocument`), `token` and `merchant` (shown small in the dialog's header). A text's link is a real link to `/l/{token}/legal/{kind}`; `resources/js/checkout/legal-dialog.js` opens the dialog instead (`showModal()`; Escape, the Close button or the backdrop close it, focus returns to the link). The dialog is a full-screen sheet below 640px and a `max-w-narrow` panel up to 5/6 of the viewport height from 640px; header (merchant, h2), scrollable `legal-prose` body, footer with Close; focus on the h2 (`tabindex="-1"`) on opening; `open:flex`, never plain `flex`; `dialog-enter` opening transition; the page behind does not scroll (base.css). A link document opens in a new tab with `rel="noopener noreferrer"` and an sr-only "(opens in a new tab)". The backdrop is the one primitive on purpose (`backdrop:bg-neutral-900/60`, a scrim that does not switch with the theme) |
+| `<x-checkout.legal-link>` | One link to a merchant document, as above | Props `document`, `token`, `label` (plain text). A prop, not a slot, so a translated sentence can embed it (the payer-fields line renders it with `view()`) |
+| `<x-checkout.payment-element>` | Mount point of Stripe's card form with a skeleton shaped like it (number; expiry and CVC side by side; country) | Its label is `text-base font-semibold`. Reserves its height (no layout shift, no shimmer); the skeleton is removed when the form is ready |
 | `<x-checkout.turnstile>` | Slot of the bot check | Hidden until the server asks for it; between the card form and the Pay button |
-| `<x-checkout.status-panel>` | A state that replaces the form: paid, processing, expired, canceled, blocked, rejected | Icon in a `*-subtle` circle, the page's `h1` (focused on arrival), body and actions. `level="2"` only for previews |
+| `<x-checkout.status-panel>` | A state that replaces the form: paid, processing, expired, canceled, blocked, rejected | Icon in a `*-subtle` circle, the page's `h1` (focused on arrival), body and actions, start-aligned. `level="2"` only for previews. The page's panels are in `resources/views/checkout/page-status.blade.php` |
 | `<x-checkout.field-error>` | Error line of a payer field, filled from the server's answer | Linked with `aria-describedby` |
-| `<x-checkout.footer>` | "Powered by {platform}", "Processed by Stripe", privacy notice (when payer data is collected) and support e-mail | On every state; links are 44px targets |
+| `<x-checkout.footer>` | Two tiers, no rule: the merchant's help line "Questions about your payment? Email {email}" (only with a support e-mail), then `text-xs` "Powered by {platform}" · "Processed by Stripe" | On every state; two centered lines below 1024px, one row from 1024px; links are 44px targets. "Powered by" links to the platform's `/legal` page in a new tab (sr-only "(opens in a new tab)") while the platform has a privacy notice or terms, and is plain text otherwise (ADR-0056). The merchant's documents are under the order summary, not here |
 
 The states and their exact copy are in [payments-ui.md](payments-ui.md#checkout).
+
+### Legal texts (`legal-prose`)
+
+The merchant's and the platform's legal texts are simple Markdown rendered to HTML by `App\Modules\Legal\Services\LegalMarkdown` (raw HTML stripped, unsafe links dropped, web links in a new tab, images shown as their text alternative, headings starting below the heading of the page or dialog that shows them). Wrap the HTML in the `legal-prose` utility (`resources/css/components.css`): paragraph, heading, list, link, quote and code styles from the tokens, and long words and URLs wrap at 320px. It is used by `<x-checkout.legal-links>`, `checkout/legal-document.blade.php` (`/l/{token}/legal/{kind}`), `checkout/platform-legal.blade.php` (`/legal`) and the panels' preview (`filament/legal/document-preview.blade.php`).
 
 ## Platform brand (logo and name)
 

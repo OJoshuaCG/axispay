@@ -42,7 +42,8 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Spacing, layout widths, type scale, font families, weights, tracking, radius, icon sizes, motion, z-index, disabled opacity | `resources/css/theme.css` |
 | The `dark:` and `desktop:` variant definitions | `resources/css/theme.css` |
 | Global element defaults (body, links, focus outline, selection, reduced motion) | `resources/css/base.css` |
-| Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures; `seg-group` / `seg-option`: segmented controls) | `resources/css/components.css` |
+| Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures; `seg-group` / `seg-option`: segmented controls; `dialog-enter`: a modal's reduced-motion-aware opening) | `resources/css/components.css` |
+| Page scroll lock behind an open modal `<dialog>` | `resources/css/base.css` (`html:has(dialog[open])`) |
 | Panel type scale (Filament text sizes for Mukta) | `resources/css/theme.css` (`--panel-text-*`), applied in `resources/css/filament/theme.css` |
 | Panel theme control, default panel theme | `resources/views/filament/partials/theme-control.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Import order of the CSS layers | `resources/css/app.css` |
@@ -55,13 +56,16 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Invalid-input policy for components | `app/Support/ComponentMisuse.php` |
 | A component's markup, variants or props | `resources/views/components/<name>.blade.php` |
 | Payment status badge variant or icon | `app/Enums/PaymentStatus.php` (labels: `lang/*/payments.php`) |
-| Theme persistence, toggle keyboard behavior, browser `theme-color` | `resources/js/theme.js` (keep the pre-paint script in `components/layouts/app.blade.php` in sync); the `theme-color` hexes: `components/theme-color-meta.blade.php` |
+| Theme persistence, toggle keyboard behavior, browser `theme-color`, the `theme:change` event | `resources/js/theme.js` (keep the shared pre-paint script `components/theme-prepaint.blade.php`, used by every layout, in sync); the `theme-color` hexes: `components/theme-color-meta.blade.php` |
 | Double-submit guard, loading buttons | `resources/js/forms.js` |
 | Password policy (minimum length, data-leak check) and its checklist items | `config/axispay.php` → `passwords`, `app/Modules/Identity/Support/PasswordPolicy.php` |
 | Password field markup and behavior (reveal button, checklist, mismatch hint) | `resources/views/components/password-input.blade.php`, `resources/views/components/password/*`, `resources/js/password-input.js`, `app/Support/Filament/Forms/PasswordField.php` |
 | Control bar of the panels' simple pages (sign-in, 2FA set-up) | `resources/views/filament/partials/guest-controls.blade.php`, `panel-controls.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Autofocus of feedback on page load | `resources/js/focus.js` |
 | The payer-facing checkout: page, states, payer fields, Stripe appearance, sandbox stub | `resources/views/checkout/*`, `resources/views/components/checkout/*`, `resources/js/checkout/*` (copy: `lang/*/checkout.php`) |
+| The checkout's card surface, two-card layout and footer (ADR-0056 part C) | `resources/views/components/checkout/card.blade.php`, `resources/views/checkout/page.blade.php`, `resources/views/components/checkout/footer.blade.php` |
+| How legal texts (privacy notice, terms) render and look | Rendering: `app/Modules/Legal/Services/LegalMarkdown.php`; styles: `resources/css/components.css` (`legal-prose`); the checkout's legal dialog: `resources/views/components/checkout/legal-links.blade.php`, `resources/js/checkout/legal-dialog.js` (ADR-0056) |
+| The merchant's logo on the payment page (size, dark swap, light plate) | Markup: `resources/views/components/checkout/merchant-header.blade.php`; plate color: `resources/css/tokens/semantic.css` (`--color-logo-plate`); stored size: `ImageNormalizer::LOGO_MAX_*` (ADR-0056) |
 | Icon package registration | `config/blade-icons.php` |
 | Size of the platform logo in the panels (topbar, sign-in pages, full-height sidebar) | `resources/css/theme.css` (`--brand-logo-*`, see [tokens.md](tokens.md#brand-logo-sizes)); where it is applied: `resources/css/filament/theme.css` |
 | Panel layout from lg (full-height sidebar, topbar beside it) | `resources/css/filament/theme.css`, "Full-height sidebar from lg" (ADR-0054) |

@@ -637,6 +637,7 @@ Esta regla aplica a: `payment_attempts → payment_links`, `fx_quotes → paymen
 - `id`, `legal_name`, `display_name`, `status` (`pending_onboarding` | `active` | `grace` | `suspended` | `closed`), `status_reason`, `status_changed_at`.
 - `timezone` (IANA, default `America/Mexico_City`), `default_locale` (`es` | `en`).
 - `support_email`, `privacy_notice_url` (aviso de privacidad del tenant, requerido si recolecta datos del pagador).
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** `privacy_notice_url` se retira. El aviso de privacidad y los términos y condiciones del tenant viven en `tenant_legal_documents` (uno por tipo, texto Markdown sencillo o URL, sin `livemode`); las URL existentes se migraron como documentos de tipo URL. Los de la plataforma viven en `platform_legal_documents`.
 - `allowed_return_domains` (JSON: dominios permitidos para `return_url`).
 - `settings` (JSON validado por un DTO: expiración por defecto, FX, recibos de Stripe, etc.; ver 7.3).
 - `closed_at`.
@@ -1195,6 +1196,7 @@ Los estados `paid`, `expired` y `canceled` responden HTTP `200` con la vista inf
 - Payment Element de Stripe (solo tarjeta).
 - Botón "Pagar {monto}".
 - Enlace al aviso de privacidad del tenant (obligatorio si se recolectan datos del pagador) y texto "Pago procesado de forma segura por Stripe".
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** debajo del monto se enlazan el aviso de privacidad y los términos del comercio (texto en un diálogo con página propia en `/l/{token}/legal/{tipo}`, o URL en pestaña nueva). "Powered by" enlaza a `/legal` (textos legales de la plataforma) cuando existe alguno.
 - Idioma según `locale` del link.
 - **Nunca** se muestra `metadata` ni `client_reference_id`.
 
@@ -1881,6 +1883,7 @@ HTTP `200` con `Content-Type: application/json` y un cuerpo como:
 | `webhooks:manage` | Gestionar endpoints de webhooks, la URL de validación previa y su política de fallo, y ver los logs de entregas y validaciones. **Sensible.** |
 | `gateway:manage` | Conectar, desconectar y ver la configuración de Stripe (cualquiera de los tres métodos, incluido registrar llaves de API). **Muy sensible:** puede redirigir el dinero. |
 | `settings:manage` | Branding, FX, campos del pagador, expiraciones y dominios de retorno. |
+| `legal:manage` | Aviso de privacidad y términos y condiciones del comercio ([ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)). Lo tienen `owner` y `admin`. |
 | `users:manage` | Invitar, desactivar usuarios y asignar roles. **Sensible.** |
 | `audit:read` | Ver el log de auditoría del tenant. |
 
@@ -1919,6 +1922,8 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 ---
 
 ## 18. Branding / white label
+
+> **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** adelantado desde la fase 8: el aviso de privacidad del comercio (texto o URL, página "Legal" del panel del tenant, permiso `legal:manage`). También se adelantó el logo del tenant, a **800×240** (en lugar de 400×120), con una variante opcional para el tema oscuro, página "Marca" del panel del tenant con el permiso `settings:manage`, mostrado solo en el dominio de pagos, arriba y centrado. Queda decidido, para implementarse después, el rediseño del checkout (dos tarjetas en escritorio y selector de tema claro, oscuro o del sistema). Siguen en la fase 8: colores, `background_style` y `platform_badge_style`.
 
 - **Campos:** `display_name` (máximo 60 caracteres), logo, `primary_color`, `accent_color`, `background_style` (claro u oscuro), `support_email`, `privacy_notice_url`.
 - **Logo:**
@@ -1964,6 +1969,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - **Retención:** por defecto 24 meses desde el pago (configurable por el superadmin por tenant: 6, 12, 24 o 60 meses). Un job diario purga los datos vencidos (`purge_after`), dejando intactos los registros financieros.
 - **Minimización:** mostrar en el panel enmascarado por defecto para roles sin `payments:read`; exportaciones CSV solo con `reports:export`.
 - **Rol legal:** el tenant es el **responsable** de los datos de sus pagadores y la plataforma es **encargada** del tratamiento. El checkout debe mostrar el aviso de privacidad del tenant. Revisar con asesoría legal el contrato de encargo y las obligaciones de la legislación mexicana de protección de datos personales (sección 29).
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** el tenant publica su aviso de privacidad (texto o URL) desde su panel; sin aviso no se recaba ningún dato del pagador (ADR-0051). La retención configurable y la purga siguen en la fase 8.
 - Nunca se registran datos del pagador en logs ni en sistemas de error (scrubbing en Sentry).
 
 ---
@@ -2336,6 +2342,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 
 - Rollups diarios, dashboard del tenant, exportación CSV.
 - Branding completo (logo re-codificado, contraste, vista previa), incluido el **logo de la plataforma** gestionado desde el panel superadmin con el mismo servicio de carga y `platform_badge_style` (ADR-0038).
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** el aviso de privacidad y los términos del comercio y el logo del tenant (800×240, solo en el dominio de pagos) ya se adelantaron; el rediseño del checkout con selector de tema quedó decidido para implementarse antes de esta fase. Quedan aquí los colores, `background_style`, la retención configurable y la purga de PII.
 - Catálogo de campos del pagador, configuración por tenant y por link, cifrado, retención y purga.
 - **Aceptación:** métricas correctas en la zona horaria del tenant (pruebas con pagos cerca de la medianoche); sin suma entre monedas; purga de PII probada.
 
@@ -2347,6 +2354,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 ### Fase 10 — Endurecimiento y salida a producción
 
 - Revisión de seguridad completa, pruebas de carga ligeras (para validar que no hay cuellos de botella evidentes), runbooks, backups con restauración probada, monitoreo y alertas verificados, documentación para integradores y checklist de la sección 30.
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** la publicación del aviso de privacidad y los términos de la plataforma (página "Legal" del panel superadmin, permiso `platform:legal:manage`, página pública `/legal` del dominio de pagos) ya se adelantó; queda aquí redactar su contenido y el contrato de encargo con asesoría legal.
 - Piloto con 1–3 tenants reales antes de abrir el acceso.
 
 ---
@@ -2391,9 +2399,9 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | 4 | Destinatarios de correos: se interpretó "admin de la plataforma" como superadmins (alertas de plataforma) + usuarios del tenant (operativas) | `SUPUESTO` | Confirmar | Fase 9 |
 | 5 | Valores por defecto de expiración (propuesta: 7 días por defecto, 90 días máximo, 15 minutos mínimo) | `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 7 días por defecto, 15 minutos mínimo, 90 días máximo; configurable, el tenant solo puede bajarlos | — | — |
 | 6 | Montos mínimos y máximos por moneda | `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): mínimos de Stripe (USD 0.50, MXN 10.00) y máximos de riesgo USD 10,000.00 / MXN 200,000.00; configurables, el tenant solo puede bajar el máximo | — | — |
-| 7 | Retención de PII del pagador (propuesta: 24 meses) y aviso de privacidad del tenant obligatorio | `PROPUESTO` | Validar con asesoría legal (contrato de encargo de tratamiento de datos) | Fase 8 |
+| 7 | Retención de PII del pagador (propuesta: 24 meses) y aviso de privacidad del tenant obligatorio | `PROPUESTO`. Aviso de privacidad: el tenant ya lo publica desde su panel (texto o URL, 2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)) | Validar con asesoría legal (contrato de encargo de tratamiento de datos) | Fase 8 (retención y purga) |
 | 8 | IVA y obligaciones fiscales del operador al cobrar a sus tenants | `PENDIENTE` (fuera del sistema) | Validar con el contador: cobrar IVA en México normalmente implica emitir CFDI | Negocio |
-| 9 | Términos y condiciones: comisiones no reembolsables (ADR-012), suspensión (ADR-013), responsabilidades de disputas | `PENDIENTE` | Redactar con asesoría legal | Salida a producción |
+| 9 | Términos y condiciones: comisiones no reembolsables (ADR-012), suspensión (ADR-013), responsabilidades de disputas | `PENDIENTE` (el contenido). Dónde se publican ya existe: panel superadmin → Legal, visible en `/legal` (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)) | Redactar con asesoría legal | Salida a producción |
 | 10 | Nombre comercial, dominios y prefijo de llaves definitivos | `PARCIALMENTE RESUELTO` (2026-09-24, ADR-0037): nombre interno `AxisPay` / `axispay`, prefijo de llaves `axp_`, nombre público configurable con `AXISPAY_DISPLAY_NAME`. Dominios: `PENDIENTE` | Definir los dominios antes de la salida a producción | Salida a producción (dominios) |
 | 11 | Tope de markup FX (propuesta: 10%) | `PROPUESTO` | Confirmar | Fase 6 |
 | 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | Rate de la API `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 100 requests/minuto por API key en ambos modos, configurable. Endpoints de webhook: `PROPUESTO` | Confirmar el límite de endpoints | Fase 5 |
@@ -2438,6 +2446,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - [ ] Documentación para integradores: autenticación, idempotencia, montos como string, errores, webhooks (verificación con ejemplos), patrón fetch-back, FX (campos originales vs cobrados).
 - [ ] OpenAPI publicado.
 - [ ] Términos y condiciones y aviso de privacidad de la plataforma publicados; contrato de encargo de datos con los tenants.
+  > **Nota (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)):** ya existe dónde publicarlos (panel superadmin → Legal, visible en `/legal`); falta el contenido revisado por asesoría legal.
 - [ ] Decisiones pendientes de la sección 29 resueltas o aceptadas explícitamente.
 
 ---

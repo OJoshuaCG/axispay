@@ -9,6 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Legal texts on the payment page** (ADR-0056, brought forward from
+  Phases 8 and 10):
+  - A "Legal" page in the tenant panel (Settings) where the merchant
+    publishes a privacy notice and terms and conditions, each as a text
+    (simple Markdown, up to 50,000 characters, HTML removed) or a link. New
+    tenant permission "manage the privacy notice and terms" (`legal:manage`),
+    held by owners and admins; changes are audited.
+  - The payment page shows "Privacy notice · Terms" below the amount in every
+    state: a text opens in a dialog (with its own page under the link for
+    payers without JavaScript), a link opens in a new tab.
+  - Payer fields are collected again as soon as the merchant publishes a
+    privacy notice, as a text or a link; without one nothing is collected, as
+    before. The warning on affected links now points to the Legal page.
+  - A "Legal" page in the platform panel for the platform's privacy notice
+    and terms (new platform permission `platform:legal:manage`, password
+    again, audited), shown on the pay host's public `/legal` page. "Powered
+    by" on every payment page links there while one of them exists.
+  - The two-card checkout with a theme choice is part C, below.
+
+- **The merchant's logo on the payment page** (ADR-0056 part B, brought
+  forward from Phase 8):
+  - A "Brand" page in the tenant panel (Settings) where owners and admins
+    (`settings:manage`, plan 17.1) upload the company logo and, optionally, a
+    version for dark theme; each can be replaced or removed on its own
+    (removing the logo also removes its dark version). Same checks as the
+    platform logo (PNG, JPEG or WebP recognized from the content, SVG
+    refused, up to 1 MB and 2000 × 2000), converted to a clean PNG and kept
+    at up to 800 × 240. A preview shows it on a light and a dark page.
+    Uploads and removals are audited with the image's size and fingerprint
+    only. Read-only for suspended or closed tenants and while a platform
+    admin views as the tenant.
+  - The payment page (and the merchant's legal document pages) show it at
+    the top, centered and large, with the merchant's name as its text
+    alternative; in dark theme the dark version, or the logo on a light plate
+    when there is none. Without a logo the merchant's name is shown as
+    before. Both panels keep the platform logo.
+  - The logo is served only on the pay host, under the link's own address,
+    cached for a year (every upload gets a new address), without cookies.
+
+- **A redesigned payment page** (ADR-0056 part C):
+  - Two cards on a light-gray canvas: the payment details (merchant, the
+    description, a visible "Total to pay", the expiry and the legal links) on
+    the left, the payer fields, the card form and Pay on the right; stacked
+    on phones and tablets, side by side from 1024px. The summary is no longer
+    sticky. While a payment is processing both cards stay (the status on the
+    right); paid, expired, canceled and blocked links, the "link not found"
+    page and the error pages show one card.
+  - A light, dark or system theme choice next to the language switcher, on
+    every pay-host page. Light by default, as on the other pages (ADR-0044);
+    "System" follows the device. The choice is remembered in the browser,
+    and Stripe's card form and the bot check follow it.
+  - The merchant's logo (or name) centered and large at the top.
+  - A large total wraps its currency code below the number instead of
+    overflowing a 320px phone.
+  - A lighter footer: the merchant's help line ("Questions about your
+    payment? Email …") and, on a second line (one row from 1024px), "Powered
+    by" · "Processed by Stripe". "Powered by" opens the platform's legal page
+    in a new tab.
+  - The legal-text window is a full-screen sheet on phones and a centered
+    panel from 640px, with the merchant, the title, the scrollable text and a
+    Close button; the page behind it does not scroll.
+  - The card-form placeholder is shaped like Stripe's form.
+
+- **`axispay:doctor`** warns when payment links would use a different scheme
+  than `APP_URL` (for example `http://` without TLS but links on `https://`
+  because `AXISPAY_PAY_BASE_URL` is empty), and fails when
+  `AXISPAY_PAY_BASE_URL` has no scheme.
+
 - **Sharper, wider platform logo in the sidebar** (ADR-0053 amendment of
   2026-09-29): the sidebar logo now takes the whole sidebar width, and the
   platform logo is stored at up to 1024 × 512 (tenant logos keep 400 × 120).
@@ -213,6 +281,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attempt.
 
 ### Changed
+
+- **Database:** the tenants' `privacy_notice_url` column is replaced by the
+  `tenant_legal_documents` table; existing addresses are moved over as link
+  documents by the migration. Run the permission catalog seeder on deploy so
+  owners and admins get `legal:manage`.
+- The checkout footer no longer repeats the merchant's privacy notice link;
+  it sits under the order summary with the terms.
 
 - **Stripe connection, API keys method, test mode** (ADR-0055): a test-mode
   connection made with API keys is active, and payment links and the payment

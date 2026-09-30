@@ -68,3 +68,7 @@ The platform logo is now shown across the whole width of the sidebar on large sc
 - **Tenant logos** (Phase 8) keep the size of plan section 18: up to 400 × 120.
 - The upload rules do not change: PNG, JPEG or WebP, at most 1 MB and 2000 × 2000 pixels.
 - A logo uploaded before this change keeps its smaller stored size; the superadmin must upload it again to get the sharper version.
+
+## Amendment (by the project owner, 2026-09-30): tenant logos kept larger
+
+[ADR-0056](0056-checkout-experience-legal-texts-merchant-logo-and-theme.md) decides that tenant logos, shown large at the top of the payment pages only, are kept at up to **800 × 240** pixels instead of 400 × 120. The upload rules above do not change.

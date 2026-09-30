@@ -33,7 +33,8 @@ Rules:
 | `Payments` | Payment attempts, declines and encrypted payer data; attempt state machine; applying the gateway's state (checkout, webhooks, reconciliation); capture, void, reconciliation; the pre-payment validation extension point. Refunds and disputes in Phase 7. | Phase 4 (exists) / 7 |
 | `Webhooks` | Recorded business events (`domain_events`, Phase 4). Tenant endpoints, outbox delivery, signed delivery, retries, delivery log, shared SSRF protection, pre-payment validation. | Phase 4 (events) / 5 |
 | `Fx` | Exchange rates (Banxico), quotes, conversion policy. | Phase 6 (the `FxMode` enum exists since Phase 3: links and tenant settings store it) |
-| `Branding` | Logo, colors, display name; contrast validation. | Phase 8 |
+| `Branding` | The platform logo, favicon and display mode (ADR-0053), the merchant's logo and its tenant-panel "Brand" page (ADR-0056 part B), the shared image checks (`ImageNormalizer`); colors, display name and contrast validation later. The pay-host route that serves the merchant's logo lives in `Checkout`. | ADR-0053, ADR-0056; the rest Phase 8 |
+| `Legal` | The merchant's and the platform's privacy notice and terms (text or link), their panel pages, safe Markdown rendering (ADR-0056). The pay-host pages that show them live in `Checkout`. | ADR-0056 (brought forward from Phases 8 and 10) |
 | `PayerFields` | Payer field catalog, tenant/link configuration, validation, encrypted storage. | Phase 8 (the catalog enums exist since Phase 3; the checkout's validation and country list since Phase 4) |
 | `Reporting` | Daily rollups, metrics, monthly usage reports. | Phase 8 / 9 |
 | `Billing` | Versioned pricing plans and fee calculation for usage reports (no charging). | Phase 9 |
