@@ -7,7 +7,7 @@ Start with [`../rules.md`](../rules.md) (non-negotiable rules), then the plan.
 | Document | What it is |
 |---|---|
 | [plans/master.md](plans/master.md) | Master plan: scope, data model, API contract, security, phases. The source of truth (Spanish). |
-| [adr/README.md](adr/README.md) | Index of the architecture decision records (ADR-0001 to ADR-0039) |
+| [adr/README.md](adr/README.md) | Index of the architecture decision records (ADR-0001 to ADR-0059) |
 
 ## Building
 
@@ -30,6 +30,12 @@ Start with [`../rules.md`](../rules.md) (non-negotiable rules), then the plan.
 | [frontend/accessibility.md](frontend/accessibility.md) | Accessibility requirements |
 | [frontend/responsive.md](frontend/responsive.md) | Breakpoints and responsive rules |
 | [frontend/i18n.md](frontend/i18n.md) | Locales and translation rules |
+
+## For merchants and integrators
+
+| Document | What it is |
+|---|---|
+| [guides/webhooks.md](guides/webhooks.md) | Events (webhooks) and pre-payment validation: when they are sent, panel set-up, signature verification, the validation answer, retries, test buttons, local testing, troubleshooting |
 
 ## Operating
 

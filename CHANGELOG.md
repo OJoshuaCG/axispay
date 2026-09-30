@@ -9,6 +9,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 5 panel screens** (ADR-0059):
+  - Settings → Webhooks: the endpoints of the current mode with their
+    events, status and a "failing since" badge; create and edit (every event
+    or a chosen list), the signing secret shown once, reveal and rotate after
+    re-authentication, disable, enable, delete, and "Send test event" with
+    its result (delivered or not, HTTP status, time, error, start of the
+    answer). Each endpoint's page has the delivery log with a status filter,
+    the details of each attempt and a manual resend.
+  - Settings → Pre-payment validation: URL, failure policy explained in
+    plain words, default for new links, the secret shown once and its
+    rotation, removal with a warning about links created with validation,
+    "Test validation" with status, time, decision, format, errors, warnings
+    and the start of the answer, the alert after repeated failures and the
+    recent calls.
+  - The validation calls of each link on its detail (plan 15.8.7), for users
+    who manage webhooks.
+- **Payments in the tenant panel** (ADR-0059, brought forward from Phase 8):
+  a read-only history of the current mode's payments (`payments:read`), one
+  row per payment attempt with date, link, amount, status, card and
+  validation result; filters by status, currency, validation result and
+  date; search by link or payment ID; a detail with the payment's timeline
+  (declines, authorization, validation calls, charge or release, events
+  sent). Each attempt on a link's detail opens it.
+- **Merchant guide to webhooks and pre-payment validation**
+  (`docs/guides/webhooks.md`).
+
+- **Outgoing webhooks, backend** (Phase 5, ADR-0057; the panel screens come
+  later):
+  - Webhook endpoints per tenant and mode (at most 5 per mode), with the
+    events they subscribe to or all of them, a signing secret shown once,
+    stored encrypted, revealed again only after re-authentication, and a
+    rotation that keeps the previous secret valid for 24 hours.
+  - Every business event is published in the same transaction as the change
+    and sent, signed as Standard Webhooks, to the subscribed endpoints; failed
+    attempts are retried on the plan's calendar (8 attempts in about 27
+    hours), a sweeper every minute recovers what was never published or
+    queued, and an endpoint failing for 5 days is disabled and its managers
+    are e-mailed.
+  - Manual resend of a delivery and a synchronous test event (`ping`) whose
+    result the panel can show.
+  - SSRF protection of merchant URLs at registration and before every
+    attempt: https only, allowed ports, no IP addresses, no private or
+    reserved destinations, the checked addresses pinned for the request, no
+    redirects; a blocked destination is never retried.
+
+- **Pre-payment validation, backend** (Phase 5, ADR-0058; the panel screens
+  come later):
+  - One validation URL per mode with its own signing secret (shown once,
+    stored encrypted, rotation keeping the previous one valid for 24 hours),
+    a default for new links, and a failure policy: do not charge (default)
+    or charge anyway.
+  - After the card is authorized, links that use it call the merchant with a
+    signed request (5 seconds in total, one retry only when the connection
+    could not be opened, SSRF protection shared with the webhooks); an
+    approval captures the payment, a rejection releases the authorization,
+    shows the merchant's message and can cancel the link, and a failure
+    follows the merchant's policy. Every call is logged for 30 days.
+  - `POST /v1/payment_links` now accepts `pre_payment_validation: true` when
+    the mode has a validation URL, and applies its default when omitted.
+  - An e-mail to the managers and a panel alert after 10 failures in a row
+    (at most one e-mail per hour), a "Test validation" action with the
+    status, latency, decision and format problems, and a `pre_validation`
+    block in the outgoing payment events.
+
 - **Legal texts on the payment page** (ADR-0056, brought forward from
   Phases 8 and 10):
   - A "Legal" page in the tenant panel (Settings) where the merchant
@@ -282,6 +346,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Spanish copy of the webhook and pre-payment validation errors and
+  e-mails now uses the panels' formal register (*usted*).
+- README: the phase table shows Phases 2 to 4 as done, 4B as partial and 5 in
+  progress.
 - **Database:** the tenants' `privacy_notice_url` column is replaced by the
   `tenant_legal_documents` table; existing addresses are moved over as link
   documents by the migration. Run the permission catalog seeder on deploy so
@@ -336,6 +404,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-tenant invitation limit, which moved to `InvitationThrottle`.
 
 ### Fixed
+
+- Phase 5 review fixes (ADR-0057, ADR-0058):
+  - Webhook and validation URLs are stored and called in one canonical form
+    (lowercase, international domains in ASCII), so the address pin always
+    matches the name called; a domain with a final dot is refused.
+  - The domain lookup counts towards the 10-second (webhooks) and 5-second
+    (validation) budgets; a lookup that uses it up is a timeout.
+  - A merchant's `cancel_link` is applied whoever releases the authorization,
+    including Stripe's later notification when the void got no answer, and
+    in the same step, so it never cancels a link a newer payer is using.
+  - A new endpoint no longer receives backlog events that happened before it
+    existed; the outbox sweeper reads unpublished events through an index.
+  - A delivery job that runs a moment early sends the attempt; one that runs
+    earlier goes back to the queue for the time left.
+  - Signing secrets and validation bodies are hidden from stack traces.
+  - Panel: Spanish copy says "clave secreta de firma" and drops jargon; test
+    results say what to do next and, for validation, the decision taken;
+    events are labeled by meaning with their code below; a new endpoint shows
+    "No deliveries yet"; the validation page groups rotate and remove under
+    "More"; the payment detail shows declines only when there were some.
 
 - Platform panel: **View as user** could not be found. A tenant row opened
   the edit page instead of the view page (Filament's default record URL

@@ -24,11 +24,11 @@ Phases from the [master plan, section 27](docs/plans/master.md#27-plan-de-implem
 |---|---|---|
 | 0 | Foundations: tooling, MariaDB, `Shared` module, logging, CI | Done |
 | 1 | Tenancy, identity, RBAC, 2FA, audit log, admin and app panels | Done |
-| 2 | Stripe connection (`platform_onboarding`), gateway port, Connect webhooks | Pending |
-| 3 | API keys, idempotency, payment-links API | Pending |
-| 4 | Checkout and card payments | Pending |
-| 4B | `oauth` and `api_key` connection methods | Pending |
-| 5 | Outgoing webhooks and pre-payment validation | Pending |
+| 2 | Stripe connection (`platform_onboarding`), gateway port, Connect webhooks | Done |
+| 3 | API keys, idempotency, payment-links API | Done |
+| 4 | Checkout and card payments | Done (acceptance pending the Stripe contract tests, ADR-0051) |
+| 4B | `oauth` and `api_key` connection methods | Partial: `api_key` built in Phase 2 (ADR-0047); `oauth` pending |
+| 5 | Outgoing webhooks and pre-payment validation | In progress |
 | 6 | Currency conversion (Banxico) | Pending |
 | 7 | Refunds and disputes | Pending |
 | 8 | Metrics, branding, payer fields | Pending |
