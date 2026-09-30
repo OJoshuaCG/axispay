@@ -75,6 +75,11 @@ enum WebhookEventType: string
     /** When the event is sent, in the reader's language (the panel's event picker). */
     public function description(): string
     {
-        return __('webhooks.event_types.'.$this->value);
+        // The value holds a dot (`payment.succeeded`), which a translation
+        // key would read as nesting: look it up in the group instead.
+        $descriptions = __('webhooks.event_types');
+        $description = is_array($descriptions) ? ($descriptions[$this->value] ?? null) : null;
+
+        return is_string($description) ? $description : $this->value;
     }
 }
