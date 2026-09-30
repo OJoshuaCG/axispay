@@ -318,9 +318,13 @@ it('hands a job that runs too early back to the queue with the remaining delay',
 
     Carbon::setTestNow($retry->scheduled_at->subSeconds(30));
     $released = null;
-    $result = WebhookTestHelpers::in($tenant, false, static fn () => app(DeliverWebhook::class)->handle($retry->id, static function (int $seconds) use (&$released): void {
-        $released = $seconds;
-    }));
+    // A plain closure, not `fn`: an arrow function captures $released by
+    // value, so the reference below would bind to its copy.
+    $result = WebhookTestHelpers::in($tenant, false, static function () use ($retry, &$released) {
+        return app(DeliverWebhook::class)->handle($retry->id, static function (int $seconds) use (&$released): void {
+            $released = $seconds;
+        });
+    });
 
     expect($released)->toBe(30)
         ->and($result?->status)->toBe(WebhookDeliveryStatus::Pending)

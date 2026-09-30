@@ -155,7 +155,8 @@ it('removes the URL after re-authentication, even for a read-only tenant', funct
 });
 
 it('tests the URL with a signed sample and returns what the panel shows', function (): void {
-    Http::fake(['*' => Http::response(['decision' => 'reject', 'reason_code' => 'Bad Code', 'payer_message' => str_repeat('a', 250)], 200, ['Content-Type' => 'text/plain'])]);
+    // A string body: an array body makes the fake force application/json.
+    Http::fake(['*' => Http::response(json_encode(['decision' => 'reject', 'reason_code' => 'Bad Code', 'payer_message' => str_repeat('a', 250)], JSON_THROW_ON_ERROR), 200, ['Content-Type' => 'text/plain'])]);
     $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
     $endpoint = Validation::endpoint($tenant);

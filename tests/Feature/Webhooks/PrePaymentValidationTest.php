@@ -320,7 +320,10 @@ it('refuses to be called inside a transaction or under a row lock (rule 7b)', fu
 });
 
 it('e-mails the managers after 10 failures in a row, at most once an hour, and resets on success', function (): void {
-    Http::fake(['*' => Http::response('down', 503)]);
+    // One fake that recovers on demand: a second Http::fake() only appends
+    // stubs, and the first '*' stub would keep answering 503.
+    $merchant = new ArrayObject(['up' => false]);
+    Http::fake(['*' => static fn () => $merchant['up'] === true ? Validation::answer(['decision' => 'approve']) : Http::response('down', 503)]);
     [$tenant, $link, , $endpoint] = Validation::scenario();
     $owner = tenantUser($tenant, [SystemRole::Owner]);
     $viewer = tenantUser($tenant, [SystemRole::Viewer]);
@@ -351,7 +354,7 @@ it('e-mails the managers after 10 failures in a row, at most once an hour, and r
     Notification::assertSentToTimes($owner, ValidationEndpointNotification::class, 2);
 
     // A valid answer resets the count and the alert; validation was never switched off.
-    Http::fake(['*' => Validation::answer(['decision' => 'approve'])]);
+    $merchant['up'] = true;
     Checkout::inTenant($link, static fn () => $validator->decide($link, $attempt));
 
     expect(Validation::freshEndpoint($endpoint)->consecutive_failures)->toBe(0)

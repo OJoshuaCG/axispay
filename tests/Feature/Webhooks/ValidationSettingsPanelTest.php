@@ -133,7 +133,8 @@ it('asks for the password again before configuring', function (): void {
 it('tests the validation and states the decision, with status, latency and warnings', function (): void {
     $tenant = activeTenant();
     Validation::endpoint($tenant);
-    Http::fake(['*' => Http::response(['decision' => 'approve'], 200, ['Content-Type' => 'text/plain'])]);
+    // A string body: an array body makes the fake force application/json.
+    Http::fake(['*' => Http::response('{"decision":"approve"}', 200, ['Content-Type' => 'text/plain'])]);
     actingAsTenantUser(tenantUser($tenant));
 
     $component = Livewire::test(PrePaymentValidationSettings::class)
