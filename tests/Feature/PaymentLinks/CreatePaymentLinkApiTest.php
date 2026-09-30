@@ -20,6 +20,7 @@ use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\ApiTestHelpers;
 use Tests\Support\GatewayTestHelpers;
+use Tests\Support\ValidationTestHelpers;
 
 use function Pest\Laravel\postJson;
 use function Pest\Laravel\withHeaders;
@@ -475,4 +476,43 @@ it('reports the first of two invalid fields (ADR-0048 §6)', function (): void {
 
     expectApiError(createLink($key, ['amount' => '1,00', 'currency' => 'USD', 'description' => str_repeat('x', 501)]), ApiErrorCode::AmountInvalid, 'amount');
     expectApiError(createLink($key, ApiTestHelpers::body(['description' => '', 'expires_in_hours' => 'soon'])), ApiErrorCode::ParameterMissing, 'description');
+});
+
+// Pre-payment validation (plan 15.8.1, ADR-0058) ---------------------------------
+
+it('accepts pre_payment_validation true when the mode has a validation URL', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    ValidationTestHelpers::endpoint($tenant);
+
+    createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true]))
+        ->assertCreated()
+        ->assertJsonPath('pre_payment_validation', true);
+});
+
+it('uses the URL\'s enabled_by_default when the request says nothing, and lets the request turn it off', function (bool $enabledByDefault): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    ValidationTestHelpers::endpoint($tenant, attributes: ['enabled_by_default' => $enabledByDefault]);
+
+    createLink($key, ApiTestHelpers::body())->assertCreated()->assertJsonPath('pre_payment_validation', $enabledByDefault);
+    createLink($key, ApiTestHelpers::body(['pre_payment_validation' => false]))->assertCreated()->assertJsonPath('pre_payment_validation', false);
+})->with([true, false]);
+
+it('refuses pre_payment_validation true in live mode when only the test mode has a URL', function (): void {
+    $tenant = ApiTestHelpers::readyTenant(livemode: true);
+    [, $key] = ApiTestHelpers::key($tenant, livemode: true);
+    ValidationTestHelpers::endpoint($tenant, livemode: false, attributes: ['enabled_by_default' => true]);
+
+    expectApiError(createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true])), ApiErrorCode::ValidationEndpointNotConfigured, 'pre_payment_validation');
+    // And the test-mode default never leaks into live links.
+    createLink($key, ApiTestHelpers::body())->assertCreated()->assertJsonPath('pre_payment_validation', false);
+});
+
+it('never uses another tenant\'s validation URL', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    ValidationTestHelpers::endpoint(activeTenant(), attributes: ['enabled_by_default' => true]);
+
+    expectApiError(createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true])), ApiErrorCode::ValidationEndpointNotConfigured, 'pre_payment_validation');
 });

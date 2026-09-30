@@ -12,7 +12,8 @@ use App\Modules\Payments\Models\PaymentAttempt;
  * Extension point of ADR-0050 step 4: asks the merchant whether an
  * AUTHORIZED payment may be captured (plan 15.8). Phase 4 binds
  * NoPrePaymentValidation (always "not configured"); Phase 5 binds the signed
- * synchronous callback with its timeout and fail_closed / fail_open policy.
+ * synchronous callback with its timeout and fail_closed / fail_open policy
+ * (Webhooks\Services\HttpPrePaymentValidator, ADR-0058).
  *
  * Contract for implementations (rules.md rule 7b):
  *  - called with NO row lock and NO open transaction (the caller asserts it);

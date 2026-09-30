@@ -10,7 +10,7 @@ use App\Modules\Payments\Contracts\PrePaymentValidator;
 use App\Modules\Payments\Listeners\CloseAttemptOfClosedLink;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Policies\PaymentAttemptPolicy;
-use App\Modules\Payments\Services\NoPrePaymentValidation;
+use App\Modules\Webhooks\Services\HttpPrePaymentValidator;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -19,8 +19,9 @@ final class PaymentsServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // ADR-0050 step 4: Phase 5 replaces this binding with the merchant callback.
-        $this->app->bind(PrePaymentValidator::class, NoPrePaymentValidation::class);
+        // ADR-0050 step 4 (plan 15.8): the merchant's signed callback. Links
+        // created without validation skip it (NoPrePaymentValidation).
+        $this->app->bind(PrePaymentValidator::class, HttpPrePaymentValidator::class);
     }
 
     public function boot(): void

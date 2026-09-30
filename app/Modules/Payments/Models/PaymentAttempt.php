@@ -6,6 +6,7 @@ namespace App\Modules\Payments\Models;
 
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderFailureKind;
+use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\ValidationOutcome;
@@ -22,6 +23,7 @@ use Database\Factories\PaymentAttemptFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -59,6 +61,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $confirmation_lease_token
  * @property ValidationOutcome|null $validation_outcome
  * @property string|null $validation_payer_message
+ * @property bool $validation_cancel_link the merchant's `cancel_link`, kept with its rejection (plan 15.8.4)
  * @property CarbonImmutable|null $authorized_at
  * @property CarbonImmutable|null $capture_before
  * @property CarbonImmutable|null $reconciled_at
@@ -106,6 +109,7 @@ final class PaymentAttempt extends Model
         'amount_refunded_minor' => 0,
         'late_payment' => false,
         'needs_review' => false,
+        'validation_cancel_link' => false,
     ];
 
     public static function resourceType(): ResourceType
@@ -135,6 +139,16 @@ final class PaymentAttempt extends Model
     }
 
     /**
+     * The link this payment belongs to (same tenant and mode).
+     *
+     * @return BelongsTo<PaymentLink, $this>
+     */
+    public function link(): BelongsTo
+    {
+        return $this->belongsTo(PaymentLink::class, 'payment_link_id');
+    }
+
+    /**
      * @return HasMany<PaymentAttemptFailure, $this>
      */
     public function failures(): HasMany
@@ -159,6 +173,7 @@ final class PaymentAttempt extends Model
             'failure_count' => 'integer',
             'confirmation_lease_until' => 'immutable_datetime',
             'validation_outcome' => ValidationOutcome::class,
+            'validation_cancel_link' => 'boolean',
             'authorized_at' => 'immutable_datetime',
             'capture_before' => 'immutable_datetime',
             'reconciled_at' => 'immutable_datetime',

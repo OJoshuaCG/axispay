@@ -15,6 +15,7 @@ use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\CaptureResult;
 use App\Modules\Payments\Enums\CaptureOutcome;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\ValidationOutcome;
 use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Exceptions\CallBudgetExhausted;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -41,8 +42,14 @@ use LogicException;
  *     still be authorized; if the link was closed meanwhile (expired,
  *     canceled, closed tenant) the authorization is voided instead of
  *     captured (if the gateway says it already succeeded, the payment wins);
- *  3. approved and within the capture window → capture (stable idempotency
- *     key); rejected, or past the window (CaptureWindow) → void.
+ *  3. approved (or failed under `fail_open`) and within the capture window
+ *     → capture (stable idempotency key); rejected, failed under
+ *     `fail_closed`, or past the window (CaptureWindow) → void. A rejection
+ *     with `cancel_link` is kept on the attempt with the decision; the link
+ *     is canceled by ApplyProviderPayment in the same transaction that
+ *     applies the released authorization, whoever releases it (this action,
+ *     or later the webhook or the reconciliation when the void's outcome
+ *     was unknown) (plan 15.8.4).
  *
  * Gateway errors never escape: the attempt stays authorized, the answer is
  * Pending, and the webhook or the reconciliation completes it later with the
@@ -113,6 +120,7 @@ final readonly class CaptureAuthorizedPayment
             PaymentAttempt::query()->whereKey($attempt->id)->whereNull('validation_outcome')->update([
                 'validation_outcome' => $outcome->value,
                 'validation_payer_message' => $payerMessage !== null ? mb_substr($payerMessage, 0, PaymentAttempt::PAYER_MESSAGE_MAX) : null,
+                'validation_cancel_link' => $outcome === ValidationOutcome::Rejected && $decision->cancelLink,
             ]);
 
             // Another actor may have stored its decision first: the stored one wins.
@@ -149,6 +157,7 @@ final readonly class CaptureAuthorizedPayment
             $reason = match (true) {
                 $linkClosed => VoidReason::LinkClosed,
                 $windowElapsed => VoidReason::CaptureWindowElapsed,
+                $outcome === ValidationOutcome::FailedClosed => VoidReason::ValidationFailed,
                 default => VoidReason::MerchantRejected,
             };
 
@@ -166,7 +175,9 @@ final readonly class CaptureAuthorizedPayment
                 return new CaptureResult(CaptureOutcome::Captured, $voided);
             }
 
-            return new CaptureResult($reason === VoidReason::MerchantRejected ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
+            $rejected = in_array($reason, [VoidReason::MerchantRejected, VoidReason::ValidationFailed], true);
+
+            return new CaptureResult($rejected ? CaptureOutcome::Rejected : CaptureOutcome::NotAuthorized, $voided, $payerMessage);
         }
 
         if (! $budget->affords()) {

@@ -10,8 +10,11 @@ namespace App\Modules\Payments\Enums;
  */
 enum VoidReason: string
 {
-    /** The merchant's pre-payment validation rejected it (or `fail_closed`, Phase 5). */
+    /** The merchant's pre-payment validation rejected it. */
     case MerchantRejected = 'merchant_rejected';
+
+    /** The pre-payment validation failed and the merchant's policy is `fail_closed` (plan 15.8.5). */
+    case ValidationFailed = 'validation_failed';
 
     /** The authorization was not captured within the capture window. */
     case CaptureWindowElapsed = 'capture_window_elapsed';

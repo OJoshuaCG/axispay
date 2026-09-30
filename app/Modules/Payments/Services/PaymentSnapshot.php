@@ -37,6 +37,9 @@ final class PaymentSnapshot
             'late_payment' => $attempt->late_payment,
             'failure_count' => $attempt->failure_count,
             'failure' => $failure !== null ? ['code' => $failure] : null,
+            // Plan 15.8.5: how the merchant's pre-payment validation ended
+            // (null when none applied), e.g. a `fail_open` capture.
+            'pre_validation' => $attempt->validation_outcome?->publicBlock(),
             'created_at' => $attempt->created_at !== null ? IsoDateTime::format($attempt->created_at) : null,
         ];
     }

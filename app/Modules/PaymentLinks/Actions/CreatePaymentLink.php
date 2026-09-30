@@ -27,6 +27,7 @@ use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
+use App\Modules\Webhooks\Services\ValidationEndpoints;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -45,7 +46,9 @@ use Illuminate\Support\Facades\Gate;
  *  - conversion only for USD links, only when the tenant enabled it and the
  *    platform offers it (`fx_not_available`; Phase 6 turns it on);
  *  - the tenant's amount cap, the expiration range, the return URL domain
- *    and pre-payment validation.
+ *    and pre-payment validation (plan 15.8.1: `true` needs a validation URL
+ *    in this mode, else `validation_endpoint_not_configured`; omitted, the
+ *    URL's `enabled_by_default` decides; frozen on the link).
  *
  * A link with the same idempotency key in this tenant and mode is returned
  * as is when the request body is the same, and `422 idempotency_key_reused`
@@ -61,6 +64,7 @@ final readonly class CreatePaymentLink
         private ChargeReadiness $readiness,
         private AuditLogger $audit,
         private TenantAccess $access,
+        private ValidationEndpoints $validationEndpoints,
     ) {}
 
     /**
@@ -98,10 +102,10 @@ final readonly class CreatePaymentLink
         $this->assertAmountWithinTenantCap($data->amount, $settings);
         $expiresAt = $this->expiresAt($data, $settings);
         $this->assertReturnUrlAllowed($data->returnUrl, $tenant, $livemode);
-        $this->assertPrePaymentValidation($data->prePaymentValidation);
+        $prePaymentValidation = $this->prePaymentValidation($data->prePaymentValidation);
 
         try {
-            return DB::transaction(function () use ($data, $creation, $settings, $livemode, $fxMode, $expiresAt): PaymentLink {
+            return DB::transaction(function () use ($data, $creation, $settings, $livemode, $fxMode, $expiresAt, $prePaymentValidation): PaymentLink {
                 // Re-checked under a shared lock on the connection row: a
                 // disconnection committed since the first check is seen here,
                 // and one that starts now waits for this insert (then cancels
@@ -124,7 +128,7 @@ final readonly class CreatePaymentLink
                     'fx_fixed_rate' => $fxMode === FxMode::Fixed ? $data->fxRate?->toString() : null,
                     'payer_fields_config' => $this->payerFields($data, $settings),
                     'return_url' => $data->returnUrl,
-                    'pre_payment_validation' => false,
+                    'pre_payment_validation' => $prePaymentValidation,
                     'locale' => ($data->locale ?? $settings->checkoutLocale)->value,
                     'expires_at' => $expiresAt,
                     'created_via' => $creation->via,
@@ -287,15 +291,26 @@ final readonly class CreatePaymentLink
     }
 
     /**
-     * Plan 15.8: pre-payment validation needs a validation URL for the mode.
-     * Validation endpoints arrive in Phase 5, so no tenant has one yet: asking
-     * for it is refused, and links are stored without it (ADR-0048).
+     * Plan 15.8.1: whether the link uses the pre-payment validation. `true`
+     * needs a validation URL in the current mode (else `400
+     * validation_endpoint_not_configured`); `false` turns it off; omitted,
+     * the URL's `enabled_by_default` decides (off without a URL). If the URL
+     * is removed later, the link keeps asking for validation and is not
+     * charged until one is configured again (ADR-0058).
      */
-    private function assertPrePaymentValidation(?bool $requested): void
+    private function prePaymentValidation(?bool $requested): bool
     {
-        if ($requested === true) {
+        if ($requested === false) {
+            return false;
+        }
+
+        $endpoint = $this->validationEndpoints->current();
+
+        if ($requested === true && $endpoint === null) {
             throw PaymentLinkRejectedException::of(ApiErrorCode::ValidationEndpointNotConfigured, param: 'pre_payment_validation');
         }
+
+        return $requested ?? ($endpoint->enabled_by_default ?? false);
     }
 
     /**

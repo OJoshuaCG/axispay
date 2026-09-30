@@ -9,13 +9,18 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
+use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
+use App\Modules\PaymentLinks\Data\CancelPaymentLinkData;
+use App\Modules\PaymentLinks\Enums\CancelReason;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Exceptions\LinkNotCancelableException;
 use App\Modules\PaymentLinks\Http\Presenters\PaymentLinkPresenter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Data\AppliedPayment;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\ReviewReason;
+use App\Modules\Payments\Enums\ValidationOutcome;
 use App\Modules\Payments\Events\PaymentDeclined;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
@@ -50,7 +55,12 @@ use LogicException;
  *     attempt back to waiting or closed → `active` (or `expired` past its
  *     expiry); succeeded → `paid`. A success on an expired or canceled link
  *     wins: `late_payment` is set on the attempt, the anomaly is audited and
- *     logged, and `payment.succeeded` / `payment_link.paid` carry the flag.
+ *     logged, and `payment.succeeded` / `payment_link.paid` carry the flag;
+ *  4. an authorization released (`requires_capture` → `canceled`) after a
+ *     merchant rejection with `cancel_link` cancels the link
+ *     (`rejected_by_merchant`, plan 15.8.4, ADR-0058), whoever released it:
+ *     the checkout, a webhook, the reconciliation. It happens under the
+ *     same locks as the release, so no newer payment can start in between.
  *
  * Idempotent: applying the same gateway state twice changes nothing
  * (duplicate and out-of-order events, plan 26.2 cases 3 and 4).
@@ -63,6 +73,7 @@ final readonly class ApplyProviderPayment
         private DomainEventRecorder $events,
         private AuditLogger $audit,
         private FlagAttemptForReview $review,
+        private CancelPaymentLink $cancelLink,
     ) {}
 
     /**
@@ -139,6 +150,13 @@ final readonly class ApplyProviderPayment
             }
 
             $this->followLink($link, $attempt, $newDecline);
+
+            if ($previous === PaymentAttemptStatus::RequiresCapture
+                && $attempt->status === PaymentAttemptStatus::Canceled
+                && $attempt->validation_outcome === ValidationOutcome::Rejected
+                && $attempt->validation_cancel_link) {
+                $link = $this->cancelRejectedLink($link, $attempt);
+            }
 
             return new AppliedPayment($attempt, $link, $newDecline);
         });
@@ -226,6 +244,33 @@ final readonly class ApplyProviderPayment
         // frees it (ReleaseLinkAfterAttempt) unless this is its decline.
         if ($link->status === PaymentLinkStatus::Processing && ($newDecline || $attempt->status->isTerminal() || ! $attempt->leaseHeld())) {
             $this->links->resumeAfterAttempt($link);
+        }
+    }
+
+    /**
+     * Plan 15.8.4: the merchant rejected this payment and asked to cancel the
+     * link. Called under the link's and the attempt's locks, right after the
+     * authorization was released. Only while this attempt is still the
+     * link's latest one; a link no longer open for payment (expired, paid)
+     * is left as it is.
+     */
+    private function cancelRejectedLink(PaymentLink $link, PaymentAttempt $attempt): PaymentLink
+    {
+        $newer = PaymentAttempt::query()
+            ->where('payment_link_id', $link->id)
+            ->where('id', '>', $attempt->id)
+            ->exists();
+
+        if ($newer) {
+            return $link;
+        }
+
+        try {
+            return $this->cancelLink->handle($link, CancelPaymentLinkData::because(CancelReason::RejectedByMerchant), Actor::system());
+        } catch (LinkNotCancelableException $e) {
+            Log::info('The merchant asked to cancel a link that can no longer be canceled.', ['payment_link_id' => $link->id, 'exception' => $e::class]);
+
+            return $link->refresh();
         }
     }
 

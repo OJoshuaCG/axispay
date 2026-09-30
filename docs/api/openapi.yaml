@@ -76,8 +76,9 @@ paths:
         Scope `links:create`. `Idempotency-Key` is required. The account must be `active` or
         `grace` (`403 tenant_suspended` when suspended or closed) and have a gateway connection
         in this mode that can charge (`409 gateway_not_ready`). Unknown parameters are refused.
-        Currency conversion (`fx`) and pre-payment validation are accepted in the request but
-        refused until their phases (`fx_not_available`, `validation_endpoint_not_configured`).
+        Currency conversion (`fx`) is accepted in the request but refused until its phase
+        (`fx_not_available`). `pre_payment_validation: true` needs a pre-payment validation URL
+        configured in the panel for this mode (`400 validation_endpoint_not_configured`).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
         - $ref: '#/components/parameters/RequestIdIn'
@@ -558,8 +559,12 @@ components:
         pre_payment_validation:
           type: boolean
           description: |
-            Pre-payment validation (plan 15.8). `true` needs a validation URL for the mode
-            (`validation_endpoint_not_configured`; validation URLs arrive in Phase 5).
+            Whether the account's server is asked to approve each payment of this link, after
+            the card is authorized and before it is charged (a signed synchronous call, see
+            the integration guide). `true` needs a pre-payment validation URL configured in the
+            panel for this mode, else `400 validation_endpoint_not_configured`. `false` turns it
+            off. Omitted: the URL's "use for new links" setting decides (off when no URL is
+            configured). Frozen when the link is created.
     CancelPaymentLinkRequest:
       type: object
       additionalProperties: false
@@ -661,8 +666,10 @@ components:
             Why the link was canceled. The free text given by whoever canceled
             it (API or panel), or one of the reasons the platform records when
             it cancels a link itself: `gateway_disconnected` (the tenant's
-            payment gateway was disconnected in this mode) or `tenant_closed`
-            (the tenant's account was closed).
+            payment gateway was disconnected in this mode), `tenant_closed`
+            (the tenant's account was closed) or `rejected_by_merchant` (the
+            account's pre-payment validation rejected a payment and asked to
+            cancel the link).
         expired_at:
           type: [string, 'null']
           format: date-time
