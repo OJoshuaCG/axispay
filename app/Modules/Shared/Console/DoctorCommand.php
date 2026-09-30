@@ -6,6 +6,7 @@ namespace App\Modules\Shared\Console;
 
 use App\Modules\Gateways\Enums\ConnectionMethod;
 use App\Modules\Gateways\Services\GatewayWebhookUrls;
+use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
 use App\Modules\ProviderEvents\Services\ProviderEventActivity;
 use App\Modules\Shared\Http\Middleware\UseSurfaceSessionCookie;
 use Illuminate\Console\Command;
@@ -157,6 +158,34 @@ final class DoctorCommand extends Command
         if ($cookies[0] !== null && $cookies[0] === $cookies[1]) {
             $this->row('Session cookies', self::ERROR, 'the admin and app panels share one cookie name');
         }
+
+        $this->checkPayBaseUrl();
+    }
+
+    /**
+     * Payment links and every checkout request use PaymentLinkUrl::base():
+     * `https://` + the pay host, or AXISPAY_PAY_BASE_URL when set. A server
+     * without TLS (APP_URL http://) that leaves it empty hands out https://
+     * links whose payment requests fail; the opposite serves them over
+     * plain HTTP.
+     */
+    private function checkPayBaseUrl(): void
+    {
+        $base = PaymentLinkUrl::base();
+        $configured = self::string(config('axispay.links.public_base_url'));
+        $payScheme = parse_url($base, PHP_URL_SCHEME);
+        $appScheme = parse_url(self::string(config('app.url')), PHP_URL_SCHEME);
+        $source = $configured === '' ? 'AXISPAY_PAY_BASE_URL empty: https:// + pay host' : 'from AXISPAY_PAY_BASE_URL';
+
+        [$status, $detail] = match (true) {
+            $payScheme !== 'http' && $payScheme !== 'https' => [self::ERROR, 'AXISPAY_PAY_BASE_URL has no http:// or https:// scheme'],
+            ! is_string($appScheme) || $appScheme === $payScheme => [self::OK, "matches the APP_URL scheme ({$source})"],
+            $appScheme === 'http' => [self::WARN, "APP_URL is http:// but payment links use https:// ({$source}): without TLS the checkout's payment requests fail; set AXISPAY_PAY_BASE_URL=http://<pay host>"],
+            default => [self::WARN, "APP_URL is https:// but payment links use http:// ({$source}): leave AXISPAY_PAY_BASE_URL empty where TLS is served"],
+        };
+
+        $this->row('Pay links base URL', self::INFO, $base);
+        $this->row('Pay links scheme', $status, $detail);
     }
 
     private function checkSessionStorage(): void
