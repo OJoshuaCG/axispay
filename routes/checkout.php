@@ -2,14 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Http\Middleware\SetLocale;
 use App\Modules\Checkout\Http\CheckoutRateLimits;
 use App\Modules\Checkout\Http\CheckoutResponses;
 use App\Modules\Checkout\Http\Controllers\CheckoutAttemptController;
+use App\Modules\Checkout\Http\Controllers\CheckoutLegalController;
+use App\Modules\Checkout\Http\Controllers\CheckoutMerchantLogoController;
 use App\Modules\Checkout\Http\Controllers\CheckoutPageController;
 use App\Modules\Checkout\Http\Controllers\CheckoutStatusController;
 use App\Modules\Checkout\Http\Controllers\SandboxNextActionController;
 use App\Modules\Checkout\Http\Middleware\ApplyCheckoutLocale;
 use App\Modules\Gateways\Sandbox\SandboxMode;
+use App\Modules\Legal\Enums\LegalDocumentKind;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
@@ -46,11 +52,36 @@ Route::prefix('/l/{token}')
         Route::post('/attempts', [CheckoutAttemptController::class, 'store'])->middleware('throttle:'.CheckoutRateLimits::ATTEMPTS)->name('attempts.store');
         Route::post('/attempts/continue', [CheckoutAttemptController::class, 'continue'])->middleware('throttle:'.CheckoutRateLimits::CONTINUE)->name('attempts.continue');
 
+        // ADR-0056: the merchant's privacy notice or terms (the checkout's dialog without JavaScript).
+        Route::get('/legal/{kind}', [CheckoutLegalController::class, 'tenant'])
+            ->where(['kind' => LegalDocumentKind::pattern()])
+            ->middleware('throttle:'.CheckoutRateLimits::LEGAL)
+            ->name('legal');
+
+        // ADR-0056 part B: the merchant's logo. Versioned and cached for a
+        // year: no session, no cookie, no locale (the answer never varies).
+        Route::get('/logo/{variant}/{version}.png', CheckoutMerchantLogoController::class)
+            ->where(['variant' => 'light|dark', 'version' => '[0-9a-z]{26}'])
+            ->middleware('throttle:'.CheckoutRateLimits::LOGO)
+            ->withoutMiddleware([
+                EncryptCookies::class,
+                AddQueuedCookiesToResponse::class,
+                StartSession::class,
+                ShareErrorsFromSession::class,
+                PreventRequestForgery::class,
+                SetLocale::class,
+            ])
+            ->name('merchant-logo');
+
         // ADR-0051: the sandbox bank of the Stripe.js stub (local/testing only).
         if (SandboxMode::enabled()) {
             Route::post('/sandbox/next-action', SandboxNextActionController::class)->middleware('throttle:'.CheckoutRateLimits::CONTINUE)->name('sandbox.next-action');
         }
     });
+
+// ADR-0056: the platform's privacy notice and terms, linked from "Powered by".
+// Outside /l/{token}, so it must be registered before the fallback.
+Route::get('/legal', [CheckoutLegalController::class, 'platform'])->middleware('throttle:'.CheckoutRateLimits::LEGAL)->name('checkout.platform-legal');
 
 // Anything else on the pay host (malformed or too long tokens included):
 // the same 404 page as an unknown token (plan 11.2).

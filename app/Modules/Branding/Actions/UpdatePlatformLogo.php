@@ -27,7 +27,7 @@ use SensitiveParameter;
  *  - `platform:branding:manage` and a fresh re-authentication;
  *  - the upload is checked and re-encoded by ImageNormalizer (real type by
  *    its first bytes, size and dimension limits, no metadata kept), scaled
- *    down to fit 1024 × 512 (the platform box; tenant logos keep 400 × 120);
+ *    down to fit 1024 × 512 (the platform box; merchant logos: 800 × 240, ADR-0056);
  *  - every change gets a new random version, so the served URL changes and
  *    the long browser cache never shows an old logo;
  *  - audited in the platform log; the cached brand is dropped after commit.

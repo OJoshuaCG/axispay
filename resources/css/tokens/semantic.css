@@ -123,6 +123,10 @@
        tile with a near-black glyph (7.2:1). Same in both themes. Decorative. */
     --color-brand-mark: var(--color-green-500);
     --color-brand-mark-fg: var(--color-neutral-900);
+    /* Plate behind the merchant's logo on the payment page when there is no
+       dark variant (ADR-0056): none in light; in dark a light plate, so a
+       logo drawn for white backgrounds stays readable. Decorative. */
+    --color-logo-plate: light-dark(transparent, var(--color-neutral-50));
 
     /* ---------- Focus ---------- */
     /* Solid 2px outline (see base.css). Meets 3:1 against page and surface. */

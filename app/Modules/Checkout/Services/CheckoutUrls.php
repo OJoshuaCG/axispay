@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Checkout\Services;
 
+use App\Modules\Branding\Enums\LogoVariant;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
 
@@ -37,6 +38,12 @@ final class CheckoutUrls
     public function status(PaymentLink $link): string
     {
         return PaymentLinkUrl::for($link).'/status';
+    }
+
+    /** The merchant's logo (ADR-0056 part B): versioned, so it can be cached for a year. */
+    public function merchantLogo(PaymentLink $link, LogoVariant $variant, string $version): string
+    {
+        return PaymentLinkUrl::for($link).'/logo/'.$variant->value.'/'.$version.'.png';
     }
 
     public function sandboxNextAction(PaymentLink $link): string

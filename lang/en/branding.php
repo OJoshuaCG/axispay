@@ -97,4 +97,40 @@ return [
         'reauthentication_required' => 'Confirm your identity to continue.',
     ],
 
+    // ADR-0056 part B: the merchant's logo, "Brand" page of the tenant panel.
+    'tenant' => [
+        'navigation_group' => 'Settings',
+        'title' => 'Brand',
+        'subheading' => 'Your company logo on the payment pages.',
+        'heading' => 'Company logo',
+        'description' => 'Shown at the top of your payment pages, centered and large, with your company name as its text alternative. Only payers see it: this panel always shows the platform logo. Without a logo, payers see your company name.',
+        'preview_light' => 'Light theme',
+        'preview_dark' => 'Dark theme',
+        'preview_alt' => 'Your logo on a :theme background',
+        'preview_empty' => 'No logo: payers see your company name.',
+        'dark_fallback' => 'There is no dark theme logo: in dark theme your logo is shown on a light plate, as here.',
+        'variant' => [
+            'light' => 'Logo',
+            'dark' => 'Dark theme logo',
+        ],
+        'actions' => [
+            'upload_light' => 'Upload logo',
+            'replace_light' => 'Replace logo',
+            'upload_dark' => 'Upload dark theme logo',
+            'replace_dark' => 'Replace dark theme logo',
+            'upload_help' => 'The image is checked and converted to PNG, reduced to fit :box_width × :box_height pixels (never enlarged); hidden data such as location or camera details is removed. PNG, JPEG or WebP, up to :max_mb MB and :max_px × :max_px pixels. SVG is not accepted.',
+            'upload_dark_help' => 'Optional: a version of your logo for dark backgrounds (for example, with white text). Without it, your logo is shown on a light plate in dark theme. The image is checked and converted to PNG, reduced to fit :box_width × :box_height pixels (never enlarged), without hidden data. PNG, JPEG or WebP, up to :max_mb MB and :max_px × :max_px pixels. SVG is not accepted.',
+            'remove_light' => 'Remove logo',
+            'remove_dark' => 'Remove dark theme logo',
+            'remove_light_heading' => 'Remove your logo',
+            'remove_light_help' => 'The dark theme logo is removed too. Payers will see your company name instead.',
+            'remove_dark_heading' => 'Remove the dark theme logo',
+            'remove_dark_help' => 'In dark theme, your logo will be shown on a light plate.',
+        ],
+        'notifications' => [
+            'updated' => ':variant updated. Payers see it on your payment pages now.',
+            'removed' => ':variant removed.',
+        ],
+    ],
+
 ];

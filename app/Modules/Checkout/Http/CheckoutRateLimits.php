@@ -21,7 +21,11 @@ use Illuminate\Support\Facades\View;
  *    3D Secure return URL): 60 per minute each;
  *  - status (the completion page polls every 3 s for 2 minutes, 40 polls;
  *    two tabs fit): 90 per minute;
- *  - attempts (Pay) and continue (after 3D Secure): 30 per minute each.
+ *  - attempts (Pay) and continue (after 3D Secure): 30 per minute each;
+ *  - legal (the merchant's documents under a link and the platform's
+ *    `/legal` page, ADR-0056): 60 per minute;
+ *  - logo (the merchant's logo, ADR-0056 part B; up to two images per page
+ *    view, cached for a year afterwards): 120 per minute.
  *
  * An exceeded limit answers 429 with `Retry-After`: JSON the page script
  * shows as a message, or a short page.
@@ -38,9 +42,13 @@ final class CheckoutRateLimits
 
     public const string CONTINUE = 'checkout-continue';
 
+    public const string LEGAL = 'checkout-legal';
+
+    public const string LOGO = 'checkout-logo';
+
     public static function register(): void
     {
-        foreach ([self::PAGE => 60, self::COMPLETE => 60, self::STATUS => 90, self::ATTEMPTS => 30, self::CONTINUE => 30] as $name => $perMinute) {
+        foreach ([self::PAGE => 60, self::COMPLETE => 60, self::STATUS => 90, self::ATTEMPTS => 30, self::CONTINUE => 30, self::LEGAL => 60, self::LOGO => 120] as $name => $perMinute) {
             RateLimiter::for($name, static fn (Request $request): Limit => Limit::perMinute($perMinute)
                 ->by($name.'|'.$request->ip().'|'.self::token($request))
                 ->response(static fn (Request $request, array $headers) => self::tooMany($request, $headers)));

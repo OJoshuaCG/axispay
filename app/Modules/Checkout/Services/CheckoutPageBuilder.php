@@ -10,6 +10,7 @@ use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
 use App\Modules\Gateways\Sandbox\SandboxMode;
 use App\Modules\Gateways\Services\GatewayFactory;
+use App\Modules\Legal\Services\TenantLegalDocuments;
 use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Models\PaymentLink;
@@ -37,6 +38,8 @@ final readonly class CheckoutPageBuilder
         private EffectivePayerFields $effectiveFields,
         private ReadCheckoutStatus $status,
         private CheckoutConnection $connection,
+        private TenantLegalDocuments $legal,
+        private CheckoutMerchantLogo $merchantLogo,
     ) {}
 
     public function build(PaymentLink $link, ?CheckoutPhase $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
@@ -55,8 +58,9 @@ final readonly class CheckoutPageBuilder
             state: $state,
             token: $link->public_token,
             merchant: $this->access->displayName($tenantId),
+            merchantLogo: $this->merchantLogo->for($link),
             supportEmail: $this->access->supportEmail($tenantId),
-            privacyUrl: $this->access->privacyNoticeUrl($tenantId),
+            legal: $this->legal->all($tenantId),
             description: $link->description,
             money: $link->money(),
             expiresSoonAt: $expiresSoon,

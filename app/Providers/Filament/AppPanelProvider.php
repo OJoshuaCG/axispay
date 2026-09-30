@@ -7,9 +7,11 @@ namespace App\Providers\Filament;
 use App\Modules\Access\Filament\Resources\Roles\RoleResource;
 use App\Modules\ApiKeys\Filament\Resources\ApiKeys\ApiKeyResource;
 use App\Modules\Audit\Filament\Resources\AuditLogs\AuditLogResource;
+use App\Modules\Branding\Filament\Pages\TenantBrandingSettings;
 use App\Modules\Gateways\Filament\Pages\StripeConnection;
 use App\Modules\Identity\Filament\Resources\Users\UserResource;
 use App\Modules\Identity\Http\Middleware\RequireTwoFactorForSensitiveUsers;
+use App\Modules\Legal\Filament\Pages\TenantLegalSettings;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\PaymentLinkResource;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
 use App\Modules\Tenancy\Http\Middleware\ApplyTenantTimezone;
@@ -48,7 +50,7 @@ final class AppPanelProvider extends PanelProvider
                 AuditLogResource::class,
                 ApiKeyResource::class,
             ])
-            ->pages([Dashboard::class, StripeConnection::class])
+            ->pages([Dashboard::class, StripeConnection::class, TenantBrandingSettings::class, TenantLegalSettings::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([
                 Authenticate::class,

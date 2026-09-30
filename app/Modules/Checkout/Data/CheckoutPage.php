@@ -6,6 +6,8 @@ namespace App\Modules\Checkout\Data;
 
 use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
+use App\Modules\Legal\Data\LegalDocument;
+use App\Modules\Legal\Enums\LegalDocumentKind;
 use App\Modules\Shared\Money\Money;
 use Carbon\CarbonImmutable;
 
@@ -17,6 +19,8 @@ use Carbon\CarbonImmutable;
 final readonly class CheckoutPage
 {
     /**
+     * @param  MerchantLogo|null  $merchantLogo  the merchant's logo; null shows the name (ADR-0056)
+     * @param  array<string, LegalDocument>  $legal  the merchant's published legal documents, by kind (ADR-0056)
      * @param  list<array{field: string, required: bool}>  $payerFields
      * @param  array<string, mixed>|null  $client  the page script's configuration (active only)
      */
@@ -24,8 +28,9 @@ final readonly class CheckoutPage
         public CheckoutState $state,
         public string $token,
         public string $merchant,
+        public ?MerchantLogo $merchantLogo,
         public ?string $supportEmail,
-        public ?string $privacyUrl,
+        public array $legal,
         public string $description,
         public Money $money,
         public ?CarbonImmutable $expiresSoonAt,
@@ -48,5 +53,11 @@ final readonly class CheckoutPage
     public function collectsPayerData(): bool
     {
         return $this->payerFields !== [];
+    }
+
+    /** The merchant's privacy notice; payer fields are only collected with one (ADR-0051). */
+    public function privacyNotice(): ?LegalDocument
+    {
+        return $this->legal[LegalDocumentKind::Privacy->value] ?? null;
     }
 }

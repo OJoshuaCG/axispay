@@ -97,4 +97,40 @@ return [
         'reauthentication_required' => 'Confirme su identidad para continuar.',
     ],
 
+    // ADR-0056 parte B: el logo del comercio, página "Marca" del panel del tenant.
+    'tenant' => [
+        'navigation_group' => 'Configuración',
+        'title' => 'Marca',
+        'subheading' => 'El logo de tu empresa en las páginas de pago.',
+        'heading' => 'Logo de la empresa',
+        'description' => 'Se muestra arriba en tus páginas de pago, centrado y grande, con el nombre de tu empresa como texto alternativo. Solo lo ven los pagadores: este panel siempre muestra el logo de la plataforma. Sin logo, los pagadores ven el nombre de tu empresa.',
+        'preview_light' => 'Tema claro',
+        'preview_dark' => 'Tema oscuro',
+        'preview_alt' => 'Tu logo sobre un fondo de :theme',
+        'preview_empty' => 'Sin logo: los pagadores ven el nombre de tu empresa.',
+        'dark_fallback' => 'No hay logo para el tema oscuro: en el tema oscuro tu logo se muestra sobre una placa clara, como aquí.',
+        'variant' => [
+            'light' => 'Logo',
+            'dark' => 'Logo para el tema oscuro',
+        ],
+        'actions' => [
+            'upload_light' => 'Subir logo',
+            'replace_light' => 'Reemplazar logo',
+            'upload_dark' => 'Subir logo para el tema oscuro',
+            'replace_dark' => 'Reemplazar logo para el tema oscuro',
+            'upload_help' => 'La imagen se revisa y se convierte a PNG, reducida para caber en :box_width × :box_height píxeles (nunca se amplía); se eliminan los datos ocultos, como la ubicación o los datos de la cámara. PNG, JPEG o WebP, hasta :max_mb MB y :max_px × :max_px píxeles. No se acepta SVG.',
+            'upload_dark_help' => 'Opcional: una versión de tu logo para fondos oscuros (por ejemplo, con texto blanco). Sin ella, en el tema oscuro tu logo se muestra sobre una placa clara. La imagen se revisa y se convierte a PNG, reducida para caber en :box_width × :box_height píxeles (nunca se amplía), sin datos ocultos. PNG, JPEG o WebP, hasta :max_mb MB y :max_px × :max_px píxeles. No se acepta SVG.',
+            'remove_light' => 'Eliminar logo',
+            'remove_dark' => 'Eliminar logo para el tema oscuro',
+            'remove_light_heading' => 'Eliminar tu logo',
+            'remove_light_help' => 'También se elimina el logo para el tema oscuro. Los pagadores verán el nombre de tu empresa.',
+            'remove_dark_heading' => 'Eliminar el logo para el tema oscuro',
+            'remove_dark_help' => 'En el tema oscuro, tu logo se mostrará sobre una placa clara.',
+        ],
+        'notifications' => [
+            'updated' => ':variant actualizado. Los pagadores ya lo ven en tus páginas de pago.',
+            'removed' => ':variant eliminado.',
+        ],
+    ],
+
 ];

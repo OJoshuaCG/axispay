@@ -11,7 +11,7 @@ use GdImage;
 
 /**
  * The upload rules of plan section 18 for every brand image (the platform
- * logo and favicon now, tenant logos in Phase 8; ADR-0038, ADR-0053):
+ * logo and favicon, and the merchant's logo; ADR-0038, ADR-0053, ADR-0056):
  *
  *  - PNG, JPEG or WebP only, recognized by their magic bytes (never by the
  *    file name or the declared type); SVG, ICO and anything else are refused;
@@ -28,10 +28,14 @@ final class ImageNormalizer
 
     public const int MAX_SOURCE_PIXELS = 2000;
 
-    /** Plan 18: logos are normalized to at most 400 × 120 (tenant logos, Phase 8). */
-    public const int LOGO_MAX_WIDTH = 400;
+    /**
+     * The merchant's logo (ADR-0056, amending plan 18's 400 × 120): shown
+     * large at the top of the payment pages, so it is kept at up to
+     * 800 × 240 and stays sharp there, retina included.
+     */
+    public const int LOGO_MAX_WIDTH = 800;
 
-    public const int LOGO_MAX_HEIGHT = 120;
+    public const int LOGO_MAX_HEIGHT = 240;
 
     /**
      * The platform logo is kept larger (ADR-0053 amendment of 2026-09-29), so
@@ -47,7 +51,7 @@ final class ImageNormalizer
 
     /**
      * A logo: scaled down to fit the box (never up). The default box is the
-     * tenant one of plan 18; the platform logo passes PLATFORM_LOGO_MAX_*.
+     * merchant's (ADR-0056); the platform logo passes PLATFORM_LOGO_MAX_*.
      *
      * @throws InvalidImageException
      */
