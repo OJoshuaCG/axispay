@@ -92,6 +92,34 @@ it('shows the not-configured state and both failure policies explained', functio
     $component->assertMountedActionModalSee(ValidationFailurePolicy::FailOpen->explanation());
 })->with(['en', 'es']);
 
+/*
+ * Regression: the page has a table (HasTable), so Filament's page layout does
+ * not render the action modals and leaves them to the table view, but the
+ * table is hidden until validation is configured or has calls. The modal of
+ * "Configure" then had no container in the browser and nothing opened. The
+ * page's own view renders exactly one container, whether the table shows or not.
+ */
+it('renders one action modal container, so "Configure" opens before anything exists', function (bool $configured): void {
+    $tenant = activeTenant();
+
+    if ($configured) {
+        Validation::endpoint($tenant);
+    }
+
+    actingAsTenantUser(tenantUser($tenant, [SystemRole::IntegrationManager]));
+    GatewayTestHelpers::reauthenticated();
+
+    $component = Livewire::test(PrePaymentValidationSettings::class);
+    expect(substr_count($component->html(), 'wire:partial="action-modals"'))->toBe(1);
+
+    $component->mountAction('configure')
+        ->assertActionMounted('configure')
+        ->assertFormFieldExists('url')
+        ->assertFormFieldExists('failure_policy')
+        ->assertFormFieldExists('enabled_by_default');
+    $component->assertMountedActionModalSee($configured ? __('webhooks.validation.actions.edit') : __('webhooks.validation.actions.configure'));
+})->with(['not configured, no calls' => false, 'configured' => true]);
+
 it('configures the URL and shows its secret once, never in the page state', function (): void {
     $tenant = activeTenant();
     actingAsTenantUser(tenantUser($tenant));

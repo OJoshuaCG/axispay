@@ -58,6 +58,9 @@ use SensitiveParameter;
  * alert after repeated failures and the recent calls. `webhooks:manage`;
  * every change goes through a Webhooks action, which re-checks the
  * permission, the re-authentication window and the SSRF protection.
+ *
+ * Its own view renders the action modals: see the comment in
+ * `filament.webhooks.pages.pre-payment-validation-settings`.
  */
 final class PrePaymentValidationSettings extends Page implements HasTable, PresentsTestResults
 {
@@ -70,6 +73,8 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
     protected static ?int $navigationSort = 82;
 
     protected static ?string $slug = 'settings/pre-payment-validation';
+
+    protected string $view = 'filament.webhooks.pages.pre-payment-validation-settings';
 
     /** Per-request memo; false = looked up, none configured. */
     private ValidationEndpoint|false|null $endpoint = null;
