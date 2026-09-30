@@ -128,6 +128,14 @@ final class ImageNormalizer
         }
 
         $type = self::sniff($bytes) ?? throw new InvalidImageException(ImageRejection::UnsupportedType);
+
+        // getimagesize() reads a PNG's size at fixed offsets without checking
+        // that the IHDR chunk is there, so a broken file would pass with any
+        // made-up size (and be refused for the wrong reason, or not at all).
+        if ($type === IMAGETYPE_PNG && substr($bytes, 8, 8) !== "\x00\x00\x00\x0DIHDR") {
+            throw new InvalidImageException(ImageRejection::Unreadable);
+        }
+
         $info = @getimagesizefromstring($bytes);
 
         if ($info === false || $info[2] !== $type) {
