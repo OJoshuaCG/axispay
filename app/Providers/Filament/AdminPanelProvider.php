@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Modules\Branding\Filament\Pages\BrandingSettings;
+use App\Modules\Legal\Filament\Pages\PlatformLegalSettings;
 use App\Modules\PlatformAdmin\Filament\Resources\AuditLogs\AuditLogResource;
 use App\Modules\PlatformAdmin\Filament\Resources\PlatformAdmins\PlatformAdminResource;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\TenantResource;
@@ -34,7 +35,7 @@ final class AdminPanelProvider extends PanelProvider
                 PlatformAdminResource::class,
                 AuditLogResource::class,
             ])
-            ->pages([Dashboard::class, BrandingSettings::class])
+            ->pages([Dashboard::class, BrandingSettings::class, PlatformLegalSettings::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([Authenticate::class], isPersistent: true);
     }

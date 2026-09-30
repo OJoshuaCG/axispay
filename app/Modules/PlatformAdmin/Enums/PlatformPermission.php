@@ -15,4 +15,7 @@ enum PlatformPermission: string
 {
     /** The platform logo and how the brand is shown (ADR-0053). */
     case BrandingManage = 'platform:branding:manage';
+
+    /** The platform's privacy notice and terms, on the pay host's /legal page (ADR-0056). */
+    case LegalManage = 'platform:legal:manage';
 }

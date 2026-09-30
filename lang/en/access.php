@@ -19,6 +19,7 @@ return [
         'webhooks_manage' => 'Manage webhooks',
         'gateway_manage' => 'Manage the payment gateway',
         'settings_manage' => 'Manage settings',
+        'legal_manage' => 'Manage the privacy notice and terms',
         'users_manage' => 'Manage users',
         'audit_read' => 'View the audit log',
     ],

@@ -9,6 +9,7 @@ use App\Modules\Branding\Providers\BrandingServiceProvider;
 use App\Modules\Checkout\Providers\CheckoutServiceProvider;
 use App\Modules\Gateways\Providers\GatewaysServiceProvider;
 use App\Modules\Identity\Providers\IdentityServiceProvider;
+use App\Modules\Legal\Providers\LegalServiceProvider;
 use App\Modules\PaymentLinks\Providers\PaymentLinksServiceProvider;
 use App\Modules\Payments\Providers\PaymentsServiceProvider;
 use App\Modules\PlatformAdmin\Providers\PlatformAdminServiceProvider;
@@ -28,6 +29,7 @@ return [
     AccessServiceProvider::class,
     PlatformAdminServiceProvider::class,
     BrandingServiceProvider::class,
+    LegalServiceProvider::class,
     GatewaysServiceProvider::class,
     ProviderEventsServiceProvider::class,
     ApiKeysServiceProvider::class,

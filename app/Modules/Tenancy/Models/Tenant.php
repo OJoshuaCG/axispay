@@ -30,7 +30,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string $timezone
  * @property string $default_locale
  * @property string|null $support_email
- * @property string|null $privacy_notice_url
  * @property list<string>|null $allowed_return_domains
  * @property array<mixed>|null $settings
  * @property CarbonImmutable|null $closed_at
@@ -51,7 +50,6 @@ final class Tenant extends Model
         'timezone',
         'default_locale',
         'support_email',
-        'privacy_notice_url',
         'allowed_return_domains',
         'settings',
     ];

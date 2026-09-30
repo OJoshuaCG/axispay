@@ -39,6 +39,10 @@ return [
         'payment_attempt_failures',
         'payer_details',
         'domain_events',
+        // ADR-0056: the merchant's privacy notice and terms.
+        'tenant_legal_documents',
+        // ADR-0056 part B: the merchant's logo (light and dark variants).
+        'tenant_logos',
     ],
 
     /*

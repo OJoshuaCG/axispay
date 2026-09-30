@@ -21,6 +21,8 @@ enum TenantPermission: string
     case WebhooksManage = 'webhooks:manage';
     case GatewayManage = 'gateway:manage';
     case SettingsManage = 'settings:manage';
+    /** The merchant's privacy notice and terms (ADR-0056). */
+    case LegalManage = 'legal:manage';
     case UsersManage = 'users:manage';
     case AuditRead = 'audit:read';
 

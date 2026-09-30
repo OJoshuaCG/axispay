@@ -19,6 +19,7 @@ return [
         'webhooks_manage' => 'Gestionar webhooks',
         'gateway_manage' => 'Gestionar la pasarela de pago',
         'settings_manage' => 'Gestionar la configuración',
+        'legal_manage' => 'Gestionar el aviso de privacidad y los términos',
         'users_manage' => 'Gestionar usuarios',
         'audit_read' => 'Ver el registro de auditoría',
     ],

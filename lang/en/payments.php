@@ -100,7 +100,8 @@ return [
 
     'privacy_notice_missing' => [
         'heading' => 'The payment page will not ask for the payer fields',
-        'help' => 'Your account has no privacy notice URL, so the payment page collects no payer data for this link. Ask the platform administrator to add your privacy notice URL to collect it.',
+        'help' => 'Your account has no privacy notice, so the payment page collects no payer data for this link. Add your privacy notice on the Legal page (Settings) to collect it.',
+        'action' => 'Go to the Legal page',
     ],
 
 ];

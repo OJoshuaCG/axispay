@@ -96,6 +96,12 @@ return [
         'platform_brand_display_mode_changed' => 'Platform brand display changed',
         'platform_favicon_updated' => 'Platform favicon updated',
         'platform_favicon_removed' => 'Platform favicon removed',
+        'legal_document_updated' => 'Legal document updated',
+        'legal_document_removed' => 'Legal document removed',
+        'platform_legal_document_updated' => 'Platform legal document updated',
+        'platform_legal_document_removed' => 'Platform legal document removed',
+        'tenant_logo_updated' => 'Company logo updated',
+        'tenant_logo_removed' => 'Company logo removed',
     ],
 
 ];

@@ -10,6 +10,9 @@ use App\Modules\Gateways\Enums\ConnectionMethod;
 use App\Modules\Gateways\Enums\ConnectionStatus;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Sandbox\SandboxMode;
+use App\Modules\Legal\Enums\LegalDocumentFormat;
+use App\Modules\Legal\Enums\LegalDocumentKind;
+use App\Modules\Legal\Models\TenantLegalDocument;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
 use App\Modules\PaymentLinks\Actions\CreatePaymentLink;
 use App\Modules\PaymentLinks\Actions\ExpirePaymentLink;
@@ -32,6 +35,17 @@ use Illuminate\Support\Str;
  */
 final class CheckoutDemoCommand extends Command
 {
+    private const string DEMO_TERMS = <<<'MD'
+        # Términos y condiciones de Tienda Demo
+
+        Estos términos son un **ejemplo** del modo sandbox.
+
+        ## Pagos
+
+        - El cargo se hace en la moneda del enlace.
+        - Consulta dudas en [soporte](mailto:soporte@demo.test).
+        MD;
+
     protected $signature = 'axispay:checkout:demo {--json : Print the URLs as JSON}';
 
     protected $description = 'Create sandbox payment links to try the checkout without Stripe keys (local/testing only).';
@@ -48,12 +62,20 @@ final class CheckoutDemoCommand extends Command
         $tenant->fill([
             'display_name' => 'Tienda Demo',
             'support_email' => 'soporte@demo.test',
-            'privacy_notice_url' => 'https://demo.test/privacidad',
             'allowed_return_domains' => ['demo.test'],
         ]);
         $tenant->forceFill(['status' => TenantStatus::Active])->save();
 
         $links = $context->runAsTenant($tenant->id, false, function () use ($parser, $create, $expire, $cancel): array {
+            // ADR-0056: a privacy notice (a link, so payer fields are collected) and terms (a text, the checkout's dialog).
+            foreach ([
+                [LegalDocumentKind::Privacy, LegalDocumentFormat::Url, null, 'https://demo.test/privacidad'],
+                [LegalDocumentKind::Terms, LegalDocumentFormat::Text, self::DEMO_TERMS, null],
+            ] as [$kind, $format, $body, $url]) {
+                $document = TenantLegalDocument::query()->where('kind', $kind->value)->first() ?? (new TenantLegalDocument)->forceFill(['kind' => $kind]);
+                $document->forceFill(['format' => $format, 'body' => $body, 'url' => $url])->save();
+            }
+
             if (! GatewayConnection::query()->current()->exists()) {
                 (new GatewayConnection)->forceFill([
                     'connection_method' => ConnectionMethod::PlatformOnboarding,

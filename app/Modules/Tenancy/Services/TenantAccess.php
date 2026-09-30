@@ -97,14 +97,6 @@ final class TenantAccess
         return $this->find($tenantId)?->support_email;
     }
 
-    /** The merchant's privacy notice; without it no payer data is collected (plan 19.2). */
-    public function privacyNoticeUrl(string $tenantId): ?string
-    {
-        $url = $this->find($tenantId)?->privacy_notice_url;
-
-        return is_string($url) && trim($url) !== '' ? $url : null;
-    }
-
     /** Drops what this request remembers about a tenant (its status just changed). */
     public function forget(string $tenantId): void
     {

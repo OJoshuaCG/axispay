@@ -9,6 +9,7 @@ use App\Modules\Checkout\Services\EffectivePayerFields;
 use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
 use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Filament\Concerns\TenantPanel;
+use App\Modules\Legal\Filament\Pages\TenantLegalSettings;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
 use App\Modules\PaymentLinks\Enums\DisputeStatus;
@@ -179,6 +180,14 @@ final class PaymentLinkResource extends Resource
                 ->description(__('payments.privacy_notice_missing.help'))
                 ->icon(Heroicon::OutlinedExclamationTriangle)
                 ->color('warning')
+                // ADR-0056: the tenant adds it on the Legal page (only users who may manage it see the button).
+                ->actions([
+                    Action::make('openLegalSettings')
+                        ->label(__('payments.privacy_notice_missing.action'))
+                        ->url(static fn (): string => TenantLegalSettings::getUrl())
+                        ->visible(static fn (): bool => TenantLegalSettings::canAccess())
+                        ->link(),
+                ])
                 ->visible(static fn (PaymentLink $record): bool => $record->status->isShareable() && app(EffectivePayerFields::class)->missingPrivacyNotice($record))
                 ->columnSpanFull(),
             Callout::make(static fn (PaymentLink $record): string => __('payments.checkout_block.callout', ['date' => $record->checkout_blocked_until !== null ? self::panelDate($record->checkout_blocked_until) : '']))

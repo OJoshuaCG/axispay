@@ -96,6 +96,12 @@ return [
         'platform_brand_display_mode_changed' => 'Visualización de la marca de la plataforma cambiada',
         'platform_favicon_updated' => 'Favicon de la plataforma actualizado',
         'platform_favicon_removed' => 'Favicon de la plataforma eliminado',
+        'legal_document_updated' => 'Documento legal actualizado',
+        'legal_document_removed' => 'Documento legal eliminado',
+        'platform_legal_document_updated' => 'Documento legal de la plataforma actualizado',
+        'platform_legal_document_removed' => 'Documento legal de la plataforma eliminado',
+        'tenant_logo_updated' => 'Logo de la empresa actualizado',
+        'tenant_logo_removed' => 'Logo de la empresa eliminado',
     ],
 
 ];
