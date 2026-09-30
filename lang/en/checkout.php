@@ -18,7 +18,6 @@ return [
     'summary' => [
         'pay_to' => 'Payment to :merchant',
         'total' => 'Total to pay',
-        'description' => 'Description',
         'expires' => 'Expires :date',
     ],
 
@@ -151,8 +150,27 @@ return [
     'footer' => [
         'powered_by' => 'Powered by :platform',
         'processed_by' => 'Processed by Stripe',
-        'privacy' => 'Privacy notice',
-        'support' => 'Support: :email',
+        'help' => 'Questions about your payment? Email :email',
+    ],
+
+    'legal' => [
+        'nav' => 'Legal documents',
+        'link' => [
+            'privacy' => 'Privacy notice',
+            'terms' => 'Terms',
+        ],
+        'title' => [
+            'privacy' => 'Privacy notice',
+            'terms' => 'Terms and conditions',
+        ],
+        'close' => 'Close',
+        'new_tab' => '(opens in a new tab)',
+        'back' => 'Back to the payment',
+        'external' => ':merchant publishes this document on their website.',
+        'open_external' => 'Open the document',
+        'platform_title' => 'Legal information',
+        'platform_intro' => 'The privacy notice and terms and conditions of :platform, the platform behind this payment page.',
+        'platform_external' => 'Published on another website.',
     ],
 
     'errors' => [

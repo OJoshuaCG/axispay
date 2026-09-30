@@ -152,8 +152,9 @@ return [
 
     'checkout' => [
         'title' => 'Checkout',
-        'description' => 'Payer-facing pieces of the payment page (DESIGN.md, ADR-0051): header, order summary, payer fields, card form placeholder, feedback and the state panels. The page itself follows the operating system theme and has no theme toggle.',
+        'description' => 'Payer-facing pieces of the payment page (DESIGN.md, ADR-0051, ADR-0056): header with the language and theme controls, the two cards on the canvas (details on the left, card form on the right), the total split so a large amount wraps, the state panels and the two-tier footer.',
         'sample_description' => 'Order #A-1029 — 2 items',
+        'large_amount' => 'Largest total in a 320px card: the code wraps below the number',
     ],
 
 ];

@@ -15,14 +15,15 @@
 @endphp
 
 <x-layouts.checkout :title="__('checkout.error_pages.'.$status.'.heading').' · '.\App\Modules\Shared\Support\Brand::displayName()">
-    <div class="mx-auto w-full max-w-narrow md:rounded-xl md:border md:border-line md:p-inset-lg">
-        <header class="flex flex-wrap items-center justify-end gap-x-4 gap-y-stack-sm pb-stack-lg">
-            <x-language-switcher />
-        </header>
+    <div class="mx-auto flex w-full max-w-narrow flex-col gap-stack-lg">
+        {{-- No merchant here: the site controls only (language and theme). --}}
+        <x-checkout.merchant-header />
 
-        <x-checkout.status-panel variant="neutral" :icon="$icon" :heading="__('checkout.error_pages.'.$status.'.heading')" focus>
-            <p>{{ __('checkout.error_pages.'.$status.'.body') }}</p>
-        </x-checkout.status-panel>
+        <x-checkout.card>
+            <x-checkout.status-panel variant="neutral" :icon="$icon" :heading="__('checkout.error_pages.'.$status.'.heading')" focus>
+                <p>{{ __('checkout.error_pages.'.$status.'.body') }}</p>
+            </x-checkout.status-panel>
+        </x-checkout.card>
     </div>
 
     <x-slot:footer>

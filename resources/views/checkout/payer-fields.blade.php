@@ -92,11 +92,17 @@
         @endswitch
     @endforeach
 
+    {{-- The merchant's notice opens like the summary's link: a dialog for a text, a new tab for a link (ADR-0056). --}}
     <p class="text-sm text-fg-secondary break-words">
-        @if ($page->privacyUrl)
+        @if ($notice = $page->privacyNotice())
             {!! __('checkout.payer.privacy', [
                 'merchant' => e($page->merchant),
-                'link' => '<a href="'.e($page->privacyUrl).'" rel="noopener noreferrer" target="_blank" class="text-link underline">'.e(__('checkout.payer.privacy_link')).'</a>',
+                'link' => view('components.checkout.legal-link', [
+                    'document' => $notice,
+                    'token' => $page->token,
+                    'label' => __('checkout.payer.privacy_link'),
+                    'attributes' => new \Illuminate\View\ComponentAttributeBag(['class' => 'text-link underline']),
+                ])->render(),
             ]) !!}
         @else
             {{ __('checkout.payer.privacy_no_link', ['merchant' => $page->merchant]) }}

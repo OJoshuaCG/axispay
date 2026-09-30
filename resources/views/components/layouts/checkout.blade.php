@@ -2,8 +2,13 @@
     Payer-facing checkout layout (plan 11, docs/frontend/checkout-design.md, ADR-0051).
 
     Differences from <x-layouts.app>:
-        - no theme pre-paint script and no data-theme: the page follows the
-          OS (prefers-color-scheme); the payer never gets a theme toggle;
+        - the same theme pre-paint (<x-theme-prepaint />, nonce'd) and the
+          same light / dark / system choice as the other Blade pages, in the
+          header's <x-site-controls> (ADR-0056 part C amends ADR-0051): light
+          by default (ADR-0044), "system" follows the OS; saved in
+          localStorage['theme'] on the pay origin;
+        - the body is the `canvas`; the page's cards sit on it
+          (<x-checkout.card>, bg-page), the <html> stays `page`;
         - robots noindex (also sent as X-Robots-Tag), CSRF meta for the
           page script, preconnect to Stripe's API, Geist Mono 600 preloaded (the
           total);
@@ -45,6 +50,8 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         {{-- Page background per scheme (--color-page: neutral-0 / neutral-900), before CSS loads. --}}
         <x-theme-color-meta />
+        {{-- Saved theme applied before first paint (ADR-0056 part C); shared with the app layout. --}}
+        <x-theme-prepaint />
 
         <x-favicon-links />
         <title>{{ $title }}</title>
@@ -67,7 +74,7 @@
 
         @vite($entries)
     </head>
-    <body class="min-h-dvh bg-page font-sans text-fg">
+    <body class="min-h-dvh bg-canvas font-sans text-fg">
         <a
             href="#main"
             class="sr-only rounded-md bg-primary px-4 py-3 font-medium text-on-primary no-underline focus:not-sr-only focus:fixed focus:top-edge focus:start-edge focus:z-tooltip"
@@ -76,7 +83,7 @@
         </a>
 
         <div class="flex min-h-dvh flex-col px-gutter pt-safe-top pb-safe-bottom">
-            <main id="main" tabindex="-1" {{ $attributes->class('flex-1 py-stack-lg focus-visible:outline-none md:py-stack-xl') }}>
+            <main id="main" tabindex="-1" {{ $attributes->class('flex-1 py-stack-md focus-visible:outline-none md:py-stack-lg') }}>
                 {{ $slot }}
             </main>
 

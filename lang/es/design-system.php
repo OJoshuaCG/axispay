@@ -149,8 +149,9 @@ return [
 
     'checkout' => [
         'title' => 'Checkout',
-        'description' => 'Piezas de la página de pago para el pagador (DESIGN.md, ADR-0051): encabezado, resumen del cobro, campos del pagador, espacio del formulario de tarjeta, mensajes y paneles de estado. La página sigue el tema del sistema operativo y no tiene selector de tema.',
+        'description' => 'Piezas de la página de pago para el pagador (DESIGN.md, ADR-0051, ADR-0056): encabezado con los controles de idioma y tema, las dos tarjetas sobre el lienzo (detalles a la izquierda, formulario de tarjeta a la derecha), el total dividido para que un monto grande se acomode, los paneles de estado y el pie en dos niveles.',
         'sample_description' => 'Pedido #A-1029 — 2 artículos',
+        'large_amount' => 'Total más grande en una tarjeta de 320 px: el código pasa debajo del número',
     ],
 
 ];

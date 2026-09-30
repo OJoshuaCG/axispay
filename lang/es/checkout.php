@@ -18,7 +18,6 @@ return [
     'summary' => [
         'pay_to' => 'Pago a :merchant',
         'total' => 'Total a pagar',
-        'description' => 'Descripción',
         'expires' => 'Vence el :date',
     ],
 
@@ -151,8 +150,27 @@ return [
     'footer' => [
         'powered_by' => 'Con la tecnología de :platform',
         'processed_by' => 'Procesado por Stripe',
-        'privacy' => 'Aviso de privacidad',
-        'support' => 'Soporte: :email',
+        'help' => '¿Dudas sobre tu pago? Escribe a :email',
+    ],
+
+    'legal' => [
+        'nav' => 'Documentos legales',
+        'link' => [
+            'privacy' => 'Aviso de privacidad',
+            'terms' => 'Términos',
+        ],
+        'title' => [
+            'privacy' => 'Aviso de privacidad',
+            'terms' => 'Términos y condiciones',
+        ],
+        'close' => 'Cerrar',
+        'new_tab' => '(se abre en una pestaña nueva)',
+        'back' => 'Volver al pago',
+        'external' => ':merchant publica este documento en su sitio web.',
+        'open_external' => 'Abrir el documento',
+        'platform_title' => 'Información legal',
+        'platform_intro' => 'El aviso de privacidad y los términos y condiciones de :platform, la plataforma detrás de esta página de pago.',
+        'platform_external' => 'Publicado en otro sitio web.',
     ],
 
     'errors' => [

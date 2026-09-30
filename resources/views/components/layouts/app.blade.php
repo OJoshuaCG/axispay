@@ -21,7 +21,6 @@
 
 @php
     $appName = \App\Modules\Shared\Support\Brand::displayName();
-    $cspNonce = \Illuminate\Support\Facades\Vite::cspNonce();
 @endphp
 
 <!DOCTYPE html>
@@ -34,43 +33,16 @@
             Browser UI color = page background (--color-page: neutral-0 / neutral-900).
             These two values are the only copy of those hexes outside the tokens:
             they are needed before any CSS loads. A manual theme overrides them:
-            the pre-paint script below copies the chosen scheme's value into both
+            the pre-paint script (<x-theme-prepaint />) copies the chosen scheme's value into both
             tags, and resources/js/theme.js then writes the computed --color-page.
         --}}
         <x-theme-color-meta />
+        {{-- Saved theme applied before first paint (ADR-0044); shared with the checkout layout. --}}
+        <x-theme-prepaint />
 
         <x-favicon-links />
         <title>{{ filled($title) ? $title.' · '.$appName : $appName }}</title>
 
-        {{--
-            Apply the saved theme before first paint to avoid a flash. With no
-            saved (or an unreadable) preference the page is light (ADR-0044);
-            only an explicit "system" follows the OS. Keep in sync with
-            resources/js/theme.js (STORAGE_KEY, THEMES, DEFAULT_THEME).
-        --}}
-        <script @if ($cspNonce) nonce="{{ $cspNonce }}" @endif>
-            (function () {
-                var theme = null;
-                try {
-                    theme = window.localStorage.getItem('theme');
-                } catch (error) {}
-                if (theme !== 'dark' && theme !== 'system') {
-                    theme = 'light';
-                }
-                if (theme === 'system') {
-                    return;
-                }
-                document.documentElement.setAttribute('data-theme', theme);
-                try {
-                    var source = document.querySelector('meta[data-theme-color="' + theme + '"]');
-                    var color = source.getAttribute('content');
-                    document.querySelectorAll('meta[data-theme-color]').forEach(function (meta) {
-                        meta.setAttribute('data-default-content', meta.getAttribute('content'));
-                        meta.setAttribute('content', color);
-                    });
-                } catch (error) {}
-            })();
-        </script>
 
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])

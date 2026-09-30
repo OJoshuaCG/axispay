@@ -21,6 +21,13 @@
         line-height: var(--text-base--line-height);
     }
 
+    /* No page scroll behind a modal dialog (the checkout's legal texts,
+       ADR-0056); the gutter keeps the layout from shifting sideways. */
+    html:has(dialog[open]) {
+        overflow: hidden;
+        scrollbar-gutter: stable;
+    }
+
     ::selection {
         background-color: var(--color-primary);
         color: var(--color-on-primary);

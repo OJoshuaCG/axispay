@@ -4,8 +4,10 @@
  * Colors are read from hidden probe elements that carry real utility
  * classes (getComputedStyle → hex), not from --color-* variables: Lightning
  * CSS compiles light-dark() into custom-property switches, so the variables
- * themselves are not plain colors. Re-run on a color-scheme change.
+ * themselves are not plain colors. Re-run on a theme change (the payer's
+ * choice, `theme:change`, or the OS under "system", ADR-0056 part C).
  */
+import { effectiveTheme } from '../theme';
 
 function toHex(color) {
     const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -23,8 +25,9 @@ function probe(name) {
     return element ? toHex(window.getComputedStyle(element).color) : undefined;
 }
 
+/** The scheme on screen, the payer's choice included (Stripe and Turnstile follow it). */
 export function prefersDark() {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return effectiveTheme() === 'dark';
 }
 
 export function appearance() {

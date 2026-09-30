@@ -1,9 +1,14 @@
 /**
  * Theme preference handling (light | dark | system).
  *
- * The pre-paint script in the layout <head> applies the saved theme before first
- * paint. This module syncs the theme radio groups, handles keyboard navigation
- * and persists changes.
+ * The pre-paint script (components/theme-prepaint.blade.php, in every layout's
+ * <head>) applies the saved theme before first paint. This module syncs the
+ * theme radio groups, handles keyboard navigation and persists changes.
+ *
+ * Every applied change dispatches `theme:change` on document (detail:
+ * { preference }), so page scripts that paint outside the CSS (the checkout's
+ * Stripe card form and Turnstile widget) can repaint. effectiveTheme() says
+ * which scheme is showing, "system" resolved against the OS.
  *
  * "system" is expressed by removing data-theme from <html>, which lets
  * `color-scheme: light dark` follow the OS preference. With no saved
@@ -26,6 +31,7 @@ export const DEFAULT_THEME = 'light';
 const OPTION = '[data-theme-option]';
 const GROUP = '[data-theme-toggle]';
 const THEME_COLOR_META = 'meta[data-theme-color]';
+const COLOR_SCHEME_META = 'meta[name="color-scheme"]';
 
 /** Server-rendered theme-color values, keyed by meta element. */
 const defaultThemeColors = new Map();
@@ -77,6 +83,22 @@ function savePreference(preference) {
     }
 }
 
+/** The browser's own UI (scrollbars, form controls) follows the chosen scheme; "system" allows both. */
+function syncColorScheme(preference) {
+    document.querySelector(COLOR_SCHEME_META)?.setAttribute('content', preference === 'light' || preference === 'dark' ? preference : 'light dark');
+}
+
+/** The scheme on screen: the manual theme, or the OS preference under "system". */
+export function effectiveTheme() {
+    const theme = document.documentElement.dataset.theme;
+
+    if (theme === 'light' || theme === 'dark') {
+        return theme;
+    }
+
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export function applyTheme(preference) {
     const root = document.documentElement;
 
@@ -86,7 +108,9 @@ export function applyTheme(preference) {
         delete root.dataset.theme;
     }
 
+    syncColorScheme(preference);
     syncThemeColor(preference);
+    document.dispatchEvent(new CustomEvent('theme:change', { detail: { preference } }));
 }
 
 /** Mark the checked option in every group; it becomes the group's tab stop. */

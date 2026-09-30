@@ -16,6 +16,14 @@
         signed    show +/− and use positive/negative colors (default true)
         minor     value is in minor units (cents); the currency's decimals
                   come from ISO 4217 (2 for USD and MXN, 0 for CLP)
+        split     render the number and the code as two pieces that may wrap
+                  onto two lines (the number itself never breaks), for large
+                  totals in narrow columns: "1,500,000.00 MXN" at text-3xl is
+                  wider than a 320px phone's card (ADR-0056 part C). The
+                  string is split at its last non-breaking space; the text
+                  read is the same.
+        codeClass classes of the currency code when `split` (e.g. a smaller
+                  size and fg-secondary); the weight is inherited, never set
 
     Formatting is App\Modules\Shared\Money\MoneyDisplay, the same one the
     panels use: number with the currency's decimals, a non-breaking space and
@@ -37,6 +45,8 @@
     'locale' => null,
     'signed' => true,
     'minor' => false,
+    'split' => false,
+    'codeClass' => '',
 ])
 
 @php
@@ -67,7 +77,13 @@
     };
 @endphp
 
-@if ($valid)
+@php
+    $separatorAt = $valid && $split ? mb_strrpos($formatted, \App\Modules\Shared\Money\MoneyDisplay::SEPARATOR) : false;
+@endphp
+
+@if ($separatorAt !== false)
+    <span {{ $attributes->class(['amount inline-flex flex-wrap items-baseline gap-x-2', $color])->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}><span class="whitespace-nowrap">{{ $sign }}{{ mb_substr($formatted, 0, $separatorAt) }}</span> <span @class([$codeClass])>{{ mb_substr($formatted, $separatorAt + 1) }}</span></span>
+@elseif ($valid)
     <span {{ $attributes->class(['amount whitespace-nowrap', $color])->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}>{{ $sign }}{{ $formatted }}</span>
 @else
     <span {{ $attributes->class('amount whitespace-nowrap text-fg-secondary') }}><span aria-hidden="true">&mdash;</span><span class="sr-only">{{ __('ui.amount.unavailable') }}</span></span>

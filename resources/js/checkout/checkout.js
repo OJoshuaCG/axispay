@@ -9,11 +9,16 @@
  * paid/processing → the completion page (which polls).
  *
  * Modules: api (transport), state, stripe-elements, turnstile, payer, ui,
- * polling. Whatever fails along the way, the Pay button never stays busy:
- * the generic error is shown and the payer may try again.
+ * polling, legal-dialog (the merchant's legal texts, every state), and the
+ * shared theme toggle (../theme, ADR-0056 part C): this is the only script of
+ * every pay-host page, so the toggle starts here, before anything can return.
+ * Whatever fails along the way, the Pay button never stays busy: the
+ * generic error is shown and the payer may try again.
  */
+import { initThemeToggle } from '../theme';
 import { appearance } from './appearance';
 import { postJson } from './api';
+import { initLegalDialogs } from './legal-dialog';
 import { billingDetails, readPayer } from './payer';
 import { initPolling } from './polling';
 import { createState } from './state';
@@ -92,9 +97,19 @@ function initCheckout() {
     paymentElement.on('loaderror', cardFormUnavailable);
     paymentElement.mount(form.querySelector('[data-payment-element]'));
 
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    // The card form and the bot check paint outside our CSS: repaint them in
+    // the scheme on screen when the payer picks a theme, and when the OS
+    // changes while "system" (no data-theme) is in effect.
+    const repaint = () => {
         elements.update({ appearance: appearance() });
         turnstile.redraw();
+    };
+
+    document.addEventListener('theme:change', repaint);
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+        if (!document.documentElement.dataset.theme) {
+            repaint();
+        }
     });
 
     if (config.pausedMinutes && strings.pausedMessage) {
@@ -258,6 +273,8 @@ function initCheckout() {
     });
 }
 
+initThemeToggle();
 initCheckout();
 initPolling();
 initAutofocus();
+initLegalDialogs();

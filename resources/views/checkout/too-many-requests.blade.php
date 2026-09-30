@@ -4,14 +4,15 @@
     information.
 --}}
 <x-layouts.checkout :title="__('checkout.title.too_many_requests').' · '.\App\Modules\Shared\Support\Brand::displayName()">
-    <div class="mx-auto w-full max-w-narrow md:rounded-xl md:border md:border-line md:p-inset-lg">
-        <header class="flex flex-wrap items-center justify-end gap-x-4 gap-y-stack-sm pb-stack-lg">
-            <x-language-switcher />
-        </header>
+    <div class="mx-auto flex w-full max-w-narrow flex-col gap-stack-lg">
+        {{-- No merchant here: the site controls only (language and theme). --}}
+        <x-checkout.merchant-header />
 
-        <x-checkout.status-panel variant="neutral" icon="clock" :heading="__('checkout.states.too_many_requests.heading')" focus>
-            <p>{{ __('checkout.states.too_many_requests.body') }}</p>
-        </x-checkout.status-panel>
+        <x-checkout.card>
+            <x-checkout.status-panel variant="neutral" icon="clock" :heading="__('checkout.states.too_many_requests.heading')" focus>
+                <p>{{ __('checkout.states.too_many_requests.body') }}</p>
+            </x-checkout.status-panel>
+        </x-checkout.card>
     </div>
 
     <x-slot:footer>

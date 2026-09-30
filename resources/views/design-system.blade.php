@@ -42,7 +42,7 @@
         ],
         'Destructive fills' => [['bg-error-fill', '--color-error-fill'], ['bg-error-fill-hover', '--color-error-fill-hover'], ['bg-error-fill-active', '--color-error-fill-active'], ['bg-on-error', '--color-on-error']],
         'Money' => [['bg-amount-positive', '--color-amount-positive'], ['bg-amount-negative', '--color-amount-negative']],
-        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle'], ['bg-brand-mark', '--color-brand-mark'], ['bg-brand-mark-fg', '--color-brand-mark-fg']],
+        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle'], ['bg-brand-mark', '--color-brand-mark'], ['bg-brand-mark-fg', '--color-brand-mark-fg'], ['bg-logo-plate', '--color-logo-plate']],
     ];
 
     $typeScale = [
@@ -438,47 +438,83 @@
                 <p class="max-w-narrow text-fg-secondary">{{ __('design-system.checkout.description') }}</p>
             </div>
 
-            <div class="grid gap-stack-xl lg:grid-cols-2">
-                <div class="flex flex-col gap-stack-lg rounded-xl border border-line p-inset-lg">
-                    <x-checkout.merchant-header merchant="Tienda Demo" />
-                    <x-checkout.order-summary merchant="Tienda Demo" :description="__('design-system.checkout.sample_description')" :money="\App\Modules\Shared\Money\Money::ofMinor(150000, \App\Modules\Shared\Money\CurrencyCode::MXN)" :expires-at="now()->addHours(20)" />
-                    <div class="flex flex-col gap-stack-xs">
-                        <x-input id="ds-checkout-email" :label="__('checkout.payer.email')" type="email" autocomplete="email" required aria-describedby="ds-checkout-email-error" class="border-error" aria-invalid="true" />
-                        <p id="ds-checkout-email-error" class="flex items-start gap-1.5 text-sm text-error">
-                            <x-icon name="exclamation-circle" variant="mini" size="sm" class="mt-0.5" />
-                            <span class="min-w-0 break-words">{{ __('checkout.errors.email') }}</span>
-                        </p>
-                    </div>
-                    <x-phone-input name="ds_phone" country-name="ds_phone_country" :countries="\App\Modules\PayerFields\Data\PayerCountries::options(app()->getLocale())" :label="__('checkout.payer.optional_label', ['label' => __('checkout.payer.phone')])" />
-                    <x-checkout.payment-element />
-                    <x-alert variant="error">{{ __('checkout.messages.declined') }}</x-alert>
-                    <x-alert variant="warning">{{ __('checkout.messages.turnstile') }}</x-alert>
-                    <x-button size="lg" icon="lock-closed" class="w-full">{!! __('checkout.pay_amount', ['amount' => '<span class="amount">1,500.00 MXN</span>']) !!}</x-button>
-                    <x-button size="lg" class="w-full" loading :loading-label="__('checkout.processing_payment')">{{ __('checkout.processing_payment') }}</x-button>
+            {{-- The page on its canvas (ADR-0056 part C): header, then the two cards (stacked below lg), then the footer. --}}
+            <div class="flex flex-col gap-stack-lg rounded-xl bg-canvas p-inset-md sm:p-inset-lg">
+                <x-checkout.merchant-header merchant="Tienda Demo" />
+
+                <div class="flex flex-col gap-stack-lg lg:grid lg:grid-cols-5 lg:items-start">
+                    <x-checkout.order-summary merchant="Tienda Demo" :description="__('design-system.checkout.sample_description')" :money="\App\Modules\Shared\Money\Money::ofMinor(150000, \App\Modules\Shared\Money\CurrencyCode::MXN)" :expires-at="now()->addHours(20)" class="lg:col-span-2">
+                        {{-- ADR-0056: link documents here (a text document opens a dialog on the checkout, whose script this page does not load). --}}
+                        <x-checkout.legal-links token="demo" :documents="[
+                            'privacy' => new \App\Modules\Legal\Data\LegalDocument(\App\Modules\Legal\Enums\LegalDocumentKind::Privacy, \App\Modules\Legal\Enums\LegalDocumentFormat::Url, null, 'https://example.com/privacidad'),
+                            'terms' => new \App\Modules\Legal\Data\LegalDocument(\App\Modules\Legal\Enums\LegalDocumentKind::Terms, \App\Modules\Legal\Enums\LegalDocumentFormat::Url, null, 'https://example.com/terminos'),
+                        ]" />
+                    </x-checkout.order-summary>
+
+                    <x-checkout.card as="div" class="flex flex-col gap-stack-lg lg:col-span-3">
+                        <div class="flex flex-col gap-stack-xs">
+                            <x-input id="ds-checkout-email" :label="__('checkout.payer.email')" type="email" autocomplete="email" required aria-describedby="ds-checkout-email-error" class="border-error" aria-invalid="true" />
+                            <p id="ds-checkout-email-error" class="flex items-start gap-1.5 text-sm text-error">
+                                <x-icon name="exclamation-circle" variant="mini" size="sm" class="mt-0.5" />
+                                <span class="min-w-0 break-words">{{ __('checkout.errors.email') }}</span>
+                            </p>
+                        </div>
+                        <x-phone-input name="ds_phone" country-name="ds_phone_country" :countries="\App\Modules\PayerFields\Data\PayerCountries::options(app()->getLocale())" :label="__('checkout.payer.optional_label', ['label' => __('checkout.payer.phone')])" />
+                        <div class="flex flex-col gap-stack-md border-t border-line pt-stack-lg">
+                            <x-alert variant="error">{{ __('checkout.messages.declined') }}</x-alert>
+                            <x-alert variant="warning">{{ __('checkout.messages.turnstile') }}</x-alert>
+                            <x-checkout.payment-element />
+                        </div>
+                        <div class="flex flex-col gap-stack-sm">
+                            <x-button size="lg" icon="lock-closed" class="w-full">{!! __('checkout.pay_amount', ['amount' => '<span class="amount">1,500.00 MXN</span>']) !!}</x-button>
+                            <x-button size="lg" class="w-full" loading :loading-label="__('checkout.processing_payment')">{{ __('checkout.processing_payment') }}</x-button>
+                        </div>
+                    </x-checkout.card>
                 </div>
 
-                <div class="flex flex-col gap-stack-xl">
+                {{-- The split total at the largest amount, in a card as narrow as a 320px phone's (254px inside). --}}
+                <x-checkout.card class="flex max-w-72 flex-col gap-stack-xs">
+                    <p class="text-sm text-fg-secondary">{{ __('design-system.checkout.large_amount') }}</p>
+                    <x-amount :value="150000000" currency="MXN" minor :signed="false" split class="text-3xl font-semibold sm:text-4xl" code-class="text-xl text-fg-secondary" />
+                </x-checkout.card>
+
+                {{-- Single-card states (paid, expired, canceled, blocked): the status, then the summary without its own card. --}}
+                <x-checkout.card class="mx-auto flex w-full max-w-narrow flex-col gap-stack-lg">
                     <x-checkout.status-panel :level="2" variant="success" icon="check-circle" :heading="__('checkout.states.paid.heading')">
                         <p>{{ __('checkout.states.paid.paid_on', ['date' => now()->isoFormat('LLL')]) }}</p>
                         <x-slot:actions><x-button size="lg">{{ __('checkout.states.paid.return', ['merchant' => 'Tienda Demo']) }}</x-button></x-slot:actions>
                     </x-checkout.status-panel>
-                    <x-checkout.status-panel :level="2" variant="info" icon="arrow-path" :heading="__('checkout.states.processing.heading')">
-                        <p>{{ __('checkout.states.processing.body') }}</p>
-                    </x-checkout.status-panel>
-                    <x-checkout.status-panel :level="2" variant="error" icon="x-circle" :heading="__('checkout.states.rejected.heading', ['merchant' => 'Tienda Demo'])">
-                        <p>{{ __('checkout.states.rejected.fallback', ['merchant' => 'Tienda Demo']) }}</p>
-                        <x-alert variant="info" role="note">{{ __('checkout.states.voided') }}</x-alert>
-                    </x-checkout.status-panel>
-                    <x-checkout.status-panel :level="2" variant="warning" icon="exclamation-triangle" :heading="__('checkout.states.blocked.heading')">
-                        <p>{{ __('checkout.states.blocked.body', ['merchant' => 'Tienda Demo']) }}</p>
-                    </x-checkout.status-panel>
-                    <x-checkout.status-panel :level="2" variant="neutral" icon="calendar" :heading="__('checkout.states.expired.heading')">
-                        <p>{{ __('checkout.states.expired.body', ['merchant' => 'Tienda Demo']) }}</p>
-                    </x-checkout.status-panel>
-                </div>
-            </div>
+                    <div class="border-t border-line pt-stack-lg">
+                        <x-checkout.order-summary bare merchant="Tienda Demo" :description="__('design-system.checkout.sample_description')" :money="\App\Modules\Shared\Money\Money::ofMinor(150000, \App\Modules\Shared\Money\CurrencyCode::MXN)" />
+                    </div>
+                </x-checkout.card>
 
-            <x-checkout.footer privacy-url="https://example.com/privacidad" support-email="soporte@example.com" :show-privacy="true" />
+                <div class="grid gap-stack-lg lg:grid-cols-2">
+                    <x-checkout.card class="flex flex-col">
+                        <x-checkout.status-panel :level="2" variant="info" icon="arrow-path" :heading="__('checkout.states.processing.heading')">
+                            <p>{{ __('checkout.states.processing.body') }}</p>
+                        </x-checkout.status-panel>
+                    </x-checkout.card>
+                    <x-checkout.card class="flex flex-col">
+                        <x-checkout.status-panel :level="2" variant="error" icon="x-circle" :heading="__('checkout.states.rejected.heading', ['merchant' => 'Tienda Demo'])">
+                            <p>{{ __('checkout.states.rejected.fallback', ['merchant' => 'Tienda Demo']) }}</p>
+                            <x-alert variant="info" role="note">{{ __('checkout.states.voided') }}</x-alert>
+                        </x-checkout.status-panel>
+                    </x-checkout.card>
+                    <x-checkout.card class="flex flex-col">
+                        <x-checkout.status-panel :level="2" variant="warning" icon="exclamation-triangle" :heading="__('checkout.states.blocked.heading')">
+                            <p>{{ __('checkout.states.blocked.body', ['merchant' => 'Tienda Demo']) }}</p>
+                        </x-checkout.status-panel>
+                    </x-checkout.card>
+                    <x-checkout.card class="flex flex-col">
+                        <x-checkout.status-panel :level="2" variant="neutral" icon="calendar" :heading="__('checkout.states.expired.heading')">
+                            <p>{{ __('checkout.states.expired.body', ['merchant' => 'Tienda Demo']) }}</p>
+                        </x-checkout.status-panel>
+                    </x-checkout.card>
+                </div>
+
+                <x-checkout.footer support-email="soporte@example.com" />
+            </div>
         </section>
     </div>
     </div>
