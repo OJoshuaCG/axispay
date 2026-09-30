@@ -102,4 +102,63 @@ return [
         'action' => 'Ir a la página Legal',
     ],
 
+    // Historial de pagos (ADR-0059), panel del comercio. Una fila por intento de pago.
+    'resource' => [
+        'singular' => 'pago',
+        'plural' => 'pagos',
+        'page' => [
+            'subheading' => [
+                'test' => 'Pagos del modo de prueba: no se mueve dinero real. También se listan los pagos rechazados y liberados.',
+                'live' => 'Pagos del modo real. También se listan los pagos rechazados y liberados.',
+            ],
+            'view_title' => 'Pago',
+        ],
+        'fields' => [
+            'date' => 'Fecha',
+            'link' => 'Link',
+            'amount' => 'Monto',
+            'currency' => 'Moneda',
+            'status' => 'Estado',
+            'card' => 'Tarjeta',
+            'validation' => 'Validación previa',
+        ],
+        'filters' => [
+            'from' => 'Desde',
+            'until' => 'Hasta',
+            'from_indicator' => 'Desde el :date',
+            'until_indicator' => 'Hasta el :date',
+        ],
+        'fail_open_help' => 'Su servidor no dio una respuesta válida y su política cobró el pago de todos modos: revíselo.',
+        'empty' => [
+            'heading' => 'Aún no hay pagos',
+            'description' => 'Los pagos aparecen aquí en cuanto un pagador ingresa una tarjeta en uno de sus links.',
+        ],
+    ],
+
+    'validation_outcome' => [
+        'not_configured' => 'No se usó',
+        'approved' => 'Aprobado',
+        'rejected' => 'Rechazado por usted',
+        'failed_open' => 'Falló, cobrado',
+        'failed_closed' => 'Falló, no cobrado',
+    ],
+
+    'timeline' => [
+        'title' => 'Línea de tiempo',
+        'started' => 'Pago iniciado',
+        'declined' => 'Tarjeta rechazada',
+        'authorized' => 'Tarjeta autorizada',
+        'capture_before' => 'Debe capturarse antes del :date',
+        'validation' => 'Validación previa: :outcome',
+        'captured' => 'Cobrado',
+        'captured_fail_open' => 'Cobrado con su política "cobrar de todos modos" tras una validación fallida.',
+        'released' => 'Autorización liberada, sin cobro',
+        'released_rejected' => 'Su servidor rechazó el pago.',
+        'released_fail_closed' => 'La validación falló y se aplicó su política "no cobrar".',
+        'failed' => 'Pago fallido',
+        'event' => 'Evento :type',
+        'event_published' => 'Enviado a sus endpoints de webhooks como:',
+        'event_pending' => 'Aún no se envía a sus endpoints.',
+    ],
+
 ];

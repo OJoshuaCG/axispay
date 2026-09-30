@@ -21,12 +21,16 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\CancelPaymentLinkInputParser;
 use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Filament\Resources\Payments\PaymentResource;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptDisplay;
 use App\Modules\Shared\Http\Errors\ApiException;
 use App\Modules\Shared\Money\CurrencyCode;
 use App\Modules\Shared\Money\MoneyDisplay;
 use App\Modules\Tenancy\Enums\CheckoutLocale;
+use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
+use App\Modules\Webhooks\Models\ValidationCall;
+use App\Modules\Webhooks\Models\ValidationEndpoint;
 use App\Support\Filament\Concerns\SentenceCaseLabels;
 use App\Support\Filament\DomainErrors;
 use App\Support\Filament\PanelDefaults;
@@ -234,6 +238,7 @@ final class PaymentLinkResource extends Resource
                     ]),
                 ]),
             self::attemptsSection(),
+            self::validationCallsSection(),
             Section::make(__('payment_links.sections.details'))
                 ->collapsible()
                 ->collapsed()
@@ -355,6 +360,9 @@ final class PaymentLinkResource extends Resource
                                 ->label(__('payments.attempts.id'))
                                 ->state(static fn (PaymentAttempt $record): string => $record->prefixedId())
                                 ->fontFamily(FontFamily::Mono)
+                                // Opens the payment's detail and timeline (ADR-0059).
+                                ->url(static fn (PaymentAttempt $record): string => PaymentResource::getUrl('view', ['record' => $record]))
+                                ->color('primary')
                                 ->extraAttributes(['class' => 'break-all']),
                             TextEntry::make('provider_payment_id')
                                 ->label(__('payments.attempts.provider_payment_id'))
@@ -367,6 +375,81 @@ final class PaymentLinkResource extends Resource
                         ]),
                     ]),
             ]);
+    }
+
+    /**
+     * The pre-payment validation calls of the link (plan 15.8.7): decision,
+     * reason, latency and the policy applied when the call failed. Only for
+     * users who may read the validation log (`webhooks:manage`, plan 17.1).
+     * Test calls from the settings page are not listed here.
+     */
+    private static function validationCallsSection(): Section
+    {
+        return Section::make(__('webhooks.validation.link_calls.section'))
+            ->description(__('webhooks.validation.link_calls.description'))
+            ->columnSpanFull()
+            ->collapsible()
+            ->visible(static fn (PaymentLink $record): bool => Gate::allows('viewAny', ValidationEndpoint::class)
+                && ($record->pre_payment_validation || self::validationCalls($record)->exists()))
+            ->schema([
+                TextEntry::make('validation_calls_empty')
+                    ->hiddenLabel()
+                    ->state(__('webhooks.validation.link_calls.empty'))
+                    ->visible(static fn (PaymentLink $record): bool => ! self::validationCalls($record)->exists()),
+                RepeatableEntry::make('validation_calls')
+                    ->hiddenLabel()
+                    ->state(static fn (PaymentLink $record): array => self::validationCalls($record)->orderBy('id')->get()->all())
+                    ->visible(static fn (PaymentLink $record): bool => self::validationCalls($record)->exists())
+                    ->schema([
+                        Grid::make(['default' => 1, 'sm' => 2])->schema([
+                            TextEntry::make('outcome')
+                                ->label(__('webhooks.validation.calls.outcome'))
+                                ->badge()
+                                ->formatStateUsing(static fn (ValidationCall $record): string => $record->outcome?->label() ?? '—')
+                                ->color(static fn (ValidationCall $record): string => $record->outcome?->color() ?? 'gray')
+                                ->placeholder('—'),
+                            TextEntry::make('created_at')->label(__('webhooks.validation.calls.time'))->dateTime(),
+                            TextEntry::make('reason_code')
+                                ->label(__('webhooks.validation.calls.reason_code'))
+                                ->fontFamily(FontFamily::Mono)
+                                ->visible(static fn (ValidationCall $record): bool => filled($record->reason_code)),
+                            TextEntry::make('failure_kind')
+                                ->label(__('webhooks.validation.calls.failure'))
+                                ->formatStateUsing(static fn (ValidationCall $record): ?string => $record->failure_kind?->label())
+                                ->visible(static fn (ValidationCall $record): bool => $record->failure_kind !== null),
+                            TextEntry::make('policy_applied')
+                                ->label(__('webhooks.validation.calls.policy_applied'))
+                                ->formatStateUsing(static fn (ValidationCall $record): ?string => $record->policy_applied?->label())
+                                ->visible(static fn (ValidationCall $record): bool => $record->policy_applied !== null),
+                            TextEntry::make('final_decision')
+                                ->label(__('webhooks.validation.calls.final_decision'))
+                                ->formatStateUsing(static fn (ValidationCall $record): ?string => $record->final_decision?->label())
+                                ->placeholder('—'),
+                            TextEntry::make('duration_ms')
+                                ->label(__('webhooks.validation.calls.latency'))
+                                ->formatStateUsing(static fn (ValidationCall $record): string => TestResultPresenter::latency($record->duration_ms))
+                                ->fontFamily(FontFamily::Mono)
+                                ->placeholder('—'),
+                            TextEntry::make('attempt_number')
+                                ->label(__('webhooks.validation.calls.attempt'))
+                                ->placeholder('—'),
+                            TextEntry::make('public_id')
+                                ->label(__('webhooks.validation.calls.id'))
+                                ->state(static fn (ValidationCall $record): string => $record->prefixedId())
+                                ->fontFamily(FontFamily::Mono)
+                                ->extraAttributes(['class' => 'break-all'])
+                                ->columnSpanFull(),
+                        ]),
+                    ]),
+            ]);
+    }
+
+    /**
+     * @return Builder<ValidationCall>
+     */
+    private static function validationCalls(PaymentLink $record): Builder
+    {
+        return ValidationCall::query()->where('payment_link_id', $record->id)->where('is_test', false);
     }
 
     /** `Visa •••• 4242` */

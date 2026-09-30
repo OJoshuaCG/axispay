@@ -104,4 +104,63 @@ return [
         'action' => 'Go to the Legal page',
     ],
 
+    // Payment history (ADR-0059), tenant panel. One row per payment attempt.
+    'resource' => [
+        'singular' => 'payment',
+        'plural' => 'payments',
+        'page' => [
+            'subheading' => [
+                'test' => 'Payments of test mode: no real money moves. Declined and released payments are listed too.',
+                'live' => 'Payments of live mode. Declined and released payments are listed too.',
+            ],
+            'view_title' => 'Payment',
+        ],
+        'fields' => [
+            'date' => 'Date',
+            'link' => 'Link',
+            'amount' => 'Amount',
+            'currency' => 'Currency',
+            'status' => 'Status',
+            'card' => 'Card',
+            'validation' => 'Pre-payment validation',
+        ],
+        'filters' => [
+            'from' => 'From',
+            'until' => 'Until',
+            'from_indicator' => 'From :date',
+            'until_indicator' => 'Until :date',
+        ],
+        'fail_open_help' => 'Your server did not give a valid answer and your policy charged the payment anyway: review it.',
+        'empty' => [
+            'heading' => 'No payments yet',
+            'description' => 'Payments appear here as soon as a payer enters a card on one of your links.',
+        ],
+    ],
+
+    'validation_outcome' => [
+        'not_configured' => 'Not used',
+        'approved' => 'Approved',
+        'rejected' => 'Rejected by you',
+        'failed_open' => 'Failed, charged',
+        'failed_closed' => 'Failed, not charged',
+    ],
+
+    'timeline' => [
+        'title' => 'Timeline',
+        'started' => 'Payment started',
+        'declined' => 'Card declined',
+        'authorized' => 'Card authorized',
+        'capture_before' => 'Must be captured before :date',
+        'validation' => 'Pre-payment validation: :outcome',
+        'captured' => 'Charged',
+        'captured_fail_open' => 'Charged under your "charge anyway" policy after a failed validation.',
+        'released' => 'Authorization released, not charged',
+        'released_rejected' => 'Your server rejected the payment.',
+        'released_fail_closed' => 'The validation failed and your "do not charge" policy applied.',
+        'failed' => 'Payment failed',
+        'event' => 'Event :type',
+        'event_published' => 'Sent to your webhook endpoints as:',
+        'event_pending' => 'Not sent to your endpoints yet.',
+    ],
+
 ];

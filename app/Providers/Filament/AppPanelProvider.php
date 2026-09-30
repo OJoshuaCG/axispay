@@ -13,9 +13,12 @@ use App\Modules\Identity\Filament\Resources\Users\UserResource;
 use App\Modules\Identity\Http\Middleware\RequireTwoFactorForSensitiveUsers;
 use App\Modules\Legal\Filament\Pages\TenantLegalSettings;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\PaymentLinkResource;
+use App\Modules\Payments\Filament\Resources\Payments\PaymentResource;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
 use App\Modules\Tenancy\Http\Middleware\ApplyTenantTimezone;
 use App\Modules\Tenancy\Http\Middleware\ResolveTenantContext;
+use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\WebhookEndpointResource;
 use App\Support\Filament\PanelDefaults;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Pages\Dashboard;
@@ -45,12 +48,14 @@ final class AppPanelProvider extends PanelProvider
             ->multiFactorAuthenticationRequiredMiddlewareName(RequireTwoFactorForSensitiveUsers::class)
             ->resources([
                 PaymentLinkResource::class,
+                PaymentResource::class,
                 UserResource::class,
                 RoleResource::class,
                 AuditLogResource::class,
                 ApiKeyResource::class,
+                WebhookEndpointResource::class,
             ])
-            ->pages([Dashboard::class, StripeConnection::class, TenantBrandingSettings::class, TenantLegalSettings::class])
+            ->pages([Dashboard::class, StripeConnection::class, TenantBrandingSettings::class, TenantLegalSettings::class, PrePaymentValidationSettings::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([
                 Authenticate::class,
