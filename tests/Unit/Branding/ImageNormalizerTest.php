@@ -10,7 +10,8 @@ use Tests\Support\BrandingTestHelpers as Images;
 /*
  * The upload rules of plan section 18 (ADR-0053): the real type by its first
  * bytes, PNG/JPEG/WebP only, size and dimension limits, re-encoded to PNG
- * without metadata, transparency kept, scaled down to 400 × 120.
+ * without metadata, transparency kept, scaled down to the merchant's logo
+ * box, 800 × 240 (ADR-0056).
  */
 
 function normalizerRejection(string $bytes): ImageRejection
@@ -72,16 +73,16 @@ it('refuses images larger than 2000 × 2000 pixels', function (int $width, int $
 it('accepts exactly 2000 pixels and scales it down to the logo box', function (): void {
     $image = (new ImageNormalizer)->normalize(Images::png(2000, 600));
 
-    expect($image->width)->toBe(400)->and($image->height)->toBe(120);
+    expect($image->width)->toBe(800)->and($image->height)->toBe(240);
 });
 
-it('scales down to fit 400 × 120 keeping the proportions, and never scales up', function (int $width, int $height, int $expectedWidth, int $expectedHeight): void {
+it('scales down to fit 800 × 240 keeping the proportions, and never scales up', function (int $width, int $height, int $expectedWidth, int $expectedHeight): void {
     $image = (new ImageNormalizer)->normalize(Images::png($width, $height));
 
     expect([$image->width, $image->height])->toBe([$expectedWidth, $expectedHeight]);
 })->with([
-    'wide' => [800, 120, 400, 60],
-    'tall' => [100, 600, 20, 120],
+    'wide' => [1600, 120, 800, 60],
+    'tall' => [100, 600, 40, 240],
     'small' => [100, 30, 100, 30],
 ]);
 
@@ -115,7 +116,7 @@ it('explains each refusal in English and Spanish', function (string $locale): vo
     }
 })->with(['en', 'es']);
 
-it('fits platform logos into 1024 × 512 and keeps 400 × 120 as the default (tenant) box', function (int $width, int $height, array $platform, array $tenant): void {
+it('fits platform logos into 1024 × 512 and merchant logos into the default 800 × 240 box', function (int $width, int $height, array $platform, array $tenant): void {
     $bytes = Images::png($width, $height);
     $normalizer = new ImageNormalizer;
 
@@ -125,10 +126,10 @@ it('fits platform logos into 1024 × 512 and keeps 400 × 120 as the default (te
     expect([$asPlatform->width, $asPlatform->height])->toBe($platform)
         ->and([$asTenant->width, $asTenant->height])->toBe($tenant)
         ->and([ImageNormalizer::PLATFORM_LOGO_MAX_WIDTH, ImageNormalizer::PLATFORM_LOGO_MAX_HEIGHT])->toBe([1024, 512])
-        ->and([ImageNormalizer::LOGO_MAX_WIDTH, ImageNormalizer::LOGO_MAX_HEIGHT])->toBe([400, 120]);
+        ->and([ImageNormalizer::LOGO_MAX_WIDTH, ImageNormalizer::LOGO_MAX_HEIGHT])->toBe([800, 240]);
 })->with([
-    '16:9 (1600 × 900)' => [1600, 900, [910, 512], [213, 120]],
-    'wide (1200 × 300)' => [1200, 300, [1024, 256], [400, 100]],
-    'square (2000 × 2000)' => [2000, 2000, [512, 512], [120, 120]],
+    '16:9 (1600 × 900)' => [1600, 900, [910, 512], [427, 240]],
+    'wide (1200 × 300)' => [1200, 300, [1024, 256], [800, 200]],
+    'square (2000 × 2000)' => [2000, 2000, [512, 512], [240, 240]],
     'small (300 × 100), never enlarged' => [300, 100, [300, 100], [300, 100]],
 ]);

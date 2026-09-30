@@ -10,7 +10,11 @@ use App\Modules\Branding\Enums\LogoVariant;
 use App\Modules\Branding\Models\PlatformFavicon;
 use App\Modules\Branding\Models\PlatformLogo;
 use App\Modules\Branding\Models\PlatformSetting;
+use App\Modules\Branding\Models\TenantLogo;
 use App\Modules\Branding\Services\PlatformBrand;
+use App\Modules\Branding\Services\TenantLogos;
+use App\Modules\Tenancy\Models\Tenant;
+use App\Modules\Tenancy\TenantContext;
 use GdImage;
 use Illuminate\Support\Str;
 use LogicException;
@@ -95,6 +99,36 @@ final class BrandingTestHelpers
         ])->save();
 
         app(PlatformBrand::class)->forget();
+
+        return $logo;
+    }
+
+    /**
+     * Stores a merchant logo directly (bypassing the action) in the tenant's
+     * context (ADR-0056 part B), then drops the remembered logos.
+     */
+    public static function storeTenantLogo(Tenant $tenant, LogoVariant $variant = LogoVariant::Light, ?string $bytes = null, int $width = 40, int $height = 12): TenantLogo
+    {
+        $bytes ??= self::png($width, $height);
+
+        $logo = app(TenantContext::class)->runAsTenant($tenant->id, false, static function () use ($tenant, $variant, $bytes, $width, $height): TenantLogo {
+            $logo = (new TenantLogo)->forceFill([
+                'tenant_id' => $tenant->id,
+                'variant' => $variant,
+                'version' => strtolower((string) Str::ulid()),
+                'mime_type' => 'image/png',
+                'width' => $width,
+                'height' => $height,
+                'size_bytes' => strlen($bytes),
+                'sha256' => hash('sha256', $bytes),
+                'content' => $bytes,
+            ]);
+            $logo->save();
+
+            return $logo;
+        });
+
+        app(TenantLogos::class)->forget($tenant->id);
 
         return $logo;
     }

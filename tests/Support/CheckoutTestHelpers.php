@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Legal\Enums\LegalDocumentFormat;
+use App\Modules\Legal\Enums\LegalDocumentKind;
+use App\Modules\Legal\Models\TenantLegalDocument;
+use App\Modules\Legal\Services\TenantLegalDocuments;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\Enums\TenantStatus;
@@ -33,11 +37,40 @@ final class CheckoutTestHelpers
      */
     public static function scenario(?Closure $link = null, ?Closure $connection = null): array
     {
-        $tenant = Tenant::factory()->status(TenantStatus::Active)->create(['display_name' => 'Tienda Demo', 'support_email' => 'soporte@demo.test', 'privacy_notice_url' => 'https://demo.test/privacidad']);
+        $tenant = Tenant::factory()->status(TenantStatus::Active)->create(['display_name' => 'Tienda Demo', 'support_email' => 'soporte@demo.test']);
+        self::legalDocument($tenant, LegalDocumentKind::Privacy, url: 'https://demo.test/privacidad');
         GatewayTestHelpers::connection($tenant, false, $connection);
         $fake = FakePaymentGateway::install();
 
         return [$tenant, ApiTestHelpers::link($tenant, false, $link), $fake];
+    }
+
+    /**
+     * Publishes one of the tenant's legal documents (ADR-0056): a link when
+     * $url is given, otherwise a text with $body.
+     */
+    public static function legalDocument(Tenant $tenant, LegalDocumentKind $kind, ?string $body = null, ?string $url = null): TenantLegalDocument
+    {
+        return app(TenantContext::class)->runAsTenant($tenant->id, false, static function () use ($tenant, $kind, $body, $url): TenantLegalDocument {
+            $document = TenantLegalDocument::query()->where('kind', $kind->value)->first() ?? (new TenantLegalDocument)->forceFill(['tenant_id' => $tenant->id, 'kind' => $kind]);
+            $document->forceFill([
+                'format' => $url !== null ? LegalDocumentFormat::Url : LegalDocumentFormat::Text,
+                'body' => $url !== null ? null : ($body ?? 'Texto de ejemplo.'),
+                'url' => $url,
+            ])->save();
+            app(TenantLegalDocuments::class)->forget($tenant->id);
+
+            return $document;
+        });
+    }
+
+    /** Removes one of the tenant's legal documents. */
+    public static function removeLegalDocument(Tenant $tenant, LegalDocumentKind $kind): void
+    {
+        app(TenantContext::class)->runAsTenant($tenant->id, false, static function () use ($kind): void {
+            TenantLegalDocument::query()->where('kind', $kind->value)->delete();
+        });
+        app(TenantLegalDocuments::class)->forget($tenant->id);
     }
 
     /**

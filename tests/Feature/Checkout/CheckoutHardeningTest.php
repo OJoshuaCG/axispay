@@ -8,6 +8,7 @@ use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
+use App\Modules\Legal\Enums\LegalDocumentKind;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
 use App\Modules\PaymentLinks\Actions\ExpirePaymentLink;
 use App\Modules\PaymentLinks\Data\CancelPaymentLinkData;
@@ -217,9 +218,9 @@ it('keeps a rejection: a failed void is retried as a void, and the merchant is n
 
 // Item 5 -------------------------------------------------------------------
 
-it('collects no payer data when the tenant has no privacy notice URL', function (): void {
+it('collects no payer data when the tenant has no privacy notice', function (): void {
     [$tenant, $link] = Checkout::scenario(static fn ($f) => $f->state(['payer_fields_config' => ['email' => 'required', 'full_name' => 'hidden', 'phone' => 'hidden', 'company_name' => 'hidden', 'billing_address' => 'hidden', 'tax_id' => 'hidden', 'notes' => 'hidden']]));
-    $tenant->forceFill(['privacy_notice_url' => null])->save();
+    Checkout::removeLegalDocument($tenant, LegalDocumentKind::Privacy);
 
     get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->assertDontSee('payer[email]', false)->assertDontSee('Tus datos');
     Checkout::pay($link, body: ['payer' => []])->assertOk()->assertJson(['outcome' => 'paid']);

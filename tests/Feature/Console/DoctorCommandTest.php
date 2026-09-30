@@ -267,3 +267,41 @@ it('does not warn about disconnected connections', function (): void {
     expect($output)->not->toContain('Stripe Connect events (test)')
         ->and($output)->not->toContain('can charge but');
 });
+
+it('warns without failing when APP_URL is http but payment links would use https', function (): void {
+    config(['app.url' => 'http://app.localhost', 'axispay.links.public_base_url' => null]);
+
+    expect(Artisan::call('axispay:doctor'))->toBe(0);
+    expect(Artisan::output())
+        ->toContain('Pay links base URL')
+        ->toContain('https://pay.localhost')
+        ->toContain('set AXISPAY_PAY_BASE_URL=http://<pay host>');
+});
+
+it('warns when APP_URL is https but AXISPAY_PAY_BASE_URL serves links over http', function (): void {
+    config(['app.url' => 'https://app.localhost', 'session.secure' => true, 'axispay.links.public_base_url' => 'http://pay.localhost']);
+
+    expect(Artisan::call('axispay:doctor'))->toBe(0);
+    expect(Artisan::output())->toContain('payment links use http://');
+});
+
+it('reports the pay links scheme as matching APP_URL', function (string $appUrl, ?string $payBase): void {
+    config(['app.url' => $appUrl, 'session.secure' => str_starts_with($appUrl, 'https'), 'axispay.links.public_base_url' => $payBase]);
+
+    Artisan::call('axispay:doctor');
+
+    $output = Artisan::output();
+
+    expect($output)->toContain('matches the APP_URL scheme (')
+        ->and(str_contains($output, 'payment links use'))->toBeFalse();
+})->with([
+    'http with the base URL' => ['http://app.localhost', 'http://pay.localhost:8000'],
+    'https without it' => ['https://app.localhost', null],
+]);
+
+it('fails when AXISPAY_PAY_BASE_URL has no scheme', function (): void {
+    config(['axispay.links.public_base_url' => 'pay.localhost']);
+
+    expect(Artisan::call('axispay:doctor'))->toBe(1);
+    expect(Artisan::output())->toContain('AXISPAY_PAY_BASE_URL has no http:// or https:// scheme');
+});

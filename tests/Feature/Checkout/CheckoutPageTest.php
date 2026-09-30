@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use App\Modules\Checkout\Actions\RecordCheckoutOpening;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
-use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Models\DomainEvent;
 use Illuminate\Support\Carbon;
@@ -175,7 +174,6 @@ it('treats an empty user agent as a previewer', function (): void {
 
 it('lays out the form as the design spec says (iteration 10)', function (): void {
     [, $link] = Checkout::scenario(static fn ($f) => $f->state(['payer_fields_config' => ['phone' => 'required']]));
-    Tenant::query()->whereKey($link->tenant_id)->update(['privacy_notice_url' => 'https://demo.test/privacidad']);
 
     $html = (string) get(payUrl('/l/'.$link->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()->getContent();
     $form = substr($html, (int) strpos($html, '<form id="checkout-form"'));

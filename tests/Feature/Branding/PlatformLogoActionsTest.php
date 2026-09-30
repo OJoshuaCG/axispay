@@ -76,7 +76,7 @@ it('stores the re-encoded logo and audits the change in the platform log', funct
 
     expect($logo->variant)->toBe(LogoVariant::Light)
         ->and($logo->mime_type)->toBe('image/png')
-        // The platform box (1024 × 512), not the tenant one (400 × 120).
+        // The platform box (1024 × 512), not the merchant one (800 × 240).
         ->and([$logo->width, $logo->height])->toBe([910, 512])
         ->and($logo->size_bytes)->toBe(strlen($logo->content))
         ->and($logo->sha256)->toBe(hash('sha256', $logo->content))

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Modules\Access\Enums\SystemRole;
+use App\Modules\Branding\Enums\LogoVariant;
 use App\Modules\Checkout\Actions\UnblockCheckout;
+use App\Modules\Legal\Enums\LegalDocumentKind;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ViewPaymentLink;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -11,6 +13,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 use Tests\Support\ApiTestHelpers;
+use Tests\Support\BrandingTestHelpers as Images;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 use Tests\Support\GatewayTestHelpers;
 
@@ -39,6 +42,9 @@ const REVIEWED_PAY_ROUTES = [
     'checkout.attempts.store' => 'Public token through CheckoutLinkResolver; the attempt is the link\'s own (claim under the link lock).',
     'checkout.attempts.continue' => 'Public token; the attempt comes from this session for this link and must belong to it (tested below).',
     'checkout.sandbox.next-action' => 'Sandbox only (local/testing); public token through CheckoutLinkResolver.',
+    'checkout.legal' => 'Public token through CheckoutLinkResolver; the document is read through the tenant scope of that link (cross-tenant case in Checkout/CheckoutLegalTest).',
+    'checkout.merchant-logo' => 'Public token through CheckoutLinkResolver; the logo is read in that link\'s tenant (and by its tenant_id), so another merchant\'s version answers 404 (tested below).',
+    'checkout.platform-legal' => 'Platform documents only (no tenant data, no parameters).',
     'checkout.fallback' => 'The uniform 404 page.',
 ];
 
@@ -74,6 +80,36 @@ it('refuses to continue an attempt of another link or tenant from the session, w
 
     expect($fake->calls)->toHaveCount($calls);
 })->with(['other link', 'other tenant']);
+
+it('shows a link\'s legal document only from that link\'s merchant, and 404 for a document only another tenant has (ADR-0056)', function (): void {
+    [$a] = Checkout::scenario();
+    [$b, $linkB] = Checkout::scenario();
+    Checkout::legalDocument($a, LegalDocumentKind::Terms, body: 'Solo del comercio A.');
+    Checkout::removeLegalDocument($b, LegalDocumentKind::Terms);
+
+    get(payUrl('/l/'.$linkB->public_token.'/legal/terms'))->assertNotFound()->assertDontSee('Solo del comercio A.');
+    get(payUrl('/l/'.$linkB->public_token))->assertOk()->assertDontSee('Solo del comercio A.');
+});
+
+it('serves under a link only its own merchant\'s logo, and shows only that logo (ADR-0056)', function (): void {
+    [$a, $linkA] = Checkout::scenario();
+    [$b, $linkB] = Checkout::scenario();
+    $logoA = Images::storeTenantLogo($a);
+    $darkA = Images::storeTenantLogo($a, LogoVariant::Dark);
+    $logoB = Images::storeTenantLogo($b);
+
+    // Tenant A's versions under tenant B's link (and the other way round): 404.
+    get(payUrl('/l/'.$linkB->public_token.'/logo/light/'.$logoA->version.'.png'))->assertNotFound();
+    get(payUrl('/l/'.$linkB->public_token.'/logo/dark/'.$darkA->version.'.png'))->assertNotFound();
+    get(payUrl('/l/'.$linkA->public_token.'/logo/light/'.$logoB->version.'.png'))->assertNotFound();
+
+    // Each link serves and shows its own merchant's logo only.
+    get(payUrl('/l/'.$linkB->public_token.'/logo/light/'.$logoB->version.'.png'))->assertOk();
+    get(payUrl('/l/'.$linkB->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk()
+        ->assertSee($logoB->version)
+        ->assertDontSee($logoA->version)
+        ->assertDontSee($darkA->version);
+});
 
 it('reviews every pay-host route for isolation', function (): void {
     $payHost = config()->string('axispay.surfaces.pay');
