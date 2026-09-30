@@ -70,6 +70,8 @@
         default => "\u{2212}",
     };
 
+    // '' when neutral: filtered out of the class list below, so no stray
+    // double space is left before the caller's classes.
     $color = match (true) {
         ! $valid || ! $signed || $decimal->isZero() => '',
         $decimal->isPositive() => 'text-amount-positive',
@@ -82,9 +84,9 @@
 @endphp
 
 @if ($separatorAt !== false)
-    <span {{ $attributes->class(['amount inline-flex flex-wrap items-baseline gap-x-2', $color])->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}><span class="whitespace-nowrap">{{ $sign }}{{ mb_substr($formatted, 0, $separatorAt) }}</span> <span @class([$codeClass])>{{ mb_substr($formatted, $separatorAt + 1) }}</span></span>
+    <span {{ $attributes->class(array_filter(['amount inline-flex flex-wrap items-baseline gap-x-2', $color]))->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}><span class="whitespace-nowrap">{{ $sign }}{{ mb_substr($formatted, 0, $separatorAt) }}</span> <span @class([$codeClass])>{{ mb_substr($formatted, $separatorAt + 1) }}</span></span>
 @elseif ($valid)
-    <span {{ $attributes->class(['amount whitespace-nowrap', $color])->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}>{{ $sign }}{{ $formatted }}</span>
+    <span {{ $attributes->class(array_filter(['amount whitespace-nowrap', $color]))->merge(['lang' => \App\Support\Locales::formattingLanguageTag($locale)]) }}>{{ $sign }}{{ $formatted }}</span>
 @else
     <span {{ $attributes->class('amount whitespace-nowrap text-fg-secondary') }}><span aria-hidden="true">&mdash;</span><span class="sr-only">{{ __('ui.amount.unavailable') }}</span></span>
 @endif
