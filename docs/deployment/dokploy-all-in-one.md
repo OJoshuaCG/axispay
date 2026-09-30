@@ -392,10 +392,13 @@ On every machine that opens the site, point the four names to the Dokploy server
    AXISPAY_APP_HOST=app.axispay.test
    AXISPAY_ADMIN_HOST=admin.axispay.test
    AXISPAY_PAY_HOST=pay.axispay.test
+   AXISPAY_PAY_BASE_URL=http://pay.axispay.test
    SESSION_SECURE_COOKIE=false
    ```
 
    With `SESSION_SECURE_COOKIE=true` over HTTP, the browser drops the session cookie and every sign-in fails with `419 Page Expired`.
+
+   `AXISPAY_PAY_BASE_URL` is only for an environment without TLS like this one: without it, payment links and every checkout request use `https://` plus `AXISPAY_PAY_HOST`, so the payment page opens but its payment requests fail. Leave it out (empty) wherever HTTPS is served. `axispay:doctor` warns when the scheme of the payment links does not match `APP_URL`.
 
 ### Caveats over plain HTTP
 

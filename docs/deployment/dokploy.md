@@ -128,6 +128,7 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `AXISPAY_APP_HOST` | yes | `app.example.com` | " |
 | `AXISPAY_ADMIN_HOST` | yes | `admin.example.com` | " |
 | `AXISPAY_PAY_HOST` | yes | `pay.example.com` | " |
+| `AXISPAY_PAY_BASE_URL` | no | `http://pay.staging.example.com` | Leave empty in production: payment links and every checkout request then use `https://` plus `AXISPAY_PAY_HOST`. Set it only on an environment served without TLS, with the scheme it really uses; otherwise the checkout opens but its payment requests go to `https://` and fail. Applies to existing links too (the URL is never stored). Needs a redeploy |
 | `DB_CONNECTION` | yes | `mariadb` | Only MariaDB is supported |
 | `DB_HOST` / `DB_PORT` | yes | `db.internal.example.com` / `3306` | External database server |
 | `DB_DATABASE` | yes | `axispay` | Different per environment |
@@ -245,6 +246,8 @@ GATEWAY_CREDENTIALS_KEY_VERSION=${{environment.GATEWAY_CREDENTIALS_KEY_VERSION}}
 The workers and the scheduler need the Stripe and `GATEWAY_CREDENTIALS_*` variables too: they process the incoming webhooks and run the daily api_key health check.
 
 Every Application starts the application, so every one of them needs `TRUSTED_PROXIES` and both Turnstile keys. Without them the container refuses to start in production. The image build itself needs none of them.
+
+Only on an environment served without TLS (for example a staging server on plain `http://`): add `AXISPAY_PAY_BASE_URL` with the real scheme and pay host to the shared variables and reference it in all four Applications (the workers build link URLs for e-mails too). Leave it out everywhere else; do not reference it when it is not defined.
 
 `web`-only settings:
 
