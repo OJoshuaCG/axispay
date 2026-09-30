@@ -10,6 +10,7 @@ use App\Modules\ApiKeys\Filament\Resources\ApiKeys\Pages\ListApiKeys;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Filament\Resources\AuditLogs\Pages\ListAuditLogs;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Branding\Enums\LogoVariant;
 use App\Modules\Identity\Filament\Resources\Users\Pages\ListUsers;
 use App\Modules\Identity\Models\User;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ListPaymentLinks;
@@ -23,6 +24,7 @@ use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\ApiTestHelpers;
+use Tests\Support\BrandingTestHelpers as Images;
 
 use function Pest\Laravel\get;
 use function Pest\Laravel\withHeaders;
@@ -72,6 +74,8 @@ const REVIEWED_APP_ROUTES = [
     'app.session.ping' => 'Keep-alive (ADR-0040): no parameters, reads nothing, returns an empty 204.',
     'gateways.stripe.onboarding.return' => 'Connection resolved through the tenant scope; cross-tenant 404 covered by Gateways/GatewayIsolationTest.',
     'gateways.stripe.onboarding.refresh' => 'Connection resolved through the tenant scope; cross-tenant 404 covered by Gateways/GatewayIsolationTest.',
+    'app.branding.platform-logo' => 'Platform asset (ADR-0053): no tenant data and no tenant parameter, read from the platform table by variant and version only; cookie-less and sessionless, the same bytes for any signed-in tenant or guest, and a merchant\'s logo version answers 404 (tested below).',
+    'app.branding.favicon' => 'Platform asset (ADR-0053): no tenant data and no tenant parameter, read from the platform table by size and version only; cookie-less and sessionless, the same bytes for any signed-in tenant or guest (tested below).',
 ];
 
 /**
@@ -132,6 +136,31 @@ it('isolates tenant panel resources between tenants', function (string $slug, st
 
     assertTenantIsolation($viewer, $slug, $listPage, $own, $foreign, $hasRecordPage);
 })->with('isolated_app_resources');
+
+it('serves the platform logo and favicon identically to every tenant and to guests, never a merchant\'s logo (ADR-0053)', function (): void {
+    [$a, $b] = [activeTenant(), activeTenant()];
+    $merchantLogo = Images::storeTenantLogo($a);
+    $logoBytes = Images::png(30, 10);
+    $platformLogo = Images::storeLogo(LogoVariant::Light, $logoBytes);
+    $favicon = Images::storeFavicon()[32];
+    $assets = [Images::url($platformLogo) => $logoBytes, Images::faviconUrl($favicon) => $favicon->content];
+
+    foreach ([null, tenantUser($a, [SystemRole::Owner]), tenantUser($b, [SystemRole::Owner])] as $viewer) {
+        if ($viewer instanceof User) {
+            actingAsTenantUser($viewer);
+        }
+
+        // A merchant's logo version is unknown to the platform route: 404.
+        get(appUrl('/branding/platform-logo/light/'.$merchantLogo->version.'.png'))->assertNotFound();
+
+        foreach ($assets as $path => $bytes) {
+            $response = get(appUrl($path))->assertOk();
+
+            expect($response->getContent())->toBe($bytes)
+                ->and($response->headers->getCookies())->toBe([]);
+        }
+    }
+});
 
 it('covers every tenant-panel route with an isolation test', function (): void {
     $appHost = config()->string('axispay.surfaces.app');

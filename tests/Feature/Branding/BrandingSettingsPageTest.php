@@ -69,8 +69,12 @@ it('is only reachable with platform:branding:manage', function (): void {
 it('never lets a tenant user reach the page or its upload', function (): void {
     actingAsTenantUser(tenantUser());
 
-    // Not a page of the tenant panel, and the admin host has its own guard.
-    get(appUrl('/settings/branding'))->assertNotFound();
+    // The tenant panel's /settings/branding is the merchant's own Brand page
+    // (ADR-0056), never the platform one; the admin host has its own guard.
+    get(appUrl('/settings/branding'))
+        ->assertOk()
+        ->assertSee(__('branding.tenant.subheading'))
+        ->assertDontSee(__('branding.page.subheading'));
     get(adminUrl('/settings/branding'))->assertRedirect(adminUrl('/login'));
 
     expect(BrandingSettings::canAccess())->toBeFalse();

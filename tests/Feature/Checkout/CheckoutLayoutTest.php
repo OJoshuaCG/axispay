@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Modules\Legal\Enums\LegalDocumentKind;
+use App\Modules\PayerFields\Enums\PayerField;
+use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use Illuminate\Support\Facades\Blade;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 
@@ -50,7 +52,8 @@ it('shows a visible "Total to pay" label and splits the total so the code can wr
 
 it('keeps a separate hairline group for the card form only when payer fields are collected', function (): void {
     [, $withFields] = Checkout::scenario(static fn ($f) => $f->state(['payer_fields_config' => ['email' => 'required']]));
-    [, $withoutFields] = Checkout::scenario();
+    // Every field hidden: the scenario's merchant has a privacy notice, so the default optional email would be collected.
+    [, $withoutFields] = Checkout::scenario(static fn ($f) => $f->state(['payer_fields_config' => array_fill_keys(PayerField::values(), PayerFieldRequirement::Hidden->value)]));
 
     $form = static function (string $token): string {
         $html = (string) get(payUrl('/l/'.$token), LAYOUT_UA)->assertOk()->getContent();

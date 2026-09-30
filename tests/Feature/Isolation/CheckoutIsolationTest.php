@@ -46,6 +46,8 @@ const REVIEWED_PAY_ROUTES = [
     'checkout.merchant-logo' => 'Public token through CheckoutLinkResolver; the logo is read in that link\'s tenant (and by its tenant_id), so another merchant\'s version answers 404 (tested below).',
     'checkout.platform-legal' => 'Platform documents only (no tenant data, no parameters).',
     'checkout.fallback' => 'The uniform 404 page.',
+    'pay.branding.platform-logo' => 'Platform asset (ADR-0053): no tenant data and no tenant parameter, read from the platform table by variant and version only; cookie-less, the same bytes for every payer, and a merchant\'s logo version answers 404 (tested below).',
+    'pay.branding.favicon' => 'Platform asset (ADR-0053): no tenant data and no tenant parameter, read from the platform table by size and version only; cookie-less, the same bytes for every payer (tested below).',
 ];
 
 it('answers 404 for another tenant\'s link detail and never runs its unblock action', function (): void {
@@ -109,6 +111,27 @@ it('serves under a link only its own merchant\'s logo, and shows only that logo 
         ->assertSee($logoB->version)
         ->assertDontSee($logoA->version)
         ->assertDontSee($darkA->version);
+});
+
+it('serves the platform logo and favicon the same way under any link, and never a merchant\'s logo through them (ADR-0053)', function (): void {
+    [$a, $linkA] = Checkout::scenario();
+    $merchantLogo = Images::storeTenantLogo($a);
+    $logoBytes = Images::png(30, 10);
+    $platformLogo = Images::storeLogo(LogoVariant::Light, $logoBytes);
+    $favicon = Images::storeFavicon()[32];
+
+    // A merchant's logo version is unknown to the platform route: 404.
+    get(payUrl('/branding/platform-logo/light/'.$merchantLogo->version.'.png'))->assertNotFound();
+
+    // Visiting a link first (a payer session on the pay host) changes nothing.
+    get(payUrl('/l/'.$linkA->public_token), ['User-Agent' => 'Mozilla/5.0'])->assertOk();
+
+    foreach ([Images::url($platformLogo) => $logoBytes, Images::faviconUrl($favicon) => $favicon->content] as $path => $bytes) {
+        $response = get(payUrl($path))->assertOk();
+
+        expect($response->getContent())->toBe($bytes)
+            ->and($response->headers->getCookies())->toBe([]);
+    }
 });
 
 it('reviews every pay-host route for isolation', function (): void {
