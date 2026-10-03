@@ -1,6 +1,6 @@
 # ADR-0057: Outgoing webhooks in Phase 5: outbox, delivery attempts, retries and SSRF protection
 
-- **Status:** Proposed (Phase 5, slice A: backend only; the panel screens come in a later slice)
+- **Status:** Accepted (by the project owner, 2026-10-02)
 - **Date:** 2026-10-06
 - **Source:** master plan sections 7.6, 15.1-15.7, 17.3, 22 and 27 (Phase 5); [ADR-0008](0008-outgoing-webhooks-standard-webhooks.md), [ADR-0051](0051-checkout-and-card-payments-phase-4.md) (business events recorded since Phase 4).
 
@@ -24,4 +24,4 @@ Since Phase 4 every business event (a link opened, a payment that succeeded or f
 
 - The domain lookup itself cannot be cut short by the platform: a single lookup lasts at most what the servers' own name-resolution settings allow (about 30 seconds with their defaults). The platform starts no further lookup once the budget is spent, and the delivery job allows for that worst case. Operations should keep the resolution timeout of the worker servers short (one or two seconds, a single retry).
 - Deleting an endpoint deletes its delivery log; its events stay.
-- An egress proxy or dedicated outgoing addresses (plan 15.7 point 6), the 30-day retention of the delivery log, `GET /v1/events`, the panel screens and the integrator documentation are later slices of Phase 5.
+- Still open: an egress proxy or dedicated outgoing addresses (plan 15.7 point 6) and the deletion of delivery rows older than 30 days. The panel screens are in [ADR-0059](0059-panel-payments-history-and-phase-5-panel-screens.md), the event history of the API in [ADR-0060](0060-events-api-event-history.md) and the integrator documentation in [docs/guides/webhooks.md](../guides/webhooks.md).

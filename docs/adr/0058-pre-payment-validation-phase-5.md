@@ -1,6 +1,6 @@
 # ADR-0058: Pre-payment validation in Phase 5: how answers are read, failures, the alert and removing the URL
 
-- **Status:** Proposed (Phase 5, slice B: backend only; the panel screens come in a later slice)
+- **Status:** Accepted (by the project owner, 2026-10-02)
 - **Date:** 2026-10-07
 - **Source:** master plan sections 7.4, 7.6, 15.8 and 27 (Phase 5); [ADR-024](0024-pre-payment-validation.md), [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) (authorize, validate, capture), [ADR-0057](0057-outgoing-webhooks-delivery-phase-5.md) (signature and protection of merchant URLs shared with the webhooks).
 
@@ -58,4 +58,4 @@ There is no "disabled" state separate from removing the URL. Links can already b
 - The 5 seconds include looking up the merchant's domain and, as for webhooks, the address called is the canonical form of the one that was checked (a domain with a final dot is refused). When the lookup uses up the time, the call counts as a timeout and the merchant's policy applies. A single lookup cannot be cut short by the platform (it lasts at most what the servers' name-resolution settings allow), so in the worst case the payer waits longer than 5 seconds; operations should keep the resolution timeout of the servers short.
 - The payment's `pre_validation` block (in the outgoing payment events now, in the payments API in Phase 7) says whether the merchant approved, rejected, or failed and which policy was applied, so an integrator can review payments charged under `fail_open`.
 - Integrator documentation must explain the answer rules above, the warnings shown by "Test validation", and that removing the URL stops the charges of links created with validation.
-- Still open for later slices: the panel screens (settings, test button, alert, the validations in the link's detail), the `payment_link.canceled` event (not yet part of the outgoing event catalog), the currency conversion data of the call (Phase 6) and the per-tenant metrics of section 15.8.7.
+- Still open: the `payment_link.canceled` event (not yet part of the outgoing event catalog), the currency conversion data of the call (Phase 6) and the per-tenant metrics of section 15.8.7.

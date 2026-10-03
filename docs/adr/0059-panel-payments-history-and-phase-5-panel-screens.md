@@ -1,6 +1,6 @@
 # ADR-0059: Payment history in the tenant panel brought forward from Phase 8, and the Phase 5 panel screens
 
-- **Status:** Proposed (Phase 5, slice C)
+- **Status:** Accepted (by the project owner, 2026-10-02)
 - **Date:** 2026-10-08
 - **Source:** master plan sections 15.1, 15.8.1, 15.8.7, 17.1, 20.2 and 27 (Phases 5 and 8); [ADR-0057](0057-outgoing-webhooks-delivery-phase-5.md), [ADR-0058](0058-pre-payment-validation-phase-5.md), [ADR-0049](0049-panel-money-formatting-and-tenant-timezone.md) (money and time zone in the panel).
 
