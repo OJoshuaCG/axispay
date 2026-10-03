@@ -90,7 +90,9 @@ final class StripeApiKeyScenario
         $notFound = ['error' => ['type' => 'invalid_request_error', 'code' => 'resource_missing', 'message' => 'No such object.']];
         $allow = fn (string $permission, int $status, array $body): array => $this->permissions[$permission] ? [$status, $body] : [403, $denied];
 
-        $http->on('get', '/v1/account', StripeFixtures::account($this->accountId, $this->chargesEnabled, $this->country), $rk);
+        // Read when the request happens: tests tune the scenario (country,
+        // charges disabled) after `install()`.
+        $http->on('get', '/v1/account', fn (): array => [200, StripeFixtures::account($this->accountId, $this->chargesEnabled, $this->country)], $rk);
         $http->on('post', '/v1/tokens', ['id' => 'tok_PiiProbe0001', 'object' => 'token', 'type' => 'pii', 'livemode' => false, 'used' => false], $this->pkPrefix);
         $http->on('get', '/v1/tokens/*', fn (): array => $this->publishableKeyOtherAccount
             ? [404, $notFound]

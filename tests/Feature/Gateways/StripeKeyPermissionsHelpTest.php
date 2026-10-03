@@ -166,12 +166,14 @@ it('opens a read-only modal with every required identifier and the three dangero
 
     $component = Livewire::test(StripeConnection::class)
         ->mountAction('apiKeyPermissions')
-        ->assertActionMounted('apiKeyPermissions')
-        ->assertSee(__('gateways.permissions_help.heading'))
-        ->assertSee(__('gateways.permissions_help.dangerous.heading'))
-        ->assertSee(__('gateways.permissions_help.close'));
+        ->assertActionMounted('apiKeyPermissions');
 
-    $html = $component->html();
+    $component->assertMountedActionModalSee(__('gateways.permissions_help.heading'));
+    $component->assertMountedActionModalSee(__('gateways.permissions_help.dangerous.heading'));
+    $component->assertMountedActionModalSee(__('gateways.permissions_help.close'));
+
+    // The modal's own markup: the page's `html()` does not include modals.
+    $html = $component->getMountedActionModalHtml();
     $dangerous = dangerousBlock($html);
 
     foreach (StripeKeyPermissions::required() as $permission) {
@@ -189,13 +191,14 @@ it('puts the same help, collapsed, inside the connect and update keys forms', fu
     $owner = actingAsTenantUser(tenantUser());
 
     $connect = Livewire::test(StripeConnection::class)->mountAction('connectApiKey');
-    expect(str_contains($connect->html(), 'data-stripe-key-permissions'))->toBeTrue()
-        ->and(str_contains($connect->html(), e(__('gateways.permissions_help.form_heading'))))->toBeTrue();
+    $connectHtml = $connect->getMountedActionModalHtml();
+    expect(str_contains($connectHtml, 'data-stripe-key-permissions'))->toBeTrue()
+        ->and(str_contains($connectHtml, e(__('gateways.permissions_help.form_heading'))))->toBeTrue();
 
     GatewayTestHelpers::connection(tenantOf($owner), false, static fn ($factory) => $factory->apiKey());
 
     $update = Livewire::test(StripeConnection::class)->mountAction('updateKeys');
-    expect(str_contains($update->html(), 'data-stripe-key-permissions'))->toBeTrue();
+    expect(str_contains($update->getMountedActionModalHtml(), 'data-stripe-key-permissions'))->toBeTrue();
 });
 
 it('keeps the connect section, and its help, from users without gateway:manage', function (): void {
