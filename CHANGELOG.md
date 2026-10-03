@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **API integration guide** (`docs/api/integration-guide.md`): a self-contained
+  guide for the developer of another system, covering authentication and
+  scopes, creating and following payment links, idempotency, errors, the
+  events API, outgoing webhooks and the pre-payment validation callback, with
+  examples in curl, PHP, Node and Python.
+
 - **Event history in the API** (Phase 5, ADR-0060): `GET /v1/events` and
   `GET /v1/events/{id}` with the `events:read` scope. An event is the exact
   body that was or will be sent by webhook (frozen when the event happened),

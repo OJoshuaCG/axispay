@@ -16,7 +16,8 @@ Start with [`../rules.md`](../rules.md) (non-negotiable rules), then the plan.
 | [architecture.md](architecture.md) | Surfaces and hosts, request flow, modules, tenancy layers, identity and RBAC, audit, panels, i18n, data conventions |
 | [development.md](development.md) | Local setup with Docker MariaDB, environment keys, local accounts, quality checks, CI |
 | [../app/Modules/README.md](../app/Modules/README.md) | Module map and each module's public entry points |
-| [api/openapi.yaml](api/openapi.yaml) | Public API v1 contract (OpenAPI 3.1; endpoints arrive in Phase 3) |
+| [api/openapi.yaml](api/openapi.yaml) | Public API v1 contract (OpenAPI 3.1) |
+| [api/integration-guide.md](api/integration-guide.md) | Integrator guide: authentication, creating payment links, errors, events and webhooks |
 
 ## Frontend
 
