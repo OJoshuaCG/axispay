@@ -332,6 +332,10 @@ return [
         // request from that IP gets 429 for the rest of the minute.
         'failed_auth_per_minute' => (int) env('AXISPAY_API_FAILED_AUTH_PER_MINUTE', 30),
 
+        // Plan 10.8: `GET /v1/events` shows the events of the last N days
+        // (ADR-0060).
+        'events_retention_days' => 30,
+
         // Plan 21.3: days a closed tenant keeps read-only API access.
         'closed_tenant_read_days' => 30,
 

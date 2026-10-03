@@ -17,9 +17,12 @@ use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ListPaymentLi
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Filament\Resources\Payments\Pages\ListPayments;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Shared\Ids\PrefixedId;
+use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
 use App\Modules\Webhooks\Actions\ResendWebhookDelivery;
+use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Enums\WebhookDeliveryStatus;
 use App\Modules\Webhooks\Enums\WebhookDeliveryTrigger;
 use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
@@ -279,12 +282,26 @@ it('covers every tenant-panel route with an isolation test', function (): void {
  */
 function isolatedApiRoutes(): array
 {
+    // Tenant B's event history gets one event, whose ID the show case asks for.
+    $foreignEventId = static function (PaymentLink $foreign): string {
+        $tenant = Tenant::query()->findOrFail($foreign->tenant_id);
+        WebhookTestHelpers::record($tenant, DomainEventType::PaymentLinkOpened);
+
+        return PrefixedId::encode(ResourceType::Event, WebhookTestHelpers::events($tenant)[0]->id);
+    };
+
     $headers = static fn (string $key): array => ApiTestHelpers::headers($key, 'isolation-'.bin2hex(random_bytes(4)));
 
     return [
         'api.v1.payment_links.show' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/payment_links/'.$foreign->prefixedId())),
         'api.v1.payment_links.cancel' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links/'.$foreign->prefixedId().'/cancel')),
         'api.v1.payment_links.index' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/payment_links?client_reference_id='.$foreign->client_reference_id)),
+        'api.v1.events.show' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/events/'.$foreignEventId($foreign))),
+        'api.v1.events.index' => static function (string $key, PaymentLink $foreign) use ($foreignEventId, $headers): TestResponse {
+            $foreignEventId($foreign);
+
+            return withHeaders($headers($key))->getJson(apiUrl('v1/events'));
+        },
         // Creating never takes another tenant's ID; the new link belongs to the key's tenant.
         'api.v1.payment_links.store' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links'), ApiTestHelpers::body(['client_reference_id' => $foreign->client_reference_id])),
     ];
@@ -305,7 +322,7 @@ it('isolates every API route between tenants', function (string $name, Closure $
     assert($response instanceof TestResponse);
 
     match ($name) {
-        'api.v1.payment_links.index' => $response->assertOk()->assertJsonCount(0, 'data'),
+        'api.v1.payment_links.index', 'api.v1.events.index' => $response->assertOk()->assertJsonCount(0, 'data'),
         'api.v1.payment_links.store' => $response->assertCreated()->assertJsonMissingPath('error'),
         default => $response->assertNotFound()->assertJsonPath('error.code', 'resource_not_found'),
     };

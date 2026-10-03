@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Event history in the API** (Phase 5, ADR-0060): `GET /v1/events` and
+  `GET /v1/events/{id}` with the `events:read` scope. An event is the exact
+  body that was or will be sent by webhook (frozen when the event happened),
+  so integrators can confirm a webhook or catch up after downtime. Newest
+  first, same cursor pagination and rate limit as the other lists, filters
+  by `type` and `created[gte|lte]`, the last 30 days only, the test `ping`
+  event never shown, and other accounts' or the other mode's events answer
+  `404`.
+- **API contract and merchant guide completed for Phase 5**: the OpenAPI file
+  documents the events endpoints, the outgoing webhooks (headers, body,
+  every event type, the `pre_validation` block of payments) and the
+  pre-payment validation callback with its answer; the webhook guide adds
+  signature verification and validation server examples in PHP, Node and
+  Python, and the stock-reservation recommendation.
+- ADR-0057, ADR-0058 and ADR-0059 accepted by the project owner
+  (2026-10-02).
+
 - **"How it works" in the webhook screens**: a help slide-over on the webhook
   endpoints list, each endpoint's page and the pre-payment validation page,
   also reachable from their empty states. For the merchant's developer:
@@ -45,8 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Merchant guide to webhooks and pre-payment validation**
   (`docs/guides/webhooks.md`).
 
-- **Outgoing webhooks, backend** (Phase 5, ADR-0057; the panel screens come
-  later):
+- **Outgoing webhooks, backend** (Phase 5, ADR-0057):
   - Webhook endpoints per tenant and mode (at most 5 per mode), with the
     events they subscribe to or all of them, a signing secret shown once,
     stored encrypted, revealed again only after re-authentication, and a
@@ -64,8 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     reserved destinations, the checked addresses pinned for the request, no
     redirects; a blocked destination is never retried.
 
-- **Pre-payment validation, backend** (Phase 5, ADR-0058; the panel screens
-  come later):
+- **Pre-payment validation, backend** (Phase 5, ADR-0058):
   - One validation URL per mode with its own signing secret (shown once,
     stored encrypted, rotation keeping the previous one valid for 24 hours),
     a default for new links, and a failure policy: do not charge (default)

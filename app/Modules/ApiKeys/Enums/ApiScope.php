@@ -7,8 +7,9 @@ namespace App\Modules\ApiKeys\Enums;
 /**
  * Permissions an API key can hold (plan 10.2, 17.1): a subset of the tenant
  * permission catalog. `refunds:create` is the API name of `payments:refund`.
- * Only the `links:*` scopes have endpoints in Phase 3; the others are
- * accepted so keys do not need to be reissued when their endpoints arrive.
+ * The `links:*` scopes (Phase 3) and `events:read` (Phase 5) have endpoints;
+ * the others are accepted so keys do not need to be reissued when their
+ * endpoints arrive.
  */
 enum ApiScope: string
 {
