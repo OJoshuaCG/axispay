@@ -2,7 +2,7 @@
 
 This guide is for merchants and their developers. It explains the two ways AxisPay talks to your server during a payment, how to set them up in the panel, how to check that a request really comes from us, and what to do when something fails.
 
-Source of truth: master plan sections 15.1 to 15.8 (Spanish), [ADR-0057](../adr/0057-outgoing-webhooks-delivery-phase-5.md) (event delivery) and [ADR-0058](../adr/0058-pre-payment-validation-phase-5.md) (pre-payment validation).
+Source of truth: master plan sections 15.1 to 15.8 (Spanish), [ADR-0057](../adr/0057-outgoing-webhooks-delivery-phase-5.md) (event delivery) and [ADR-0058](../adr/0058-pre-payment-validation-phase-5.md) (pre-payment validation) and [ADR-0060](../adr/0060-events-api-event-history.md) (event history in the API).
 
 ## Two different calls
 
@@ -67,7 +67,17 @@ Each event has an ID (`evt_…`), a type, the mode, the time it happened and the
 - Answer **within 10 seconds** (5 seconds to open the connection).
 - **Deduplicate by the event ID** (the `webhook-id` header). Delivery is "at least once": the same event can arrive more than once.
 - **Do not rely on the order** of events. Use the time in the event and the state of the object.
-- Before releasing goods, you can confirm a payment by reading it from the API (fetch-back).
+- Before releasing goods, you can confirm an event by reading it from the API (fetch-back): `GET /v1/events/{id}` with the event ID returns exactly the body you received. See [Event history](#event-history-in-the-api).
+
+### Event history in the API
+
+Every event is stored when it happens, whether or not an endpoint was subscribed, and can be read for **30 days** with an API key that has the `events:read` scope (set when the key is created in the panel):
+
+- `GET /v1/events/{id}` returns one event: exactly the body that was or will be sent to your endpoints, byte for byte the same in every retry and resend. Use it to confirm a webhook before acting on it, or to read an event whose delivery you missed.
+- `GET /v1/events` lists events, newest first, with the same cursor pagination as the other lists (`limit`, `starting_after`, `ending_before`, and `has_more` in the answer). Filter with `type` (one event type) and `created[gte]` / `created[lte]`. After downtime, list from the last event you processed and handle what is missing, deduplicating by event ID.
+- The test event (`ping`) is not part of the history. Test and live keys only see the events of their own mode, and an event of another account answers `404`.
+
+The full contract is in [`docs/api/openapi.yaml`](../api/openapi.yaml).
 
 ### Retries, resends and automatic disabling
 
@@ -130,8 +140,20 @@ HTTP status **200**, a JSON object, at most **4 KB**, within **5 seconds** in to
 ### Guarantees and good practice
 
 - **An approval does not guarantee the charge.** After you approve, the charge can still fail. Confirm the sale only with the `payment.succeeded` event or by reading the payment from the API.
-- If you reserve stock when you approve, release it if `payment.succeeded` does not arrive within a reasonable time; 15 minutes is a good default.
+- If you reserve stock when you approve, release it if `payment.succeeded` does not arrive within a reasonable time; 15 minutes is a good default. See [Reserving stock safely](#reserving-stock-safely).
 - Expect several validations for one link when the payer retries; tell them apart by their sequence number and ID.
+
+### Reserving stock safely
+
+An approval is a promise to let the payment go ahead, not proof that it was paid: the charge can still fail after you approve. A safe pattern for stock:
+
+1. When you **approve**, reserve the stock with an expiry of about **15 minutes**, and remember which payment link (and validation call ID) the reservation belongs to.
+2. When `payment.succeeded` (or `payment_link.paid`) arrives for that link, turn the reservation into a sale. Check the event against your order first (amount, currency, your `client_reference_id`).
+3. If `payment.succeeded` does not arrive before the expiry, release the stock. A payer who retries after a declined card is validated again and gets a new reservation; treat a second validation of the same link as a renewal of the same reservation, not as a second item.
+4. When you **reject**, reserve nothing: the card reservation is released and nothing is charged.
+5. A late event is possible after the expiry. If `payment.succeeded` arrives after you released the stock, reserve it again if you can, or refund the payment.
+
+Never ship goods on the approval alone, and never on the payer returning to your site: use the event, or confirm it by reading it from the [event history](#event-history-in-the-api).
 
 ### Removing it
 
@@ -153,6 +175,274 @@ Every request we send (events and validations) follows the [Standard Webhooks](h
 4. It rejects timestamps more than 5 minutes away from the current time, which stops replayed requests.
 
 Then deduplicate by `webhook-id`. The pre-payment validation is authenticated in the other direction too: your server is reached over a verified TLS connection that we open.
+
+## Code examples
+
+Examples for a receiving server in PHP, Node and Python. They are small on purpose: adapt the error handling and storage to your application. Examples use the secret shown in the panel (`whsec_…`), kept in an environment variable and never in the code.
+
+### Verifying a request
+
+Use an official Standard Webhooks library when your language has one (for Node, `new Webhook(secret).verify(rawBody, headers)` from `standardwebhooks`; for Python, `Webhook(secret).verify(raw_body, headers)` from the package of the same name). If you prefer to verify by hand, these functions do exactly what [Verifying the signature](#verifying-the-signature) describes. The same function verifies events and validation calls; only the secret differs.
+
+**PHP**
+
+```php
+function verifyWebhook(string $secret, string $rawBody, array $headers, int $toleranceSeconds = 300): bool
+{
+    $id = $headers['webhook-id'] ?? '';
+    $timestamp = $headers['webhook-timestamp'] ?? '';
+
+    if ($id === '' || ! ctype_digit($timestamp) || abs(time() - (int) $timestamp) > $toleranceSeconds) {
+        return false;
+    }
+
+    $key = base64_decode(substr($secret, strlen('whsec_')), true);
+
+    if ($key === false) {
+        return false;
+    }
+
+    $expected = base64_encode(hash_hmac('sha256', "{$id}.{$timestamp}.{$rawBody}", $key, true));
+
+    foreach (explode(' ', $headers['webhook-signature'] ?? '') as $candidate) {
+        [$version, $signature] = array_pad(explode(',', $candidate, 2), 2, '');
+
+        if ($version === 'v1' && hash_equals($expected, $signature)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// In your controller or front script: the raw body, before any JSON parsing.
+$rawBody = file_get_contents('php://input');
+$headers = [
+    'webhook-id' => $_SERVER['HTTP_WEBHOOK_ID'] ?? '',
+    'webhook-timestamp' => $_SERVER['HTTP_WEBHOOK_TIMESTAMP'] ?? '',
+    'webhook-signature' => $_SERVER['HTTP_WEBHOOK_SIGNATURE'] ?? '',
+];
+
+if (! verifyWebhook(getenv('AXISPAY_WEBHOOK_SECRET'), $rawBody, $headers)) {
+    http_response_code(400);
+    exit;
+}
+
+$event = json_decode($rawBody, true, flags: JSON_THROW_ON_ERROR);
+// Deduplicate by $headers['webhook-id'], store the event, answer 2xx, process in the background.
+http_response_code(200);
+```
+
+**Node (Express)**
+
+```js
+import crypto from 'node:crypto';
+import express from 'express';
+
+function verifyWebhook(secret, rawBody, headers, toleranceSeconds = 300) {
+  const id = headers['webhook-id'];
+  const timestamp = headers['webhook-timestamp'];
+
+  if (!id || !/^\d+$/.test(timestamp ?? '') || Math.abs(Date.now() / 1000 - Number(timestamp)) > toleranceSeconds) {
+    return false;
+  }
+
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+  const expected = crypto.createHmac('sha256', key).update(`${id}.${timestamp}.`).update(rawBody).digest();
+
+  return (headers['webhook-signature'] ?? '').split(' ').some((candidate) => {
+    const [version, signature] = candidate.split(',');
+    if (version !== 'v1' || !signature) return false;
+    const given = Buffer.from(signature, 'base64');
+    return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+  });
+}
+
+const app = express();
+
+// express.raw keeps the body as the exact bytes received (req.body is a Buffer).
+app.post('/axispay/events', express.raw({ type: '*/*' }), (req, res) => {
+  if (!verifyWebhook(process.env.AXISPAY_WEBHOOK_SECRET, req.body, req.headers)) {
+    return res.sendStatus(400);
+  }
+
+  const event = JSON.parse(req.body.toString('utf8'));
+  // Deduplicate by req.headers['webhook-id'], store the event, answer 2xx, process in the background.
+  res.sendStatus(200);
+});
+```
+
+**Python (Flask)**
+
+```python
+import base64
+import hashlib
+import hmac
+import json
+import os
+import time
+
+from flask import Flask, request
+
+app = Flask(__name__)
+
+
+def verify_webhook(secret: str, raw_body: bytes, headers, tolerance_seconds: int = 300) -> bool:
+    msg_id = headers.get("webhook-id", "")
+    timestamp = headers.get("webhook-timestamp", "")
+
+    if not msg_id or not timestamp.isdigit() or abs(time.time() - int(timestamp)) > tolerance_seconds:
+        return False
+
+    key = base64.b64decode(secret.removeprefix("whsec_"))
+    signed = f"{msg_id}.{timestamp}.".encode() + raw_body
+    expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+
+    for candidate in headers.get("webhook-signature", "").split(" "):
+        version, _, signature = candidate.partition(",")
+        if version == "v1" and hmac.compare_digest(expected, signature):
+            return True
+
+    return False
+
+
+@app.post("/axispay/events")
+def receive_event():
+    raw_body = request.get_data()  # the exact bytes, before any JSON parsing
+
+    if not verify_webhook(os.environ["AXISPAY_WEBHOOK_SECRET"], raw_body, request.headers):
+        return "", 400
+
+    event = json.loads(raw_body)
+    # Deduplicate by request.headers["webhook-id"], store the event, answer 2xx, process in the background.
+    return "", 200
+```
+
+### Answering a pre-payment validation
+
+The call arrives with the same signature headers (signed with the validation URL's own secret) and the header `x-axispay-kind: pre_payment_validation`. Each example verifies the signature (with the function above), recognizes the test call of the panel's button, checks the amount against your own order, reserves the stock for 15 minutes and answers within a second or two. Answer `200` with a JSON body; anything else counts as a failure and your failure policy applies.
+
+The examples use your own functions `findOrder`, `reserveStock`; they stand for your application's logic. `reserveStock` should be idempotent for the same link, because a payer who retries is validated again.
+
+**PHP**
+
+```php
+$rawBody = file_get_contents('php://input');
+$headers = [
+    'webhook-id' => $_SERVER['HTTP_WEBHOOK_ID'] ?? '',
+    'webhook-timestamp' => $_SERVER['HTTP_WEBHOOK_TIMESTAMP'] ?? '',
+    'webhook-signature' => $_SERVER['HTTP_WEBHOOK_SIGNATURE'] ?? '',
+];
+
+if (! verifyWebhook(getenv('AXISPAY_VALIDATION_SECRET'), $rawBody, $headers)) {
+    http_response_code(400);
+    exit;
+}
+
+$call = json_decode($rawBody, true, flags: JSON_THROW_ON_ERROR);
+header('Content-Type: application/json');
+
+if ($call['test'] ?? false) {
+    // "Test validation" button: no real order behind it.
+    echo json_encode(['decision' => 'approve']);
+    exit;
+}
+
+$link = $call['data']['payment_link'];
+$charge = $call['data']['charge'];
+$order = findOrder($link['client_reference_id']);
+
+if ($order === null || $order->amount !== $charge['amount'] || $order->currency !== $charge['currency']) {
+    echo json_encode(['decision' => 'reject', 'reason_code' => 'order_mismatch', 'payer_message' => 'We could not confirm this order. Please contact the store.']);
+    exit;
+}
+
+if (! reserveStock($order, expiresInMinutes: 15)) {
+    echo json_encode(['decision' => 'reject', 'reason_code' => 'out_of_stock', 'payer_message' => 'One of the items is no longer available.', 'cancel_link' => true]);
+    exit;
+}
+
+echo json_encode(['decision' => 'approve']);
+```
+
+**Node (Express)**
+
+```js
+app.post('/axispay/validation', express.raw({ type: '*/*' }), async (req, res) => {
+  if (!verifyWebhook(process.env.AXISPAY_VALIDATION_SECRET, req.body, req.headers)) {
+    return res.sendStatus(400);
+  }
+
+  const call = JSON.parse(req.body.toString('utf8'));
+
+  if (call.test) {
+    // "Test validation" button: no real order behind it.
+    return res.json({ decision: 'approve' });
+  }
+
+  const { payment_link: link, charge } = call.data;
+  const order = await findOrder(link.client_reference_id);
+
+  if (!order || order.amount !== charge.amount || order.currency !== charge.currency) {
+    return res.json({
+      decision: 'reject',
+      reason_code: 'order_mismatch',
+      payer_message: 'We could not confirm this order. Please contact the store.',
+    });
+  }
+
+  if (!(await reserveStock(order, { expiresInMinutes: 15 }))) {
+    return res.json({
+      decision: 'reject',
+      reason_code: 'out_of_stock',
+      payer_message: 'One of the items is no longer available.',
+      cancel_link: true,
+    });
+  }
+
+  res.json({ decision: 'approve' });
+});
+```
+
+**Python (Flask)**
+
+```python
+@app.post("/axispay/validation")
+def pre_payment_validation():
+    raw_body = request.get_data()
+
+    if not verify_webhook(os.environ["AXISPAY_VALIDATION_SECRET"], raw_body, request.headers):
+        return "", 400
+
+    call = json.loads(raw_body)
+
+    if call.get("test"):
+        # "Test validation" button: no real order behind it.
+        return {"decision": "approve"}
+
+    link = call["data"]["payment_link"]
+    charge = call["data"]["charge"]
+    order = find_order(link["client_reference_id"])
+
+    if order is None or order.amount != charge["amount"] or order.currency != charge["currency"]:
+        return {
+            "decision": "reject",
+            "reason_code": "order_mismatch",
+            "payer_message": "We could not confirm this order. Please contact the store.",
+        }
+
+    if not reserve_stock(order, expires_in_minutes=15):
+        return {
+            "decision": "reject",
+            "reason_code": "out_of_stock",
+            "payer_message": "One of the items is no longer available.",
+            "cancel_link": True,
+        }
+
+    return {"decision": "approve"}
+```
+
+Flask turns a returned dictionary into a JSON answer with status 200 and the right content type.
 
 ## The test buttons
 

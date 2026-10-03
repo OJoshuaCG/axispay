@@ -2,10 +2,13 @@ openapi: 3.1.0
 info:
   title: AxisPay API
   version: v1
-  summary: Public API for creating and tracking payment links.
+  summary: Public API for creating and tracking payment links, and reading their events.
   description: |
     Contract of the public API v1 (master plan section 10; ADR-0048 for the
-    Phase 3 rules). Phase 3: payment links.
+    Phase 3 rules). Phase 3: payment links. Phase 5: the event history
+    (ADR-0060), and, under `webhooks`, what AxisPay sends to your server: the
+    events (ADR-0057) and the pre-payment validation call (ADR-0058). The
+    merchant guide is `docs/guides/webhooks.md`.
 
     Conventions (plan 10.1):
     - JSON UTF-8; `Content-Type: application/json` is required on requests with a body.
@@ -22,7 +25,7 @@ info:
     The prefix selects the mode; a test key never reaches live resources (another mode's
     resource answers `404`). A missing, unknown, revoked, expired or wrong-mode key, or a key of
     an account closed more than 30 days ago, answers `401 invalid_api_key`. Each endpoint needs a scope (`links:create`, `links:read`,
-    `links:cancel`); a key without it gets `403 insufficient_scope`. Keys are created and
+    `links:cancel`, `events:read`); a key without it gets `403 insufficient_scope`. Keys are created and
     revoked in the tenant panel only. After 30 failed authentications in a minute from the
     same IP, every request from it answers `429 rate_limited` for the rest of the minute.
 
@@ -66,6 +69,12 @@ security:
 tags:
   - name: Payment links
     description: Single-use, reopenable payment links (plan 10.5, ADR-006).
+  - name: Events
+    description: Event history for integrators (plan 10.8, ADR-0060).
+  - name: Outgoing webhooks
+    description: Events AxisPay sends to your endpoints (plan 15, ADR-0057). Described under `webhooks`.
+  - name: Pre-payment validation
+    description: The synchronous question AxisPay asks your server before charging (plan 15.8, ADR-0058). Described under `webhooks`.
 paths:
   /payment_links:
     post:
@@ -245,6 +254,184 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/ServerError' }
+  /events:
+    get:
+      tags: [Events]
+      operationId: listEvents
+      summary: List events
+      description: |
+        Scope `events:read`. The event history of the key's account and mode, newest first: every
+        event that was or will be sent by webhook, whether or not an endpoint is subscribed, of the
+        last 30 days. Each element is exactly the body of the webhook (see `Event`). The `ping`
+        test event is not part of the history. `starting_after` pages to older events,
+        `ending_before` to newer ones (not both). `created[gte]` and `created[lte]` refer to the
+        moment the event was stored. Unknown query parameters are ignored.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/EventStartingAfter'
+        - $ref: '#/components/parameters/EventEndingBefore'
+        - name: type
+          in: query
+          required: false
+          description: Only events of this type.
+          schema: { $ref: '#/components/schemas/EventType' }
+        - name: created[gte]
+          in: query
+          required: false
+          description: Stored at or after. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - name: created[lte]
+          in: query
+          required: false
+          description: Stored at or before. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: One page of events.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /events/{id}:
+    get:
+      tags: [Events]
+      operationId: retrieveEvent
+      summary: Retrieve an event
+      description: |
+        Scope `events:read`. The event with exactly the body that was or will be sent by webhook,
+        so it can be used to confirm a webhook before acting on it (fetch-back). Another account's
+        or mode's event, a `ping`, an event older than 30 days, an unknown ID and a wrong prefix
+        all answer `404`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: The event.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+webhooks:
+  event:
+    post:
+      tags: [Outgoing webhooks]
+      operationId: receiveEvent
+      summary: Event delivery (sent to your webhook endpoint)
+      description: |
+        Not an endpoint of this API: the request AxisPay sends to each webhook endpoint you
+        configured in the panel, for the events it subscribes to (plan 15; ADR-0008, ADR-0057).
+        Signed as [Standard Webhooks](https://www.standardwebhooks.com/): verify the signature on
+        the raw body with the endpoint's `whsec_` secret before parsing it, reject timestamps more
+        than 5 minutes from your clock, and deduplicate by `webhook-id` (the event ID).
+
+        Answer with any `2xx` status within 10 seconds (5 seconds to connect); anything else,
+        redirects included, is a failure. A failed delivery is retried immediately, then after
+        5 seconds, 5 minutes, 30 minutes, 2 hours, 5 hours, 10 hours and 10 hours (8 attempts in
+        about 27 hours), then abandoned. Delivery is at least once and the order is not
+        guaranteed. The body never changes between attempts. After a secret rotation the
+        previous secret keeps signing for 24 hours and `webhook-signature` holds both signatures
+        separated by a space. Only `https` URLs (ports 443 and 8443) are called, and redirects
+        are not followed. An endpoint failing for 5 days in a row is disabled.
+      parameters:
+        - { $ref: '#/components/parameters/WebhookId' }
+        - { $ref: '#/components/parameters/WebhookTimestamp' }
+        - { $ref: '#/components/parameters/WebhookSignature' }
+        - name: User-Agent
+          in: header
+          required: true
+          schema: { type: string, const: AxisPay-Webhooks/1.0 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Event'
+            examples:
+              payment.succeeded:
+                $ref: '#/components/examples/PaymentSucceededEvent'
+              payment.failed:
+                $ref: '#/components/examples/PaymentFailedEvent'
+      responses:
+        '2XX':
+          description: The event was received (the body of your answer is not used).
+  prePaymentValidation:
+    post:
+      tags: [Pre-payment validation]
+      operationId: receivePrePaymentValidation
+      summary: Pre-payment validation call (sent to your validation URL)
+      description: |
+        Not an endpoint of this API and not a webhook: a synchronous question AxisPay asks your
+        server, when a link has `pre_payment_validation` on, after the payer's card was authorized
+        and before it is charged (plan 15.8; ADR-024, ADR-0058). Your answer decides whether the
+        payment is charged.
+
+        Signed like the events (Standard Webhooks, with the validation URL's own secret), with
+        `webhook-id` = the call ID (`val_...`) and an extra header
+        `x-axispay-kind: pre_payment_validation`. Answer `200` with a JSON object of at most 4 KB
+        within 5 seconds in total (2 seconds to connect). The connection is retried once, at once,
+        only when it could not be opened; never after your server received the request.
+
+        Failures are: no answer in time, a connection or TLS error, a status other than `200`
+        (redirects are not followed), an invalid answer (not a JSON object, `decision` missing or
+        not `approve` or `reject`), and a destination blocked by the security rules. On a failure
+        the merchant's policy applies: `fail_closed` (default) does not charge, `fail_open`
+        charges and marks the payment `pre_validation.outcome = failed`. Unknown fields in the
+        answer are ignored. An approval does not guarantee the charge: confirm the sale with
+        `payment.succeeded` (or `GET /events`). If you reserve stock when approving, release it if
+        `payment.succeeded` does not arrive within a reasonable time (15 minutes is a good default).
+        A payer who retries after a declined card is validated again (`attempt_number`).
+      parameters:
+        - { $ref: '#/components/parameters/WebhookId' }
+        - { $ref: '#/components/parameters/WebhookTimestamp' }
+        - { $ref: '#/components/parameters/WebhookSignature' }
+        - name: x-axispay-kind
+          in: header
+          required: true
+          schema: { type: string, const: pre_payment_validation }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrePaymentValidationRequest'
+      responses:
+        '200':
+          description: Your decision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrePaymentValidationAnswer'
+              examples:
+                approve:
+                  value: { decision: approve }
+                reject:
+                  value:
+                    decision: reject
+                    reason_code: out_of_stock
+                    payer_message: One of the items is no longer available. Contact the store.
+                    cancel_link: false
 components:
   securitySchemes:
     apiKey:
@@ -292,6 +479,54 @@ components:
         pattern: '^plink_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
         examples:
           - plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+    EventId:
+      name: id
+      in: path
+      required: true
+      description: Event ID with its prefix (the `webhook-id` of its delivery).
+      schema:
+        type: string
+        pattern: '^evt_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        examples:
+          - evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9S
+    EventStartingAfter:
+      name: starting_after
+      in: query
+      required: false
+      description: An event ID; returns the events stored before it.
+      schema:
+        type: string
+    EventEndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      description: An event ID; returns the events stored after it.
+      schema:
+        type: string
+    WebhookId:
+      name: webhook-id
+      in: header
+      required: true
+      description: The event ID (`evt_...`), or the call ID (`val_...`) of a pre-payment validation. Stable across retries; deduplicate by it.
+      schema:
+        type: string
+    WebhookTimestamp:
+      name: webhook-timestamp
+      in: header
+      required: true
+      description: Seconds since 1970 when this attempt was signed (changes on every attempt).
+      schema:
+        type: integer
+    WebhookSignature:
+      name: webhook-signature
+      in: header
+      required: true
+      description: |
+        `v1,<base64 HMAC-SHA256>` of `{webhook-id}.{webhook-timestamp}.{raw body}` with the secret
+        (the base64-decoded part after `whsec_`). Several signatures separated by a space during
+        a secret rotation; one match is enough.
+      schema:
+        type: string
     RequestIdIn:
       name: X-Request-Id
       in: header
@@ -703,6 +938,247 @@ components:
         has_more:
           type: boolean
           description: More links exist in the direction paged.
+    EventType:
+      type: string
+      description: |
+        Event types (plan 15.2). Sent today: `payment_link.opened`, `payment_link.paid`,
+        `payment.processing`, `payment.succeeded`, `payment.failed`. Defined and subscribable but
+        not sent until their phase: `payment_link.created`, `payment_link.expired`,
+        `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`,
+        `dispute.created`, `dispute.closed`. `ping` (the panel's test event) is not subscribable
+        and is not in the event history. New types may be added: ignore the ones you do not know.
+      enum:
+        - payment_link.created
+        - payment_link.opened
+        - payment_link.paid
+        - payment_link.expired
+        - payment_link.canceled
+        - payment.processing
+        - payment.succeeded
+        - payment.failed
+        - refund.created
+        - refund.succeeded
+        - refund.failed
+        - dispute.created
+        - dispute.closed
+    PreValidation:
+      type: object
+      description: |
+        How the pre-payment validation of a payment ended (plan 15.8.5). Absent (`null` in
+        `payment.pre_validation`) when no validation applied.
+      required: [outcome]
+      properties:
+        outcome:
+          type: string
+          enum: [approved, rejected, failed]
+        policy_applied:
+          type: string
+          enum: [fail_open, fail_closed]
+          description: 'Only with `outcome: failed`. `fail_open` means the payment was charged without an answer; review it.'
+    PaymentStatus:
+      type: string
+      enum:
+        - requires_payment_method
+        - requires_confirmation
+        - requires_action
+        - requires_capture
+        - processing
+        - succeeded
+        - failed
+        - canceled
+    Payment:
+      type: object
+      description: |
+        The payment as an event carries it, frozen when the event happened. One payment is one
+        attempt at the gateway; a declined card does not create another. Our identifiers only:
+        no gateway IDs and no raw decline code.
+      required: [id, object, livemode, payment_link, status, amount, amount_minor, currency, late_payment, failure_count, failure, pre_validation, created_at]
+      properties:
+        id:
+          type: string
+          examples: [pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S]
+        object:
+          const: payment
+        livemode:
+          type: boolean
+        payment_link:
+          type: string
+          description: ID of the payment link.
+          examples: [plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S]
+        status:
+          $ref: '#/components/schemas/PaymentStatus'
+        amount:
+          type: string
+          examples: ['1500.00']
+        amount_minor:
+          type: integer
+          format: int64
+        currency:
+          $ref: '#/components/schemas/Currency'
+        late_payment:
+          type: boolean
+          description: The payment succeeded after its link expired or was canceled.
+        failure_count:
+          type: integer
+          description: Declined cards so far on this payment.
+        failure:
+          type: [object, 'null']
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum: [card_declined, insufficient_funds, expired_card, incorrect_card_details, authentication_failed, processing_error]
+              description: Generic code; new codes may be added.
+        pre_validation:
+          oneOf:
+            - $ref: '#/components/schemas/PreValidation'
+            - type: 'null'
+        created_at:
+          type: string
+          format: date-time
+    EventData:
+      type: object
+      description: |
+        `object` is the event's main object, in the shape the API shows it; the other keys depend
+        on the type.
+
+        | Type | `object` | Other keys |
+        |---|---|---|
+        | `payment_link.opened` | `PaymentLink` | `open_count` (integer), `first_open` (boolean) |
+        | `payment_link.paid` | `PaymentLink` | `payment` (`Payment`), `late_payment` (boolean) |
+        | `payment.processing` | `Payment` | none |
+        | `payment.succeeded` | `Payment` | `payment_link` (`PaymentLink`), `late_payment` (boolean) |
+        | `payment.failed` | `Payment` | `failure_count` (integer), `failure_code` (string) |
+        | `ping` | `{ "object": "ping", "message": "Test event." }` | none |
+
+        Ignore keys you do not know.
+      required: [object]
+      properties:
+        object:
+          type: object
+      additionalProperties: true
+    Event:
+      type: object
+      description: |
+        An event: the body of the webhook, byte for byte the same in every delivery, resend and
+        read of the history. Amounts and objects are those of the API at the moment it happened.
+      required: [id, type, api_version, livemode, created_at, data]
+      properties:
+        id:
+          type: string
+          description: Also the `webhook-id` header of every delivery.
+          examples: [evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9S]
+        type:
+          oneOf:
+            - $ref: '#/components/schemas/EventType'
+            - { type: string, const: ping }
+        api_version:
+          const: v1
+        livemode:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          description: When the event happened (UTC).
+        data:
+          $ref: '#/components/schemas/EventData'
+    EventList:
+      type: object
+      required: [object, data, has_more]
+      properties:
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+        has_more:
+          type: boolean
+          description: More events exist in the direction paged.
+    PrePaymentValidationRequest:
+      type: object
+      description: Body of the pre-payment validation call (plan 15.8.3).
+      required: [id, type, livemode, test, created_at, attempt_number, data]
+      properties:
+        id:
+          type: string
+          description: Call ID, also the `webhook-id`.
+          examples: [val_01J8Z6Q6T4Y0V8KX2M1N5P7R9S]
+        type:
+          const: payment.pre_validation
+        livemode:
+          type: boolean
+        test:
+          type: boolean
+          description: "`true` for the example sent by the panel's \"Test validation\" button: no link or payment is behind it."
+        created_at:
+          type: string
+          format: date-time
+        attempt_number:
+          type: integer
+          minimum: 1
+          description: Which validation this is for the link (the payer may retry after a declined card).
+        data:
+          type: object
+          required: [payment_link, charge, card, payer]
+          properties:
+            payment_link:
+              type: object
+              required: [id, client_reference_id, metadata, description, amount, currency, expires_at]
+              properties:
+                id: { type: string }
+                client_reference_id: { type: [string, 'null'] }
+                metadata: { $ref: '#/components/schemas/Metadata' }
+                description: { type: string }
+                amount: { type: string }
+                currency: { $ref: '#/components/schemas/Currency' }
+                expires_at: { type: string, format: date-time }
+            charge:
+              type: object
+              description: The amount and currency about to be charged.
+              required: [amount, currency, fx]
+              properties:
+                amount: { type: string }
+                currency: { $ref: '#/components/schemas/Currency' }
+                fx:
+                  type: object
+                  required: [applied]
+                  properties:
+                    applied: { type: boolean }
+                  additionalProperties: true
+            card:
+              type: object
+              description: Brand and country only; never the number.
+              properties:
+                brand: { type: [string, 'null'] }
+                country: { type: [string, 'null'] }
+            payer:
+              type: [object, 'null']
+              description: The e-mail and full name, when the link collected them.
+              properties:
+                email: { type: string }
+                full_name: { type: string }
+    PrePaymentValidationAnswer:
+      type: object
+      description: Your answer. Only `decision` decides whether the answer is valid; a mistake in an optional field drops that field.
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+        reason_code:
+          type: string
+          maxLength: 64
+          pattern: '^[a-z0-9_]+$'
+          description: Your own code for a rejection; shown in the panel.
+        payer_message:
+          type: string
+          maxLength: 200
+          description: Plain text shown to the payer on a rejection (longer text is shortened). Without it the payer sees a generic message.
+        cancel_link:
+          type: boolean
+          default: false
+          description: With `true` on a rejection the link is canceled (`rejected_by_merchant`). Ignored on an approval.
     ListEnvelope:
       type: object
       description: Cursor-paginated list (plan 10.1).
@@ -715,6 +1191,57 @@ components:
           items: {}
         has_more:
           type: boolean
+  examples:
+    PaymentSucceededEvent:
+      summary: payment.succeeded
+      value:
+        id: evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9S
+        type: payment.succeeded
+        api_version: v1
+        livemode: true
+        created_at: '2026-09-24T02:11:10Z'
+        data:
+          object:
+            id: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            object: payment
+            livemode: true
+            payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            status: succeeded
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            late_payment: false
+            failure_count: 0
+            failure: null
+            pre_validation: { outcome: approved }
+            created_at: '2026-09-24T02:10:40Z'
+          payment_link: { id: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S, object: payment_link, status: paid }
+          late_payment: false
+    PaymentFailedEvent:
+      summary: payment.failed
+      value:
+        id: evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9T
+        type: payment.failed
+        api_version: v1
+        livemode: true
+        created_at: '2026-09-24T02:09:02Z'
+        data:
+          object:
+            id: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            object: payment
+            livemode: true
+            payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            status: failed
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            late_payment: false
+            failure_count: 1
+            failure: { code: card_declined }
+            pre_validation: null
+            created_at: '2026-09-24T02:08:40Z'
+          failure_count: 1
+          failure_code: card_declined
   responses:
     BadRequest:
       description: Invalid request (`invalid_request_error`).
