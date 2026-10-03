@@ -92,8 +92,7 @@ it('stores the re-encoded logo and audits the change in the platform log', funct
         ->and($entries[0]->subject_id)->toBe($logo->id)
         ->and($entries[0]->changes['variant'] ?? null)->toBe('light')
         ->and($entries[0]->changes['sha256_hash'] ?? null)->toBe($logo->sha256)
-        ->and($entries[0]->changes)->toHaveKey('previous_sha256_hash')
-        ->and($entries[0]->changes['previous_sha256_hash'])->toBeNull();
+        ->and($entries[0]->changes)->toHaveKey('previous_sha256_hash', null);
 });
 
 it('gives every replacement a new version, so the served URL changes', function (): void {
