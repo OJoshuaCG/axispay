@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\PaymentLinks\Http\Presenters;
 
+use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkUrl;
 use App\Modules\Shared\Time\IsoDateTime;
@@ -41,7 +42,9 @@ final class PaymentLinkPresenter
                 'rate' => $link->fx_fixed_rate,
             ],
             'payer_fields' => (object) $link->payer_fields_config,
+            'line_items' => self::lineItems($link),
             'return_url' => $link->return_url,
+            'auto_redirect' => $link->auto_redirect,
             'locale' => $link->locale,
             'pre_payment_validation' => $link->pre_payment_validation,
             'expires_at' => self::time($link->expires_at),
@@ -56,6 +59,23 @@ final class PaymentLinkPresenter
             'payment' => null,
             'created_at' => self::time($link->created_at),
         ];
+    }
+
+    /**
+     * @return list<array{label: string, amount: string, absorbs_rounding: bool}>|null
+     */
+    private static function lineItems(PaymentLink $link): ?array
+    {
+        $items = $link->lineItems();
+
+        if ($items === []) {
+            return null;
+        }
+
+        return array_map(
+            static fn (LineItem $item): array => ['label' => $item->label, 'amount' => $item->amount->toDecimalString(), 'absorbs_rounding' => $item->absorbsRounding],
+            $items,
+        );
     }
 
     private static function time(?CarbonImmutable $time): ?string

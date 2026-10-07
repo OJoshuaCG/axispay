@@ -6,6 +6,7 @@ namespace App\Modules\PaymentLinks\Models;
 
 use App\Modules\Audit\Enums\ActorType;
 use App\Modules\Fx\Enums\FxMode;
+use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\PaymentLinks\Enums\CreatedVia;
 use App\Modules\PaymentLinks\Enums\DisputeStatus;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
@@ -40,11 +41,13 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CurrencyCode $currency
  * @property string $description
  * @property array<array-key, string>|null $metadata keys are strings, even numeric-looking ones
+ * @property list<array{label: string, amount_minor: int, absorbs_rounding: bool}>|null $line_items the merchant's breakdown, in the link's currency (display only)
  * @property string|null $client_reference_id
  * @property FxMode $fx_mode
  * @property string|null $fx_fixed_rate
  * @property array<string, string> $payer_fields_config
  * @property string|null $return_url
+ * @property bool $auto_redirect
  * @property bool $pre_payment_validation
  * @property string $locale
  * @property CarbonImmutable $expires_at
@@ -90,6 +93,7 @@ final class PaymentLink extends Model
         'dispute_status' => 'none',
         'open_count' => 0,
         'pre_payment_validation' => false,
+        'auto_redirect' => false,
     ];
 
     public static function resourceType(): ResourceType
@@ -111,6 +115,20 @@ final class PaymentLink extends Model
     public function money(): Money
     {
         return Money::ofMinor($this->amount_minor, $this->currency);
+    }
+
+    /**
+     * The merchant's breakdown of the amount, in the link's currency (empty
+     * when the link has none).
+     *
+     * @return list<LineItem>
+     */
+    public function lineItems(): array
+    {
+        return array_map(
+            fn (array $item): LineItem => new LineItem($item['label'], Money::ofMinor($item['amount_minor'], $this->currency), $item['absorbs_rounding']),
+            $this->line_items ?? [],
+        );
     }
 
     /** The long card-testing block (plan 11.7 rule 4) is in force. */
@@ -139,6 +157,8 @@ final class PaymentLink extends Model
             'metadata' => AsJsonObject::class,
             'fx_mode' => FxMode::class,
             'fx_fixed_rate' => 'decimal:6',
+            'line_items' => 'array',
+            'auto_redirect' => 'boolean',
             'payer_fields_config' => 'array',
             'pre_payment_validation' => 'boolean',
             'expires_at' => 'immutable_datetime',

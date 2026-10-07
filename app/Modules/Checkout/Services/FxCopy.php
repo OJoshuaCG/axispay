@@ -7,6 +7,7 @@ namespace App\Modules\Checkout\Services;
 use App\Modules\Checkout\Data\CurrencyConfirmation;
 use App\Modules\Fx\Data\FxConversion;
 use App\Modules\Fx\Models\FxQuote;
+use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\Shared\Money\MoneyDisplay;
 use Brick\Math\BigDecimal;
 use Carbon\CarbonImmutable;
@@ -80,6 +81,10 @@ final class FxCopy
             'amount_label' => $amountLabel,
             'amount_minor' => $converted->minorAmount,
             'currency' => $converted->currency->value,
+            'lines' => array_map(
+                static fn (LineItem $line): array => ['label' => $line->label, 'amount_label' => MoneyDisplay::format($line->amount), 'amount_minor' => $line->amount->minorAmount],
+                $confirmation->lines,
+            ),
             'rate_caption' => __('checkout.fx.confirm.rate'),
             'rate_text' => self::rateText($quote->source, $quote->effective_rate, $quote->rate_date),
             'markup_text' => self::markupText($quote->markup_bps),

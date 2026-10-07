@@ -1,13 +1,25 @@
 {{--
     Content of <x-checkout.order-summary> (included by it with its props and
     slot, so the card and the bare variant share one markup). Order: who is
-    paid, the description, the total, the FX legend (only when the link may be converted), the expiry, the slot (the
+    paid, the description, the merchant's line items (when it sent any), the total, the FX legend (only when the link may be converted), the expiry, the slot (the
     legal links). No heading: the page's h1 is in the form or the status
     panel; the section is labelled by "Payment to {merchant}".
 --}}
 <p class="text-sm font-medium break-words text-fg-secondary">{{ __('checkout.summary.pay_to', ['merchant' => $merchant]) }}</p>
 
 <p class="text-base whitespace-pre-line break-words text-fg">{{ $description }}</p>
+
+@if ($showAmount && $lineItems !== [])
+    {{-- The merchant's breakdown (ADR-0064): display only, in the link's currency, escaped text. --}}
+    <ul class="flex flex-col gap-stack-xs border-t border-line pt-stack-md" aria-label="{{ __('checkout.summary.breakdown') }}" data-line-items>
+        @foreach ($lineItems as $item)
+            <li class="flex items-baseline justify-between gap-stack-md text-sm text-fg-secondary">
+                <span class="min-w-0 break-words">{{ $item->label }}</span>
+                <span class="font-numeric shrink-0 text-fg">{{ \App\Modules\Shared\Money\MoneyDisplay::format($item->amount) }}</span>
+            </li>
+        @endforeach
+    </ul>
+@endif
 
 @if ($showAmount)
     <dl class="flex flex-col gap-stack-xs border-t border-line pt-stack-md">

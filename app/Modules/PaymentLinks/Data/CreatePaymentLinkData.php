@@ -21,6 +21,7 @@ final readonly class CreatePaymentLinkData
     /**
      * @param  array<array-key, string>|null  $metadata  keys are strings, even numeric-looking ones
      * @param  array<string, PayerFieldRequirement>  $payerFields  per-link overrides only
+     * @param  list<LineItem>  $lineItems  the merchant's breakdown of the amount (display only), empty for none
      */
     public function __construct(
         public Money $amount,
@@ -35,5 +36,7 @@ final readonly class CreatePaymentLinkData
         public ?string $returnUrl = null,
         public ?CheckoutLocale $locale = null,
         public ?bool $prePaymentValidation = null,
+        public array $lineItems = [],
+        public bool $autoRedirect = false,
     ) {}
 }

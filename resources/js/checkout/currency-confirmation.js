@@ -18,6 +18,33 @@ export function createCurrencyConfirmation(form) {
         }
     };
 
+    /** The merchant's breakdown converted to MXN (ADR-0064), one row per line; the text is never read as HTML. */
+    const showLines = (lines) => {
+        const list = field('lines');
+
+        if (!list) {
+            return;
+        }
+
+        list.replaceChildren(
+            ...lines.map((line) => {
+                const row = document.createElement('li');
+                const label = document.createElement('span');
+                const amount = document.createElement('span');
+
+                row.className = 'flex items-baseline justify-between gap-stack-md text-sm text-fg-secondary';
+                label.className = 'min-w-0 break-words';
+                amount.className = 'font-numeric shrink-0 text-fg';
+                label.textContent = line.label ?? '';
+                amount.textContent = line.amount_label ?? '';
+                row.append(label, amount);
+
+                return row;
+            }),
+        );
+        list.toggleAttribute('hidden', lines.length === 0);
+    };
+
     return {
         /** Fills and shows the panel for a quote and moves focus to it. */
         show(confirmation) {
@@ -33,6 +60,8 @@ export function createCurrencyConfirmation(form) {
             setText('amount', confirmation.amount_label);
             setText('rate-caption', confirmation.rate_caption);
             setText('rate', confirmation.rate_text);
+
+            showLines(confirmation.lines ?? []);
 
             const markup = field('markup');
 

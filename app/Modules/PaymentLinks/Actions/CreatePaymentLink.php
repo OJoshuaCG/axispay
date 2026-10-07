@@ -13,6 +13,7 @@ use App\Modules\Identity\Models\User;
 use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PaymentLinks\Data\CreatePaymentLinkData;
 use App\Modules\PaymentLinks\Data\CreationContext;
+use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\PaymentLinks\Enums\CreatedVia;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Exceptions\PaymentLinkRejectedException;
@@ -49,6 +50,8 @@ use Illuminate\Support\Facades\Gate;
  *    takes the tenant's default mode. A converting link must have a usable
  *    rate (`fx_rate_invalid`) and reach the MXN minimum once converted
  *    (`amount_below_minimum_after_conversion`), see LinkConversionCheck;
+ *  - line items on a link that can be converted: exactly one line absorbs the
+ *    rounding (`parameter_invalid` on `line_items`, ADR-0064);
  *  - the tenant's amount cap, the expiration range, the return URL domain
  *    and pre-payment validation (plan 15.8.1: `true` needs a validation URL
  *    in this mode, else `validation_endpoint_not_configured`; omitted, the
@@ -104,6 +107,7 @@ final readonly class CreatePaymentLink
         $this->assertTenantCanCreate($tenant);
         $this->assertGatewayReady();
         $fxMode = $this->resolveFx($data, $settings);
+        $this->assertLineItemsFitConversion($data, $fxMode);
         $this->conversionCheck->assertAcceptable($data->amount, $fxMode, $data->fxRate, $settings);
         $this->assertAmountWithinTenantCap($data->amount, $settings);
         $expiresAt = $this->expiresAt($data, $settings);
@@ -129,11 +133,13 @@ final readonly class CreatePaymentLink
                     'currency' => $data->amount->currency,
                     'description' => $data->description,
                     'metadata' => $data->metadata,
+                    'line_items' => $this->lineItemsForStorage($data),
                     'client_reference_id' => $data->clientReferenceId,
                     'fx_mode' => $fxMode,
                     'fx_fixed_rate' => $fxMode === FxMode::Fixed ? $data->fxRate?->toString() : null,
                     'payer_fields_config' => $this->payerFields($data, $settings),
                     'return_url' => $data->returnUrl,
+                    'auto_redirect' => $data->autoRedirect,
                     'pre_payment_validation' => $prePaymentValidation,
                     'locale' => ($data->locale ?? $settings->checkoutLocale)->value,
                     'expires_at' => $expiresAt,
@@ -232,6 +238,43 @@ final readonly class CreatePaymentLink
         }
 
         return $data->fxMode;
+    }
+
+    /**
+     * ADR-0064: a link that can be converted to MXN needs exactly one line
+     * that absorbs the rounding, or its converted lines could not add up to
+     * the amount charged.
+     */
+    private function assertLineItemsFitConversion(CreatePaymentLinkData $data, FxMode $fxMode): void
+    {
+        if ($data->lineItems === [] || ! $fxMode->converts()) {
+            return;
+        }
+
+        $absorbing = count(array_filter($data->lineItems, static fn (LineItem $item): bool => $item->absorbsRounding));
+
+        if ($absorbing !== 1) {
+            throw PaymentLinkRejectedException::of(
+                ApiErrorCode::ParameterInvalid,
+                'This link can be converted to MXN, so exactly one line item must have absorbs_rounding true: it takes the rounding residual.',
+                'line_items',
+            );
+        }
+    }
+
+    /**
+     * @return list<array{label: string, amount_minor: int, absorbs_rounding: bool}>|null
+     */
+    private function lineItemsForStorage(CreatePaymentLinkData $data): ?array
+    {
+        if ($data->lineItems === []) {
+            return null;
+        }
+
+        return array_map(
+            static fn (LineItem $item): array => ['label' => $item->label, 'amount_minor' => $item->amount->minorAmount, 'absorbs_rounding' => $item->absorbsRounding],
+            $data->lineItems,
+        );
     }
 
     private function assertAmountWithinTenantCap(Money $amount, TenantSettings $settings): void

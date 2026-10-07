@@ -67,6 +67,48 @@ final readonly class AmountParser
     }
 
     /**
+     * A part of a payment, such as a line item (ADR-0064): a decimal string
+     * greater than zero in the given currency. The minimum and maximum
+     * charge of a whole payment do not apply to a part of it.
+     *
+     * @throws InvalidAmountException
+     */
+    public function parsePart(mixed $amount, CurrencyCode $currency, string $param): Money
+    {
+        if (is_int($amount) || is_float($amount)) {
+            throw InvalidAmountException::because(
+                ApiErrorCode::AmountMustBeString,
+                'The amount must be sent as a decimal string, for example "150.50", not as a JSON number.',
+                $param,
+            );
+        }
+
+        if ($amount === null || $amount === '') {
+            throw InvalidAmountException::because(ApiErrorCode::ParameterMissing, "Missing required parameter: {$param}.", $param);
+        }
+
+        if (! is_string($amount) || preg_match(self::patternFor($currency), $amount) !== 1) {
+            throw InvalidAmountException::because(
+                ApiErrorCode::AmountInvalid,
+                sprintf(
+                    'The amount is not a valid %s amount. Use digits with up to %d decimals, no sign, spaces or thousands separators.',
+                    $currency->value,
+                    $currency->exponent(),
+                ),
+                $param,
+            );
+        }
+
+        $money = Money::fromBrick(BrickMoney::of($amount, $currency->value));
+
+        if ($money->minorAmount < 1) {
+            throw InvalidAmountException::because(ApiErrorCode::AmountInvalid, 'The amount must be greater than zero.', $param);
+        }
+
+        return $money;
+    }
+
+    /**
      * Validation regex for a currency exponent. For exponent 2 this is exactly
      * the plan's `^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$`.
      */

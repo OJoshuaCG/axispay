@@ -17,10 +17,13 @@ use App\Modules\Fx\Models\FxQuote;
 use App\Modules\Fx\Services\ConversionPolicy;
 use App\Modules\Fx\Services\FxConverter;
 use App\Modules\Fx\Services\FxQuoter;
+use App\Modules\Fx\Services\LineItemConverter;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Shared\Ids\Ulid;
+use App\Modules\Shared\Money\ExchangeRate;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -55,6 +58,7 @@ final readonly class CheckoutConversion
         private FxQuoter $quoter,
         private TenantAccess $access,
         private AuditLogger $audit,
+        private LineItemConverter $lineItems,
     ) {}
 
     public function plan(PaymentLink $link, GatewayConnection $connection, PaymentMethodPreview $card, CheckoutPaymentInput $input): ChargePlan
@@ -88,7 +92,24 @@ final readonly class CheckoutConversion
             return ChargePlan::charge($current->converted(), $current);
         }
 
-        return ChargePlan::answer(new CheckoutResult(CheckoutOutcome::CurrencyConfirmationRequired, currencyConfirmation: new CurrencyConfirmation($current)));
+        return ChargePlan::answer(new CheckoutResult(CheckoutOutcome::CurrencyConfirmationRequired, currencyConfirmation: new CurrencyConfirmation($current, $this->convertedLines($link, $current))));
+    }
+
+    /**
+     * The link's line items in MXN, adding up to the quote's amount; none when
+     * the link has none or they cannot be converted honestly (ADR-0064).
+     *
+     * @return list<LineItem>
+     */
+    private function convertedLines(PaymentLink $link, FxQuote $quote): array
+    {
+        $items = $link->lineItems();
+
+        if ($items === []) {
+            return [];
+        }
+
+        return $this->lineItems->convert($items, $quote->converted(), ExchangeRate::of($quote->effective_rate)) ?? [];
     }
 
     /** A quote of this link, converting its amount to MXN, or null (unknown, foreign, malformed ids are all null). */

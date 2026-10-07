@@ -52,6 +52,7 @@
                     :expires-at="$page->expiresSoonAt"
                     :show-amount="$page->showsAmount()"
                     :fx-legend="$page->fxLegend"
+                    :line-items="$page->lineItems"
                     class="lg:col-span-2"
                 >
                     {{-- ADR-0056: "Privacy notice · Terms", below the amount, in every state. --}}
@@ -88,6 +89,8 @@
                                     <div class="flex flex-col gap-stack-sm">
                                         <h2 class="text-base font-semibold text-fg" data-fx-title></h2>
                                         <p data-fx-intro></p>
+                                        {{-- The merchant's breakdown converted to MXN, adding up to the amount below (ADR-0064); filled by the script when the link has line items. --}}
+                                        <ul class="flex flex-col gap-stack-xs" data-fx-lines hidden></ul>
                                         <dl class="flex flex-col gap-stack-xs">
                                             <div>
                                                 <dt class="text-sm text-fg-secondary" data-fx-original-caption></dt>
@@ -184,6 +187,7 @@
                         :money="$page->money"
                         :expires-at="$page->expiresSoonAt"
                         :show-amount="$page->showsAmount()"
+                        :line-items="$page->lineItems"
                     >
                         <x-checkout.legal-links :documents="$page->legal" :token="$page->token" :merchant="$merchant" />
                     </x-checkout.order-summary>

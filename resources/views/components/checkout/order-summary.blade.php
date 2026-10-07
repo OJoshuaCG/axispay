@@ -16,6 +16,8 @@
         showAmount  bool: the total is shown only while the link can be paid,
                     during a payment, or to the session that paid (plan 11.2:
                     informative pages show the description and date only)
+        lineItems   list<LineItem>: the merchant's breakdown (ADR-0064), shown
+                    above the total while the amount is shown
         fxLegend    string|null: what a card issued in Mexico is charged in MXN
                     (plan 11.3), under the total, when the link may be converted
         bare        bool: false (default) = the left card of the two-card
@@ -25,7 +27,7 @@
     Slot: last, under a hairline; the page puts the merchant's legal links
     there (ADR-0056).
 --}}
-@props(['merchant', 'description', 'money', 'expiresAt' => null, 'showAmount' => true, 'bare' => false, 'fxLegend' => null])
+@props(['merchant', 'description', 'money', 'expiresAt' => null, 'showAmount' => true, 'bare' => false, 'fxLegend' => null, 'lineItems' => []])
 
 @php
     $label = __('checkout.summary.pay_to', ['merchant' => $merchant]);
