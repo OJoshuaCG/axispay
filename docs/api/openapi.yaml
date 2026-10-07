@@ -390,8 +390,11 @@ webhooks:
         Signed like the events (Standard Webhooks, with the validation URL's own secret), with
         `webhook-id` = the call ID (`val_...`) and an extra header
         `x-axispay-kind: pre_payment_validation`. Answer `200` with a JSON object of at most 4 KB
-        within 5 seconds in total (2 seconds to connect). The connection is retried once, at once,
-        only when it could not be opened; never after your server received the request.
+        within 30 seconds in total by default (2 seconds to connect; the platform operator sets the
+        limit with `AXISPAY_VALIDATION_TIMEOUT_SECONDS`, from 5 to 60 seconds, ADR-0061). The
+        connection is retried once, at once, only when it could not be opened; never after your
+        server received the request. The `pay_` ID in `data.payment.id` names the payment attempt
+        and is the same in that retry and in every other call about the same attempt.
 
         Failures are: no answer in time, a connection or TLS error, a status other than `200`
         (redirects are not followed), an invalid answer (not a JSON object, `decision` missing or
@@ -1120,8 +1123,21 @@ components:
           description: Which validation this is for the link (the payer may retry after a declined card).
         data:
           type: object
-          required: [payment_link, charge, card, payer]
+          required: [payment, payment_link, charge, card, payer]
           properties:
+            payment:
+              type: object
+              description: |
+                The payment attempt this call is about. `id` is stable: the immediate retry after a
+                connection failure and every later call about the same attempt carry the same ID,
+                and each new attempt of the link (a payer who retries after a declined card) has its
+                own.
+              required: [id]
+              properties:
+                id:
+                  type: string
+                  description: ID of the payment attempt (`pay_...`).
+                  examples: [pay_01J8Z6Q6T4Y0V8KX2M1N5P7R9S]
             payment_link:
               type: object
               required: [id, client_reference_id, metadata, description, amount, currency, expires_at]

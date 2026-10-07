@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One setting for the pre-payment validation timeout** (ADR-0061, proposed):
+  `AXISPAY_VALIDATION_TIMEOUT_SECONDS` (30 s by default, 5 to 60) replaces the
+  hardcoded 5 s. The checkout request budget and lease, the job timeouts, the
+  queue `retry_after`, the unique locks of the payment jobs and the container's
+  nginx, PHP-FPM and worker limits are all derived from it
+  (`ValidationTimeouts`; 5 reproduces the previous values exactly). The
+  application refuses to boot with a value out of range or an inconsistent
+  limit, and `php artisan axispay:validation-timeouts` prints the derived
+  limits for the container entrypoint. The default changes the wait of every
+  merchant from 5 to 30 s; set 5 to keep the old behavior.
+- **The pre-payment validation body names the payment attempt**:
+  `data.payment.id` (`pay_…`), the same in the immediate retry and in every
+  other call about that attempt, next to the already sent link ID,
+  `client_reference_id` and `livemode`. Documented in the integration guide,
+  the webhooks guide and the OpenAPI file.
+
 - **API integration guide** (`docs/api/integration-guide.md`): a self-contained
   guide for the developer of another system, covering authentication and
   scopes, creating and following payment links, idempotency, errors, the
@@ -377,6 +393,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The panel texts of the pre-payment validation (how it works, failure
+  policies, the timeout failure) and the guides read the timeout in force
+  instead of saying "5 seconds". The stale `QUEUE_TIMEOUT` and stop grace
+  period values of ADR-0035 and ADR-0036 are corrected.
 - The Spanish copy of the webhook and pre-payment validation errors and
   e-mails now uses the panels' formal register (*usted*).
 - README: the phase table shows Phases 2 to 4 as done, 4B as partial and 5 in

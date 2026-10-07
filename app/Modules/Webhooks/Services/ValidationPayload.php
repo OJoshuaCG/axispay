@@ -18,7 +18,12 @@ use Carbon\CarbonImmutable;
  * The body of a pre-payment validation call (plan 15.8.3), type
  * `payment.pre_validation`:
  *
- *  - `payment_link`: our identifiers and the integrator's own references;
+ *  - `payment`: the ID of the payment attempt (`pay_…`), which is the same in
+ *    the immediate retry and in every later call about that attempt, so the
+ *    merchant can tell the attempts of one link apart and recognize a repeat
+ *    (ADR-0061);
+ *  - `payment_link`: our identifiers and the integrator's own references
+ *    (the top-level `livemode` completes them);
  *  - `charge`: the amount and currency that will be captured (already
  *    converted when FX applies);
  *  - `card`: the brand and the country only; nothing else of the card is
@@ -48,6 +53,9 @@ final class ValidationPayload
             'created_at' => IsoDateTime::format($now),
             'attempt_number' => $attemptNumber,
             'data' => [
+                'payment' => [
+                    'id' => $attempt->prefixedId(),
+                ],
                 'payment_link' => [
                     'id' => $link->prefixedId(),
                     'client_reference_id' => $link->client_reference_id,
@@ -88,6 +96,9 @@ final class ValidationPayload
             'created_at' => IsoDateTime::format($now),
             'attempt_number' => 1,
             'data' => [
+                'payment' => [
+                    'id' => PrefixedId::encode(ResourceType::Payment, Ulid::generate()),
+                ],
                 'payment_link' => [
                     'id' => PrefixedId::encode(ResourceType::PaymentLink, Ulid::generate()),
                     'client_reference_id' => 'TEST-1029',
