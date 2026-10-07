@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Filament\Resources\Payments;
 
+use App\Modules\PaymentLinks\Enums\DisputeStatus;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\PaymentLinkResource;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\ValidationOutcome;
@@ -11,15 +12,20 @@ use App\Modules\Payments\Filament\Resources\Payments\Pages\ListPayments;
 use App\Modules\Payments\Filament\Resources\Payments\Pages\ViewPayment;
 use App\Modules\Payments\Filament\Support\PaymentPresenter;
 use App\Modules\Payments\Filament\Support\PaymentTimeline;
+use App\Modules\Payments\Models\Dispute;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Models\Refund;
 use App\Modules\Payments\Services\AttemptDisplay;
+use App\Modules\Payments\Services\RefundSummary;
 use App\Modules\Shared\Ids\PrefixedId;
 use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Shared\Money\CurrencyCode;
+use App\Modules\Shared\Money\Money;
 use App\Modules\Shared\Money\MoneyDisplay;
 use App\Support\Filament\Concerns\SentenceCaseLabels;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
+use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Grid;
@@ -220,6 +226,7 @@ final class PaymentResource extends Resource
                             ->placeholder('—'),
                     ]),
                 ]),
+            self::refundsSection(),
             Section::make(__('payments.timeline.title'))
                 ->columnSpanFull()
                 ->schema([
@@ -227,6 +234,86 @@ final class PaymentResource extends Resource
                         ->viewData(static fn (PaymentAttempt $record): array => ['entries' => PaymentTimeline::for($record)]),
                 ]),
         ]);
+    }
+
+    /**
+     * What went back to the payer and the disputes opened against the payment
+     * (plan 16, ADR-0066): read only, and only when there is something to show.
+     * Refunds are requested through the API or in Stripe; disputes are answered
+     * in the merchant's own Stripe Dashboard.
+     */
+    private static function refundsSection(): Section
+    {
+        return Section::make(__('payments.refunds.section'))
+            ->description(__('payments.refunds.help'))
+            ->columnSpanFull()
+            ->visible(static fn (PaymentAttempt $record): bool => $record->refunds()->exists() || $record->disputes()->exists())
+            ->schema([
+                Grid::make(['default' => 1, 'sm' => 2])->schema([
+                    TextEntry::make('amount_refunded')
+                        ->label(__('payments.refunds.refunded'))
+                        ->state(static fn (PaymentAttempt $record): string => MoneyDisplay::format(Money::ofMinor($record->amount_refunded_minor, $record->currency)))
+                        ->fontFamily(FontFamily::Mono),
+                    TextEntry::make('refund_status')
+                        ->label(__('payments.refunds.refund_status'))
+                        ->state(static fn (PaymentAttempt $record): string => RefundSummary::of($record)->label()),
+                    TextEntry::make('dispute_status')
+                        ->label(__('payments.refunds.dispute_status'))
+                        ->state(static fn (PaymentAttempt $record): string => $record->link !== null ? $record->link->dispute_status->label() : DisputeStatus::None->label())
+                        ->visible(static fn (PaymentAttempt $record): bool => $record->disputes()->exists()),
+                ]),
+                RepeatableEntry::make('refunds')
+                    ->label(__('payments.refunds.refunds'))
+                    ->visible(static fn (PaymentAttempt $record): bool => $record->refunds()->exists())
+                    ->columnSpanFull()
+                    ->schema([
+                        TextEntry::make('amount_minor')
+                            ->label(__('payments.refunds.amount'))
+                            ->formatStateUsing(static fn (Refund $record): string => MoneyDisplay::format($record->money()))
+                            ->fontFamily(FontFamily::Mono),
+                        TextEntry::make('status')
+                            ->label(__('payments.refunds.status'))
+                            ->badge()
+                            ->formatStateUsing(static fn (Refund $record): string => $record->status->label())
+                            ->color(static fn (Refund $record): string => $record->status->color()),
+                        TextEntry::make('reason')
+                            ->label(__('payments.refunds.reason'))
+                            ->formatStateUsing(static fn (Refund $record): string => $record->reason->label()),
+                        TextEntry::make('origin')
+                            ->label(__('payments.refunds.origin'))
+                            ->formatStateUsing(static fn (Refund $record): string => $record->origin->label()),
+                        TextEntry::make('created_at')
+                            ->label(__('payments.refunds.date'))
+                            ->dateTime(),
+                    ])
+                    ->columns(['default' => 2, 'md' => 5]),
+                RepeatableEntry::make('disputes')
+                    ->label(__('payments.refunds.disputes'))
+                    ->visible(static fn (PaymentAttempt $record): bool => $record->disputes()->exists())
+                    ->columnSpanFull()
+                    ->schema([
+                        TextEntry::make('amount_minor')
+                            ->label(__('payments.refunds.amount'))
+                            ->formatStateUsing(static fn (Dispute $record): string => MoneyDisplay::format($record->money()))
+                            ->fontFamily(FontFamily::Mono),
+                        TextEntry::make('status')
+                            ->label(__('payments.refunds.status'))
+                            ->badge()
+                            ->formatStateUsing(static fn (Dispute $record): string => $record->status->label())
+                            ->color(static fn (Dispute $record): string => $record->status->isOpen() ? 'warning' : 'gray'),
+                        TextEntry::make('reason')
+                            ->label(__('payments.refunds.reason'))
+                            ->placeholder('—'),
+                        TextEntry::make('evidence_due_by')
+                            ->label(__('payments.refunds.evidence_due_by'))
+                            ->dateTime()
+                            ->placeholder('—'),
+                        TextEntry::make('opened_at')
+                            ->label(__('payments.refunds.date'))
+                            ->dateTime(),
+                    ])
+                    ->columns(['default' => 2, 'md' => 5]),
+            ]);
     }
 
     public static function getPages(): array

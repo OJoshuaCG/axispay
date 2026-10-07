@@ -56,6 +56,51 @@ return [
         'succeeded_after_close' => 'Stripe indica que este pago se completó después de cerrar el intento: revíselo en Stripe y reembólselo si no debió cobrarse.',
     ],
 
+    'refund_state' => [
+        'pending' => 'Pendiente',
+        'succeeded' => 'Completado',
+        'failed' => 'Fallido',
+        'canceled' => 'Cancelado',
+    ],
+
+    'refund_reason' => [
+        'requested_by_customer' => 'Solicitado por el pagador',
+        'duplicate' => 'Cargo duplicado',
+        'fraudulent' => 'Fraudulento',
+        'other' => 'Otro',
+    ],
+
+    'refund_origin' => [
+        'api' => 'API',
+        'panel' => 'Panel',
+        'provider_dashboard' => 'Dashboard de Stripe',
+    ],
+
+    'dispute_state' => [
+        'needs_response' => 'Requiere respuesta',
+        'under_review' => 'En revisión',
+        'won' => 'Ganada',
+        'lost' => 'Perdida',
+        'warning_closed' => 'Consulta cerrada',
+    ],
+
+    // Reembolsos y disputas de un pago (plan 16, ADR-0066), solo lectura en el panel.
+    'refunds' => [
+        'section' => 'Reembolsos y disputas',
+        'refunded' => 'Reembolsado',
+        'refund_status' => 'Estado de reembolsos',
+        'dispute_status' => 'Disputa',
+        'refunds' => 'Reembolsos',
+        'disputes' => 'Disputas',
+        'amount' => 'Monto',
+        'status' => 'Estado',
+        'reason' => 'Motivo',
+        'origin' => 'Origen',
+        'date' => 'Fecha',
+        'evidence_due_by' => 'Evidencia antes del',
+        'help' => 'Los reembolsos se solicitan por la API o en Stripe. Las disputas se responden en su Dashboard de Stripe.',
+    ],
+
     'decline_codes' => [
         'generic_decline' => 'Rechazada por el banco',
         'card_declined' => 'Tarjeta rechazada',

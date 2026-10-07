@@ -58,6 +58,51 @@ return [
         'succeeded_after_close' => 'Stripe reports this payment succeeded after the attempt was closed: check it in Stripe and refund it if it should not have been charged.',
     ],
 
+    'refund_state' => [
+        'pending' => 'Pending',
+        'succeeded' => 'Completed',
+        'failed' => 'Failed',
+        'canceled' => 'Canceled',
+    ],
+
+    'refund_reason' => [
+        'requested_by_customer' => 'Requested by the payer',
+        'duplicate' => 'Duplicate charge',
+        'fraudulent' => 'Fraudulent',
+        'other' => 'Other',
+    ],
+
+    'refund_origin' => [
+        'api' => 'API',
+        'panel' => 'Panel',
+        'provider_dashboard' => 'Stripe Dashboard',
+    ],
+
+    'dispute_state' => [
+        'needs_response' => 'Needs a response',
+        'under_review' => 'Under review',
+        'won' => 'Won',
+        'lost' => 'Lost',
+        'warning_closed' => 'Inquiry closed',
+    ],
+
+    // Refunds and disputes of a payment (plan 16, ADR-0066), read only in the panel.
+    'refunds' => [
+        'section' => 'Refunds and disputes',
+        'refunded' => 'Refunded',
+        'refund_status' => 'Refund status',
+        'dispute_status' => 'Dispute',
+        'refunds' => 'Refunds',
+        'disputes' => 'Disputes',
+        'amount' => 'Amount',
+        'status' => 'Status',
+        'reason' => 'Reason',
+        'origin' => 'Origin',
+        'date' => 'Date',
+        'evidence_due_by' => 'Evidence due by',
+        'help' => 'Refunds are requested through the API or in Stripe. Disputes are answered in your Stripe Dashboard.',
+    ],
+
     'decline_codes' => [
         'generic_decline' => 'Declined by the bank',
         'card_declined' => 'Card declined',
