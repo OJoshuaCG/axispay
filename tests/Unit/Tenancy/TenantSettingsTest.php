@@ -12,7 +12,7 @@ it('provides defaults for an empty settings document', function (): void {
     $settings = TenantSettings::defaults();
 
     expect($settings->defaultExpirationHours)->toBe(168)
-        ->and($settings->maxExpirationHours)->toBe(2160)
+        ->and($settings->maxExpirationHours)->toBe(1440)
         ->and($settings->fxConversionEnabled)->toBeFalse()
         ->and($settings->checkoutLocale)->toBe(CheckoutLocale::Es);
 });
@@ -24,8 +24,8 @@ it('clamps values to the platform limits and drops invalid ones', function (): v
         'checkout' => ['locale' => 'fr'],
     ]);
 
-    expect($settings->maxExpirationHours)->toBe(2160)
-        ->and($settings->defaultExpirationHours)->toBe(2160)
+    expect($settings->maxExpirationHours)->toBe(1440)
+        ->and($settings->defaultExpirationHours)->toBe(1440)
         ->and($settings->fxMarkupBps)->toBe(1000)
         ->and($settings->fxDefaultMode)->toBe(FxMode::BanxicoFix)
         ->and($settings->fxConversionEnabled)->toBeFalse()
@@ -59,4 +59,19 @@ it('keeps only known payer field requirements', function (): void {
 
     expect($settings->payerFields)->toBe(['email' => PayerFieldRequirement::Required])
         ->and($settings->toArray()['payer_fields'])->toBe(['email' => 'required']);
+});
+
+it('keeps the tenant fixed exchange rate with six decimals and drops anything that is not a valid rate', function (): void {
+    $settings = TenantSettings::fromArray(['fx' => ['fixed_rate' => '20']]);
+
+    expect($settings->fxFixedRate?->toString())->toBe('20.000000')
+        ->and($settings->toArray()['fx']['fixed_rate'])->toBe('20.000000')
+        ->and(TenantSettings::fromArray($settings->toArray()))->toEqual($settings);
+
+    foreach ([20, 20.5, '0', '-1', '17.1234567', 'abc', '', null, ['20']] as $invalid) {
+        expect(TenantSettings::fromArray(['fx' => ['fixed_rate' => $invalid]])->fxFixedRate)->toBeNull();
+    }
+
+    expect(TenantSettings::defaults()->fxFixedRate)->toBeNull()
+        ->and(TenantSettings::defaults()->toArray()['fx']['fixed_rate'])->toBeNull();
 });

@@ -90,15 +90,16 @@ return [
     | Platform limits (plan section 7.3; not configurable by tenants)
     |--------------------------------------------------------------------------
     |
-    | Link expiration (owner decision 2026-09-26, ADR-0048): 7 days by default,
-    | 15 minutes minimum, 90 days maximum. A tenant may lower its default and
-    | its maximum (tenants.settings `links`), never above these values.
+    | Link expiration (owner decision 2026-09-26, ADR-0048; maximum lowered from
+    | 90 to 60 days on 2026-10-06): 7 days by default, 15 minutes minimum,
+    | 60 days maximum. A tenant may lower its default and its maximum
+    | (tenants.settings `links`), never above these values.
     |
     */
 
     'limits' => [
         'default_expiration_hours' => 168,
-        'max_expiration_hours' => 2160,
+        'max_expiration_hours' => 1440,
         'min_expiration_minutes' => 15,
         'max_fx_markup_bps' => 1000,
     ],
@@ -225,11 +226,32 @@ return [
     ],
 
     /*
-    | Currency conversion (plan 13) arrives in Phase 6. Until then a link that
-    | asks for conversion is refused with `fx_not_available` (ADR-0048).
+    |--------------------------------------------------------------------------
+    | Currency conversion (plan 13, ADR-0063)
+    |--------------------------------------------------------------------------
+    |
+    | `banxico`: the Banxico SIE API FIX series, fetched by FetchBanxicoFixJob
+    | and stored in `exchange_rates`; the checkout never calls it. The token
+    | comes from the environment (BANXICO_SIE_TOKEN) and is never in the
+    | repository; without it the job does nothing and the `banxico_fix` mode
+    | stays blocked (no fresh rate). The series id is to be confirmed in
+    | Banxico's documentation (historically SF43718).
+    |
+    | `max_rate_age_days`: a FIX older than this blocks `banxico_fix`
+    | conversions (plan 13.3): a stale rate is never charged.
+    | `sanity_deviation_percent`: a new FIX that differs from the previous one
+    | by more than this is stored as `requires_review` and not used.
     */
     'fx' => [
-        'available' => false,
+        'banxico' => [
+            'token' => env('BANXICO_SIE_TOKEN'),
+            'base_url' => env('BANXICO_SIE_BASE_URL', 'https://www.banxico.org.mx/SieAPIRest/service/v1'),
+            'series_id' => env('BANXICO_SIE_FIX_SERIES', 'SF43718'),
+            'timeout_seconds' => 10,
+            'tries' => 3,
+        ],
+        'max_rate_age_days' => 4,
+        'sanity_deviation_percent' => 10,
     ],
 
     /*

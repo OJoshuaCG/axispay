@@ -7,6 +7,7 @@ namespace App\Modules\Tenancy\Data;
 use App\Modules\Fx\Enums\FxMode;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\Shared\Money\CurrencyCode;
+use App\Modules\Shared\Money\ExchangeRate;
 use App\Modules\Tenancy\Enums\CheckoutLocale;
 
 /**
@@ -19,6 +20,7 @@ final readonly class TenantSettings
     public const int DEFAULT_QUOTE_VALIDITY_MINUTES = 30;
 
     /**
+     * @param  ExchangeRate|null  $fxFixedRate  the tenant's own USD to MXN rate for the `fixed` mode (`fx.fixed_rate`, DECIMAL(18,6)); a link may override it
      * @param  array<string, int>  $maxAmountMinor  currency code => maximum per link in minor units (only lowers the platform cap)
      * @param  array<string, PayerFieldRequirement>  $payerFields  payer field => requirement (plan 19.1)
      */
@@ -29,6 +31,7 @@ final readonly class TenantSettings
         public FxMode $fxDefaultMode = FxMode::BanxicoFix,
         public int $fxMarkupBps = 0,
         public int $fxQuoteValidityMinutes = self::DEFAULT_QUOTE_VALIDITY_MINUTES,
+        public ?ExchangeRate $fxFixedRate = null,
         public bool $sendStripeReceipts = false,
         public CheckoutLocale $checkoutLocale = CheckoutLocale::Es,
         public array $maxAmountMinor = [],
@@ -64,6 +67,7 @@ final readonly class TenantSettings
             fxDefaultMode: self::fxDefaultMode($fx['default_mode'] ?? null),
             fxMarkupBps: self::clamp(self::int($fx, 'markup_bps', 0), 0, $platformMaxMarkup),
             fxQuoteValidityMinutes: self::clamp(self::int($fx, 'quote_validity_minutes', self::DEFAULT_QUOTE_VALIDITY_MINUTES), 1, 1440),
+            fxFixedRate: ExchangeRate::tryOf($fx['fixed_rate'] ?? null),
             sendStripeReceipts: ($checkout['send_stripe_receipts'] ?? false) === true,
             checkoutLocale: (is_string($checkout['locale'] ?? null) ? CheckoutLocale::tryFrom($checkout['locale']) : null) ?? CheckoutLocale::Es,
             maxAmountMinor: self::maxAmounts($links),
@@ -87,6 +91,7 @@ final readonly class TenantSettings
                 'default_mode' => $this->fxDefaultMode->value,
                 'markup_bps' => $this->fxMarkupBps,
                 'quote_validity_minutes' => $this->fxQuoteValidityMinutes,
+                'fixed_rate' => $this->fxFixedRate?->toString(),
             ],
             'checkout' => [
                 'send_stripe_receipts' => $this->sendStripeReceipts,

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Fx\Jobs\FetchBanxicoFixJob;
 use App\Modules\PaymentLinks\Jobs\ExpirePaymentLinksJob;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -79,3 +80,23 @@ Schedule::command('axispay:cache:purge-expired')
     ->withoutOverlapping()
     ->onOneServer()
     ->when(static fn (): bool => config('cache.stores.'.config()->string('cache.default').'.driver') === 'database');
+
+// Plan 13.3 / ADR-0063: the Banxico FIX is published around noon Mexico City
+// time on business days. Fetched at 12:30, 13:30 and 17:00, with a fallback at
+// 09:00 the next day; idempotent (a stored date is never replaced) and a
+// no-op without BANXICO_SIE_TOKEN.
+Schedule::job(new FetchBanxicoFixJob)
+    ->cron('30 12,13 * * 1-5')
+    ->timezone('America/Mexico_City')
+    ->withoutOverlapping()
+    ->onOneServer();
+Schedule::job(new FetchBanxicoFixJob)
+    ->cron('0 17 * * 1-5')
+    ->timezone('America/Mexico_City')
+    ->withoutOverlapping()
+    ->onOneServer();
+Schedule::job(new FetchBanxicoFixJob)
+    ->cron('0 9 * * 2-6')
+    ->timezone('America/Mexico_City')
+    ->withoutOverlapping()
+    ->onOneServer();
