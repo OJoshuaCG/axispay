@@ -78,7 +78,7 @@ Code lives in `app/Modules/<Module>/`. The full map and the entry points are in 
 | `Gateways`, `ProviderEvents` | Phase 2 | Stripe port/adapter, connections, incoming webhooks |
 | `ApiKeys`, `PaymentLinks` | Phase 3 | API access (keys, authentication, scopes, rate limit, idempotency); payment links, their state machine and expiration |
 | `Checkout` | Phase 4 | Payment page, payment flow (authorize, validation hook, capture), card-testing protection, openings, sandbox demo |
-| `Payments` | Phase 4 / 7 | Payment attempts and their state machine, applying the gateway's state, capture and void, reconciliation; refunds and disputes in Phase 7 |
+| `Payments` | Phase 4 / 7 | Payment attempts and their state machine, applying the gateway's state, capture and void, reconciliation; refunds, voiding by API and disputes (Phase 7, ADR-0066) |
 | `PayerFields` | Phase 4 / 8 | Payer field catalog and validation (Phase 4); tenant configuration UI and purge (Phase 8) |
 | `Webhooks` | Phase 4 / 5 | Recorded business events (Phase 4); outgoing webhooks, outbox delivery, SSRF protection, pre-payment validation (Phase 5) |
 | `Fx` | Phase 6 (subset, ADR-0063) | Banxico FIX storage and job, immutable quotes, conversion policy, quoter |
@@ -115,6 +115,8 @@ How a link gets paid (ADR-0050, ADR-0051):
 | Truth | Every Stripe state goes through one action; Stripe's events (re-read, never trusted) and the 15-minute reconciliation keep the database right; authorizations left uncaptured are voided |
 
 Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.processing`, `payment.failed`, `payment.succeeded`, `payment.canceled`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks, as frozen snapshots (the link as `PaymentLinkPresenter` shows it, the payment as `PaymentSnapshot` builds it, which also feeds `GET /v1/payments`). `ApplyProviderPayment` records `payment.canceled` whenever an authorized payment or a 3D Secure step is reported canceled, with the `VoidReason` of our void or `gateway_canceled` when the gateway released it on its own (ADR-0062).
+
+Refunds and disputes (ADR-0066) follow the same rule: one action applies each, from the gateway's current state. `RefundPayment` (`POST /v1/refunds`) reserves the amount in one transaction (link, then attempt, locked; pending and succeeded refunds count against the payment) and then asks the gateway outside any transaction, under the refund's own idempotency key; `ApplyProviderRefund` applies what the gateway says, whoever started the refund (the API, a webhook, the reconciliation or Stripe's Dashboard, imported as `provider_dashboard`), keeps `payment_attempts.amount_refunded_minor` and the link's `refund_status`, and records `refund.created|succeeded|failed`. `ApplyProviderDispute` records disputes, keeps the link's `dispute_status` and records `dispute.created|closed`. Stripe's `charge.refunded`, `refund.*` and `charge.dispute.*` events carry no metadata of ours: `RecordProviderEvent` finds the attempt by the PaymentIntent in the payload (none: `foreign_object`), and `ProcessProviderEvent` re-reads the refund, the refunds of the payment or the dispute (`SyncProviderRefunds`, `SyncProviderDispute`). `POST /v1/payments/{id}/void` is `VoidAuthorization` with the reason `merchant_requested`, so it shares the attempt's lease with the capture. Pending refunds are re-read by the 15-minute reconciliation.
 
 ### Payment mechanics (technical detail of ADR-0051)
 

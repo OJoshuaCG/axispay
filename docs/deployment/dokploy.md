@@ -689,7 +689,7 @@ Tenants configure nothing. The platform needs **one destination per mode**. In t
 - [ ] Events from **Connected accounts** (a Connect destination), not "Your account".
 - [ ] URL `https://api.<domain>/webhooks/stripe/connect/test` in test mode, `https://api.<domain>/webhooks/stripe/connect/live` in live mode. The mode in the URL must match the Dashboard mode.
 - [ ] API version `2026-08-26.dahlia`, the version pinned in the application (`config/services.php`, `stripe.api_version`).
-- [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
+- [ ] Events `account.updated`, `account.application.deauthorized`, `payment_intent.amount_capturable_updated`, `payment_intent.canceled`, `payment_intent.payment_failed`, `payment_intent.processing`, `payment_intent.requires_action` and `payment_intent.succeeded` (Phase 4, ADR-0051), plus `charge.refunded`, `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated` and `charge.dispute.closed` (Phase 7, ADR-0066): the list in `config/axispay.php` (`gateways.stripe.connect_webhook_events`), also printed by `php artisan axispay:doctor`.
 - [ ] Its signing secret (`whsec_…`) is in `STRIPE_TEST_CONNECT_WEBHOOK_SECRET` or `STRIPE_LIVE_CONNECT_WEBHOOK_SECRET`, never the other mode's variable.
 
 `php artisan axispay:doctor` prints the pinned API version and the event list, so you can compare them with the Dashboard.
@@ -707,6 +707,15 @@ One-time steps when a deployment moves to Phase 4 (checkout and card payments, [
 5. **Sandbox off:** `AXISPAY_CHECKOUT_SANDBOX` must not be set. The application refuses to start with it outside local development and tests.
 6. **Trusted proxy:** `TRUSTED_PROXIES` is Traefik's network range, never `*` ([Trusted proxies](#trusted-proxies)). Without it every payer shares one address and the card-testing limits pause payments for everyone.
 7. Run `php artisan axispay:doctor`: no `ERROR` lines.
+
+### Upgrading to Refunds and Disputes (Phase 7, ADR-0066)
+
+One-time steps when a deployment gets refunds, voiding by API and dispute events. Payments keep working without them, but refunds made in the Stripe Dashboard and disputes only reach the platform as these events.
+
+1. **Database update:** deploy `web`; it runs the migration that creates `refunds` and `disputes` before it takes traffic.
+2. **Merchants' own webhook endpoints:** in the `web` terminal run `php artisan axispay:stripe-sync-webhook-endpoints`. It adds `charge.refunded`, `refund.*` and `charge.dispute.*` to the endpoint of every merchant connected with API keys. The restricted key of those merchants needs the **Charges and Refunds: Write** and **Disputes: Read** permissions (already required since Phase 2).
+3. **The seven events on both Connect destinations** (test and live): add `charge.refunded`, `refund.created`, `refund.updated`, `refund.failed`, `charge.dispute.created`, `charge.dispute.updated` and `charge.dispute.closed` in the Stripe Dashboard ([Connect webhook destination](#connect-webhook-destination-required)). `php artisan axispay:doctor` prints the full list.
+4. **Reconciliation:** a refund still `pending` after 10 minutes is re-read by the 15-minute reconciliation (`axispay:payments:reconcile`), which must already be scheduled. A refund the gateway never received is failed after a day and its money freed.
 
 ### Confirm that events arrive
 

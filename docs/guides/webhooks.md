@@ -52,13 +52,18 @@ Adding, changing, deleting an endpoint or rotating its secret sends an e-mail to
 | `payment.processing` | A payment is being processed (rare with cards) | Yes |
 | `payment.succeeded` | A payment was charged; includes whether it was a late payment and the result of the pre-payment validation | Yes |
 | `payment.failed` | A card was declined; includes how many declines so far and a generic code | Yes |
-| `payment.canceled` | An authorized payment was voided and will not be charged; includes the `reason` (`merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action`, `gateway_canceled`) | Yes |
+| `payment.canceled` | An authorized payment was voided and will not be charged; includes the `reason` (`merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action`, `merchant_requested`, `gateway_canceled`) | Yes |
 | `payment_link.created`, `payment_link.expired`, `payment_link.canceled` | A link was created, expired or was canceled | Later phases |
-| `refund.created`, `refund.succeeded`, `refund.failed` | Refunds | Phase 7 |
-| `dispute.created`, `dispute.closed` | Disputes | Phase 7 |
+| `refund.created` | A refund was accepted (made through the API, or in the payment gateway's own dashboard: then `origin` is `provider_dashboard`) | Yes |
+| `refund.succeeded` | A refund was completed: the money goes back to the payer. Includes the payment with its new `amount_refunded` | Yes |
+| `refund.failed` | A refund did not go through (refused, failed, canceled or never sent); includes a generic `failure.code` | Yes |
+| `dispute.created` | The payer's bank opened a dispute against a payment (`reason`, and `evidence_due_by` when the gateway asks for evidence) | Yes |
+| `dispute.closed` | A dispute closed: `status` is `won`, `lost` or `warning_closed` (an inquiry that closed without a chargeback) | Yes |
 | `ping` | The test event sent from the panel | Only from the test button |
 
 You can subscribe to the events of later phases now; they start arriving when those features ship.
+
+**Refunds and disputes.** `data.object` is the refund (`re_…`) or the dispute (`dsp_…`), and `data.payment` is the payment with your `client_reference_id`, its `amount_refunded`, `refund_status` and `dispute_status`, so you can match it without a lookup. They are sent whoever started the refund or dispute: confirm them with `GET /v1/refunds/{id}` or `GET /v1/payments/{id}` before acting, and act on `refund.succeeded` (not on `refund.created`) when the refund means giving something back on your side. AxisPay only administers the payment: what a refund or a lost dispute means for your business (credit, stock, access) is yours to decide. Disputes are answered in your own payment gateway dashboard; AxisPay does not take part in them. See the integration guide, "Refunds" and "Disputes".
 
 The payment inside every `payment.*` event (and inside `payment_link.paid`) carries your link's `client_reference_id` (so you can match it to your order without a lookup; `null` when the link has none), `captured_at` (when the payment was captured; `null` until it succeeds) and `fx` (`null` unless a currency conversion applied; see below). `payment.canceled` can arrive for a payment you approved in the pre-payment validation: if you reserved stock or credited a balance on approval, undo it then.
 

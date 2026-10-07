@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Refunds, voiding by API and refund and dispute events** (ADR-0066, proposed;
+  Phase 7 subset): `POST /v1/refunds` (scope `refunds:create`, `Idempotency-Key`
+  required) refunds a captured payment fully or in part, in the currency
+  charged, never above what is left (refunds still pending count), and
+  `GET /v1/refunds` / `GET /v1/refunds/{id}` (scope `refunds:read`) read them.
+  A refusal by the gateway is kept as a `failed` refund; an unreachable gateway
+  answers `502` and the retry with the same key finishes the same refund
+  without ever making a second one. `POST /v1/payments/{id}/void` (scope
+  `refunds:create`) releases an authorization that was not captured, safely
+  against the capture (`409 payment_busy`, `409 payment_not_voidable`;
+  `payment.canceled` with the new reason `merchant_requested`). New error codes
+  `payment_not_voidable` and `payment_busy`. Stripe's `charge.refunded`,
+  `refund.created|updated|failed` and `charge.dispute.created|updated|closed`
+  are ingested (re-read from Stripe; refunds made in the Dashboard are
+  imported with `origin: provider_dashboard`) and sent to integrators as
+  `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created` and
+  `dispute.closed` (`data.object` is the refund `re_...` or the dispute
+  `dsp_...`, `data.payment` the payment). The payment object (events and
+  `GET /v1/payments`) gains `amount_refunded`, `amount_refunded_minor`,
+  `refund_status` and `dispute_status`; the link's `refund_status` and
+  `dispute_status` are now maintained. The reconciliation re-reads refunds
+  still `pending`. The tenant panel's payment detail shows refunds and
+  disputes (read only). New tables `refunds` and `disputes`. Platform fees are
+  not returned (ADR-0012). **Deploy:** run
+  `php artisan axispay:stripe-sync-webhook-endpoints` and add the seven events
+  to both Stripe Connect destinations (see the deployment guide).
 - **Line items on payment links** (ADR-0064, proposed): `POST /v1/payment_links`
   accepts `line_items` `[{label, amount, absorbs_rounding}]`, a display-only
   breakdown that must add up to the link amount (at most 20 lines, labels up

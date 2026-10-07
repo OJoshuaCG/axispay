@@ -347,13 +347,13 @@ want to receive payments in, for each mode (start with test mode):
    | Resource | Access | Used for |
    |---|---|---|
    | PaymentIntents | Write | Charges (Phase 4) |
-   | Charges and Refunds | Write | Refunds (Phase 7); includes reading charges |
+   | Charges and Refunds | Write | Refunds (Phase 7, ADR-0066); includes reading charges |
    | Webhook Endpoints | Write | The endpoint the platform creates on your account |
    | Accounts (Core → Accounts) | Read | Country and charge status; daily health check |
    | Tokens | Read | Proving the publishable key belongs to the same account |
    | ConfirmationTokens | Read | Card checkout (deferred intents) |
    | PaymentMethods | Read | Card country (currency conversion) |
-   | Disputes | Read | Disputes (Phase 7) |
+   | Disputes | Read | Disputes (Phase 7, ADR-0066) |
    | Events | Read | Reconciliation |
 
    Do **not** grant Payouts, Transfers or Balance: the platform warns about

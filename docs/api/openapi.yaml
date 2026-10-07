@@ -2,11 +2,12 @@ openapi: 3.1.0
 info:
   title: AxisPay API
   version: v1
-  summary: Public API for creating and tracking payment links, and reading their payments and events.
+  summary: Public API for creating and tracking payment links, reading their payments and events, and refunding or voiding payments.
   description: |
     Contract of the public API v1 (master plan section 10; ADR-0048 for the
     Phase 3 rules). Phase 3: payment links. Payment reads (`GET /payments`, ADR-0062).
-    Phase 5: the event history
+    Phase 7 (part): refunds, voiding an authorization and the refund and dispute events
+    (ADR-0066). Phase 5: the event history
     (ADR-0060), and, under `webhooks`, what AxisPay sends to your server: the
     events (ADR-0057) and the pre-payment validation call (ADR-0058). The
     merchant guide is `docs/guides/webhooks.md`.
@@ -26,7 +27,7 @@ info:
     The prefix selects the mode; a test key never reaches live resources (another mode's
     resource answers `404`). A missing, unknown, revoked, expired or wrong-mode key, or a key of
     an account closed more than 30 days ago, answers `401 invalid_api_key`. Each endpoint needs a scope (`links:create`, `links:read`,
-    `links:cancel`, `payments:read`, `events:read`); a key without it gets `403 insufficient_scope`. Keys are created and
+    `links:cancel`, `payments:read`, `refunds:create`, `refunds:read`, `events:read`); a key without it gets `403 insufficient_scope`. Keys are created and
     revoked in the tenant panel only. After 30 failed authentications in a minute from the
     same IP, every request from it answers `429 rate_limited` for the rest of the minute.
 
@@ -35,13 +36,14 @@ info:
     `403 tenant_suspended`) for 30 days after closing; then its keys answer `401`.
 
     Idempotency (plan 10.3): `Idempotency-Key` is required on `POST /payment_links` and
-    honored on the other POSTs. The same key and body within 24 hours replays the stored
+    `POST /refunds`, and honored on the other POSTs. The same key and body within 24 hours replays the stored
     status and body with `Idempotent-Replayed: true` (4xx answers included; 5xx answers are
     never stored). The same key with another body answers `422 idempotency_key_reused`;
     while the first request runs, `409 idempotency_request_in_progress`. Bodies are compared
     as JSON (key order and whitespace ignored; an empty body, `{}` and `[]` are the same).
     Keys are scoped per account and mode. A key that created a payment link stays bound to
-    it: after 24 hours the same body returns that link, another body still answers `422`.
+    it: after 24 hours the same body returns that link, another body still answers `422`. A key
+    that created a refund behaves the same way.
     Stored 4xx answers (for example `409 gateway_not_ready`) are also replayed for 24 hours:
     retry with a new key once the cause is fixed. A request left unfinished for 5 minutes
     frees its key.
@@ -71,7 +73,9 @@ tags:
   - name: Payment links
     description: Single-use, reopenable payment links (plan 10.5, ADR-006).
   - name: Payments
-    description: Read-only payments, one per gateway attempt of a link (plan 10.6, ADR-0062).
+    description: Payments, one per gateway attempt of a link, and voiding an authorization that was not captured (plan 10.6, ADR-0062, ADR-0066).
+  - name: Refunds
+    description: Full or partial refunds of captured payments (plan 10.7, 16.1, ADR-0066).
   - name: Events
     description: Event history for integrators (plan 10.8, ADR-0060).
   - name: Outgoing webhooks
@@ -358,6 +362,181 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/ServerError' }
+  /payments/{id}/void:
+    post:
+      tags: [Payments]
+      operationId: voidPayment
+      summary: Void an authorization that was not captured
+      description: |
+        Scope `refunds:create`. Releases a payment whose card was authorized but not captured yet
+        (`status: requires_capture`): no money moves and nothing is refunded, the payer's bank
+        releases the hold. Returns the payment, now `canceled`; `payment.canceled` is sent with
+        `reason: merchant_requested` (ADR-0066). The link goes back to `active` like after any
+        release: cancel it (`POST /payment_links/{id}/cancel`) if you do not want it paid again.
+        Voiding a payment that is already `canceled` answers `200` with it unchanged.
+
+        A payment is only in that state for a moment (the pre-payment validation and the capture
+        follow the authorization at once), so this is meant for a payment you want to stop while
+        it waits. It shares the payment's lock with the capture and the validation: if one of
+        them is working on it right now the answer is `409 payment_busy` (retry in a few
+        seconds), and if the capture finished first the payment is `succeeded` and the answer
+        is `409 payment_not_voidable`: refund it instead (`POST /refunds`). Any other status
+        answers `409 payment_not_voidable` too. If the gateway cannot be reached the answer is
+        `502 gateway_error`, nothing changed and the same request can be retried.
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: The voided payment.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+  /refunds:
+    post:
+      tags: [Refunds]
+      operationId: createRefund
+      summary: Refund a payment, fully or in part
+      description: |
+        Scope `refunds:create`; `Idempotency-Key` is required. Refunds a captured payment
+        (`status: succeeded`) on the payment gateway account it was charged on. `amount` is a decimal
+        string in the **currency charged** (MXN when the payment was converted, see `fx`); omitted, it
+        refunds everything that is still refundable. The sum of the refunds that are pending or done
+        never exceeds the payment: a larger amount answers `422 refund_exceeds_available` (the message
+        says how much is left). A payment that is not `succeeded` answers `409 payment_not_refundable`
+        (void an authorization that was not captured instead, `POST /payments/{id}/void`).
+
+        The answer is `201` with the refund as the gateway reports it right after creating it: most
+        card refunds come back `succeeded`, some `pending`. The final state always arrives as a
+        `refund.succeeded` or `refund.failed` event (and `GET /refunds/{id}`); `refund.created` is sent
+        as soon as the refund is accepted. If the gateway refuses the refund (or its credentials no
+        longer work) the refund is kept as `failed` with `failure.code` (`gateway_refused`,
+        `gateway_access_denied`), `refund.failed` is sent and the money is free to refund again with
+        another key. If the gateway cannot be reached the answer is `502 gateway_error` and the refund
+        stays `pending`: retry with the **same** `Idempotency-Key` and body, which finishes that refund
+        and never makes a second one (a refund the gateway made whose answer was lost is found again).
+        A refund still `pending` with no answer from the gateway after a day is failed
+        (`refund_not_sent`).
+
+        Platform fees are not returned (ADR-0012). What a refund means for your own business (credit,
+        stock, access) is yours to decide when the event arrives; AxisPay only administers the payment.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+        - $ref: '#/components/parameters/RequestIdIn'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefundRequest'
+      responses:
+        '201':
+          description: The refund.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+    get:
+      tags: [Refunds]
+      operationId: listRefunds
+      summary: List refunds
+      description: |
+        Scope `refunds:read`. The refunds of the key's account and mode, newest first, including
+        those made in the gateway's own dashboard (`origin: provider_dashboard`). `starting_after`
+        pages to older refunds, `ending_before` to newer ones (not both). Unknown query parameters
+        are ignored.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/RefundStartingAfter'
+        - $ref: '#/components/parameters/RefundEndingBefore'
+        - name: payment
+          in: query
+          required: false
+          description: Only the refunds of this payment.
+          schema:
+            type: string
+            pattern: '^pay_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        - name: status
+          in: query
+          required: false
+          description: Only refunds in this status.
+          schema: { $ref: '#/components/schemas/RefundStatus' }
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: One page of refunds.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /refunds/{id}:
+    get:
+      tags: [Refunds]
+      operationId: retrieveRefund
+      summary: Retrieve a refund
+      description: |
+        Scope `refunds:read`. The refund as it is now. Another account's or mode's refund, an
+        unknown ID and a wrong prefix all answer `404`. No gateway identifier is returned.
+      parameters:
+        - $ref: '#/components/parameters/RefundId'
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: The refund.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Refund'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
   /events:
     get:
       tags: [Events]
@@ -479,6 +658,10 @@ webhooks:
                 $ref: '#/components/examples/PaymentFailedEvent'
               payment.canceled:
                 $ref: '#/components/examples/PaymentCanceledEvent'
+              refund.succeeded:
+                $ref: '#/components/examples/RefundSucceededEvent'
+              dispute.created:
+                $ref: '#/components/examples/DisputeCreatedEvent'
       responses:
         '2XX':
           description: The event was received (the body of your answer is not used).
@@ -569,9 +752,9 @@ components:
       in: header
       required: true
       description: |
-        Required. A unique value per intended link (for example your order number plus an
-        attempt counter). Missing: `400 idempotency_key_required`. A key that created a link
-        can never create another one: reused with another body, even after 24 hours, it
+        Required. A unique value per intended link or refund (for example your order number plus
+        an attempt counter). Missing: `400 idempotency_key_required`. A key that created a link or
+        a refund can never create another one: reused with another body, even after 24 hours, it
         answers `422 idempotency_key_reused`.
       schema:
         type: string
@@ -610,6 +793,30 @@ components:
       in: query
       required: false
       description: A payment ID; returns the payments created after it.
+      schema:
+        type: string
+    RefundId:
+      name: id
+      in: path
+      required: true
+      description: Refund ID with its prefix.
+      schema:
+        type: string
+        pattern: '^re_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        examples:
+          - re_01J8Z6Q6T4Y0V8KX2M1N5P7R9S
+    RefundStartingAfter:
+      name: starting_after
+      in: query
+      required: false
+      description: A refund ID; returns the refunds created before it.
+      schema:
+        type: string
+    RefundEndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      description: A refund ID; returns the refunds created after it.
       schema:
         type: string
     EventId:
@@ -822,6 +1029,8 @@ components:
             - link_payment_in_progress
             - refund_exceeds_available
             - payment_not_refundable
+            - payment_not_voidable
+            - payment_busy
             - rate_limited
             - gateway_error
             - internal_error
@@ -1135,10 +1344,10 @@ components:
       type: string
       description: |
         Event types (plan 15.2). Sent today: `payment_link.opened`, `payment_link.paid`,
-        `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled`. Defined and subscribable but
-        not sent until their phase: `payment_link.created`, `payment_link.expired`,
-        `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`,
-        `dispute.created`, `dispute.closed`. `ping` (the panel's test event) is not subscribable
+        `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled`,
+        `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed`
+        (ADR-0066). Defined and subscribable but not sent until their phase: `payment_link.created`,
+        `payment_link.expired`, `payment_link.canceled`. `ping` (the panel's test event) is not subscribable
         and is not in the event history. New types may be added: ignore the ones you do not know.
       enum:
         - payment_link.created
@@ -1229,7 +1438,7 @@ components:
         The payment as an event carries it, frozen when the event happened. One payment is one
         attempt at the gateway; a declined card does not create another. Our identifiers only:
         no gateway IDs and no raw decline code.
-      required: [id, object, livemode, payment_link, client_reference_id, status, amount, amount_minor, currency, fx, late_payment, failure_count, failure, pre_validation, captured_at, created_at]
+      required: [id, object, livemode, payment_link, client_reference_id, status, amount, amount_minor, currency, fx, late_payment, failure_count, failure, pre_validation, captured_at, amount_refunded, amount_refunded_minor, refund_status, dispute_status, created_at]
       properties:
         id:
           type: string
@@ -1286,6 +1495,24 @@ components:
           type: [string, 'null']
           format: date-time
           description: When the payment was captured (it became `succeeded`); null until then.
+        amount_refunded:
+          type: string
+          description: What went back to the payer, in the currency charged (the refunds that succeeded; pending ones are not counted).
+          examples: ['500.00']
+        amount_refunded_minor:
+          type: integer
+          format: int64
+        refund_status:
+          type: string
+          enum: [none, partial, full]
+          description: '`none` until a refund succeeds, `partial` while `amount_refunded` is below `amount`, `full` once it equals it.'
+        dispute_status:
+          type: string
+          enum: [none, open, won, lost]
+          description: |
+            Summary of the disputes opened against the payment: `open` while any is open, else `lost` if any
+            was lost, else `won` (an inquiry that closed without a chargeback counts as `won`). `none` for a
+            payment that was never disputed.
         created_at:
           type: string
           format: date-time
@@ -1331,6 +1558,146 @@ components:
         has_more:
           type: boolean
           description: More payments exist in the direction paged.
+    RefundReason:
+      type: string
+      enum: [requested_by_customer, duplicate, fraudulent, other]
+    RefundStatus:
+      type: string
+      enum: [pending, succeeded, failed, canceled]
+      description: |
+        `pending` until the gateway completes it, then `succeeded`, `failed` or `canceled`. A refund
+        that `succeeded` can still become `failed` if the card network returns it; a `failed` or
+        `canceled` one never changes again.
+    CreateRefundRequest:
+      type: object
+      required: [payment]
+      additionalProperties: false
+      properties:
+        payment:
+          type: string
+          description: The payment to refund, `pay_...`. It must be `succeeded`.
+          pattern: '^pay_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+          examples: [pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S]
+        amount:
+          type: string
+          description: |
+            Decimal string in the currency charged, greater than zero and up to what is still
+            refundable. Omitted: everything that is still refundable.
+          examples: ['500.00']
+        reason:
+          $ref: '#/components/schemas/RefundReason'
+    Refund:
+      type: object
+      description: |
+        A refund of a captured payment, as the API shows it and as the `refund.*` events carry it
+        (frozen when the event happened). Our identifiers only, no gateway ID.
+      required: [id, object, livemode, payment, status, amount, amount_minor, currency, reason, origin, failure, created_at, succeeded_at]
+      properties:
+        id:
+          type: string
+          examples: [re_01J8Z6Q6T4Y0V8KX2M1N5P7R9S]
+        object:
+          const: refund
+        livemode:
+          type: boolean
+        payment:
+          type: string
+          description: ID of the refunded payment.
+          examples: [pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S]
+        status:
+          $ref: '#/components/schemas/RefundStatus'
+        amount:
+          type: string
+          description: In the currency charged.
+          examples: ['500.00']
+        amount_minor:
+          type: integer
+          format: int64
+        currency:
+          $ref: '#/components/schemas/Currency'
+        reason:
+          $ref: '#/components/schemas/RefundReason'
+        origin:
+          type: string
+          enum: [api, panel, provider_dashboard]
+          description: Where it was requested; `provider_dashboard` is a refund made in the gateway's own dashboard, imported from its event.
+        failure:
+          type: [object, 'null']
+          required: [code]
+          description: Set when the refund did not go through. The gateway's own reason is never shown.
+          properties:
+            code:
+              type: string
+              enum: [refund_failed, refund_canceled, gateway_refused, gateway_access_denied, refund_not_sent]
+              description: Generic code; new codes may be added.
+        created_at:
+          type: string
+          format: date-time
+        succeeded_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the refund succeeded; null otherwise.
+    RefundList:
+      type: object
+      required: [object, data, has_more]
+      properties:
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Refund'
+        has_more:
+          type: boolean
+          description: More refunds exist in the direction paged.
+    DisputeStatus:
+      type: string
+      enum: [needs_response, under_review, won, lost, warning_closed]
+      description: |
+        `needs_response` and `under_review` are open. `won`, `lost` and `warning_closed` (an early
+        inquiry that closed without a chargeback) are final.
+    Dispute:
+      type: object
+      description: |
+        A dispute (chargeback or inquiry) the payer's bank opened against a payment, as the
+        `dispute.*` events carry it (frozen when the event happened). With direct charges you
+        answer it in your own payment gateway dashboard: AxisPay only records it and tells you.
+        Our identifiers only, no gateway ID.
+      required: [id, object, livemode, payment, status, amount, amount_minor, currency, reason, evidence_due_by, opened_at, closed_at]
+      properties:
+        id:
+          type: string
+          examples: [dsp_01J8Z7Q6T4Y0V8KX2M1N5P7R9S]
+        object:
+          const: dispute
+        livemode:
+          type: boolean
+        payment:
+          type: string
+          description: ID of the disputed payment.
+        status:
+          $ref: '#/components/schemas/DisputeStatus'
+        amount:
+          type: string
+          description: In the currency charged.
+        amount_minor:
+          type: integer
+          format: int64
+        currency:
+          $ref: '#/components/schemas/Currency'
+        reason:
+          type: [string, 'null']
+          description: The gateway's reason as plain text (`fraudulent`, `product_not_received`...); new values may appear.
+        evidence_due_by:
+          type: [string, 'null']
+          format: date-time
+          description: When your evidence is due at the gateway, if it asks for one.
+        opened_at:
+          type: string
+          format: date-time
+        closed_at:
+          type: [string, 'null']
+          format: date-time
     EventData:
       type: object
       description: |
@@ -1344,7 +1711,12 @@ components:
         | `payment.processing` | `Payment` | none |
         | `payment.succeeded` | `Payment` | `payment_link` (`PaymentLink`), `late_payment` (boolean) |
         | `payment.failed` | `Payment` | `failure_count` (integer), `failure_code` (string) |
-        | `payment.canceled` | `Payment` | `reason` (string: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action` or `gateway_canceled`; new reasons may be added) |
+        | `payment.canceled` | `Payment` | `reason` (string: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action`, `merchant_requested` (you voided it) or `gateway_canceled`; new reasons may be added) |
+        | `refund.created` | `Refund` | `payment` (`Payment`) |
+        | `refund.succeeded` | `Refund` | `payment` (`Payment`, with the new `amount_refunded`) |
+        | `refund.failed` | `Refund` | `payment` (`Payment`); also sent for a refund the gateway canceled |
+        | `dispute.created` | `Dispute` | `payment` (`Payment`, with `dispute_status: open`) |
+        | `dispute.closed` | `Dispute` | `payment` (`Payment`, with the new `dispute_status`) |
         | `ping` | `{ "object": "ping", "message": "Test event." }` | none |
 
         Ignore keys you do not know.
@@ -1588,6 +1960,93 @@ components:
             captured_at: null
             created_at: '2026-09-24T02:10:40Z'
           reason: capture_window_elapsed
+    RefundSucceededEvent:
+      summary: refund.succeeded
+      value:
+        id: evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9W
+        type: refund.succeeded
+        api_version: v1
+        livemode: true
+        created_at: '2026-09-30T15:02:11Z'
+        data:
+          object:
+            id: re_01J8Z6Q6T4Y0V8KX2M1N5P7R9S
+            object: refund
+            livemode: true
+            payment: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            status: succeeded
+            amount: '500.00'
+            amount_minor: 50000
+            currency: MXN
+            reason: requested_by_customer
+            origin: api
+            failure: null
+            created_at: '2026-09-30T15:02:09Z'
+            succeeded_at: '2026-09-30T15:02:11Z'
+          payment:
+            id: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            object: payment
+            livemode: true
+            payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            client_reference_id: ORDER-1029
+            status: succeeded
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            fx: null
+            late_payment: false
+            failure_count: 0
+            failure: null
+            pre_validation: { outcome: approved }
+            captured_at: '2026-09-24T02:11:09Z'
+            amount_refunded: '500.00'
+            amount_refunded_minor: 50000
+            refund_status: partial
+            dispute_status: none
+            created_at: '2026-09-24T02:10:40Z'
+    DisputeCreatedEvent:
+      summary: dispute.created
+      value:
+        id: evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9X
+        type: dispute.created
+        api_version: v1
+        livemode: true
+        created_at: '2026-10-02T09:30:00Z'
+        data:
+          object:
+            id: dsp_01J8Z7Q6T4Y0V8KX2M1N5P7R9S
+            object: dispute
+            livemode: true
+            payment: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            status: needs_response
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            reason: fraudulent
+            evidence_due_by: '2026-10-12T23:59:59Z'
+            opened_at: '2026-10-02T09:29:41Z'
+            closed_at: null
+          payment:
+            id: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            object: payment
+            livemode: true
+            payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            client_reference_id: ORDER-1029
+            status: succeeded
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            fx: null
+            late_payment: false
+            failure_count: 0
+            failure: null
+            pre_validation: { outcome: approved }
+            captured_at: '2026-09-24T02:11:09Z'
+            amount_refunded: '0.00'
+            amount_refunded_minor: 0
+            refund_status: none
+            dispute_status: open
+            created_at: '2026-09-24T02:10:40Z'
   responses:
     BadRequest:
       description: Invalid request (`invalid_request_error`).
@@ -1634,8 +2093,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    BadGateway:
+      description: The payment gateway could not be reached or answered an error (`gateway_error`). Nothing changed that a retry with the same request cannot finish.
+      headers:
+        Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     UnprocessableEntity:
-      description: Idempotency key reuse (`idempotency_key_reused`).
+      description: Idempotency key reuse (`idempotency_key_reused`) or a refund above what is left to refund (`refund_exceeds_available`).
       headers:
         Request-Id:
           $ref: '#/components/headers/RequestId'

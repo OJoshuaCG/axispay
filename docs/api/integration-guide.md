@@ -131,9 +131,11 @@ A key can do only what its scopes allow; a request outside them answers `403 ins
 | `links:read` | `GET /v1/payment_links`, `GET /v1/payment_links/{id}` |
 | `links:cancel` | `POST /v1/payment_links/{id}/cancel` |
 | `payments:read` | `GET /v1/payments`, `GET /v1/payments/{id}` |
+| `refunds:create` | `POST /v1/refunds`, `POST /v1/payments/{id}/void` (undoing a charge needs the same permission whether it was captured or not) |
+| `refunds:read` | `GET /v1/refunds`, `GET /v1/refunds/{id}` |
 | `events:read` | `GET /v1/events`, `GET /v1/events/{id}` |
 
-The panel may also offer `refunds:create` and `refunds:read`. They are accepted when creating a key so you will not have to reissue it later, but **no endpoint uses them yet** (see [section 10](#10-not-available-yet)).
+`refunds:create` is a sensitive permission: give it only to the key of the system that decides refunds.
 
 ### Rate limit
 
@@ -248,14 +250,16 @@ When a request has several problems, the first failing field is reported.
 | `return_url_not_allowed` | 400 | The `return_url` host is not in the account's allowed return domains, or it is not HTTPS in live mode. |
 | `payer_field_invalid` | 400 | `payer_fields` has an unknown field or an invalid requirement. |
 | `validation_endpoint_not_configured` | 400 | `pre_payment_validation: true` but no validation URL is configured for this mode. |
-| `idempotency_key_required` | 400 | `Idempotency-Key` is missing on `POST /v1/payment_links`. |
-| `idempotency_key_reused` | 422 | The key was already used with a different request (or, after 24 hours, with a different body for a key that created a link). Use a new key for a new request. |
+| `idempotency_key_required` | 400 | `Idempotency-Key` is missing on `POST /v1/payment_links` or `POST /v1/refunds`. |
+| `idempotency_key_reused` | 422 | The key was already used with a different request (or, after 24 hours, with a different body for a key that created a link or a refund). Use a new key for a new request. |
 | `idempotency_request_in_progress` | 409 | A request with the same key is still running. Retry shortly with the same key. |
 | `resource_not_found` | 404 | No such resource for your account and mode, or the ID has the wrong prefix. |
 | `link_not_cancelable` | 409 | The link is already `paid` or `expired`. |
 | `link_payment_in_progress` | 409 | A payment is in progress on the link (`processing`); it cannot be canceled now. Try again later. |
-| `refund_exceeds_available` | 422 | Reserved for refunds, which are not available yet. |
-| `payment_not_refundable` | 409 | Reserved for refunds, which are not available yet. |
+| `refund_exceeds_available` | 422 | The refund is above what is left to refund of the payment (refunds still pending count). The message says how much is left. |
+| `payment_not_refundable` | 409 | The payment was not captured (`status` is not `succeeded`). Void an authorization that was not captured instead. |
+| `payment_not_voidable` | 409 | The payment is not an authorization waiting for capture (`requires_capture`), or it was captured before the void reached the gateway. Refund a captured payment instead. |
+| `payment_busy` | 409 | The payment is being processed right now (the capture or your own pre-payment validation holds it). Retry in a few seconds. |
 | `rate_limited` | 429 | Rate limit exceeded, or too many failed authentications from your IP. Wait `Retry-After` seconds. |
 | `gateway_error` | 502 | The payment gateway returned an error. Retry later (with the same idempotency key). |
 | `internal_error` | 500 | Unexpected error. Retry with the same idempotency key; if it persists, send the `request_id` to support. |
@@ -373,7 +377,7 @@ Fields to know:
 | `auto_redirect` | Whether the payer is sent back to `return_url` by themselves after paying. |
 | `paid_at`, `canceled_at`, `expired_at`, `cancel_reason` | Set when the link reaches that state, otherwise `null`. |
 | `open_count`, `first_opened_at` | How many times, and when first, the payer opened the page. |
-| `refund_status`, `dispute_status` | `none` for now (refunds and disputes are not implemented yet). |
+| `refund_status`, `dispute_status` | Summaries of the link's paid payment: `refund_status` is `none`, `partial` or `full` ([Refunds](#refunds-post-v1refunds)); `dispute_status` is `none`, `open`, `won` or `lost` ([Disputes](#disputes)). |
 | `payment` | Always `null` for now. Read the payments of a link with `GET /v1/payments?payment_link={id}` ([section 6](#payments-get-v1payments)), or from the events (`payment_link.paid` and `payment.succeeded` carry it). |
 
 #### `curl`
@@ -609,7 +613,74 @@ curl -sS -G https://api.example.com/v1/payments \
 - `fx` is `null` when the payment was charged in the link's own currency. When a Mexican card paid a USD link it describes the conversion (see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)), and `amount` and `currency` are what was charged, in MXN: reconcile with both.
 - `card` has the brand and country only; either can be `null` before a card was read. Never the number, the last digits or a fingerprint. No gateway identifier and no payer data is returned.
 - `captured_at` is set once the payment succeeded, `authorized_at` once it was authorized and `canceled_at` once it was canceled; otherwise `null`.
+- `amount_refunded` (and `amount_refunded_minor`) is what went back to the payer, in the currency charged: the refunds that **succeeded** (a pending one is not counted yet). `refund_status` is `none`, `partial` or `full`. `dispute_status` is `none`, `open`, `won` or `lost` (see [Disputes](#disputes)).
 - An ID with a wrong prefix, an unknown ID, another account's or another mode's payment answers `404 resource_not_found`.
+
+### Voiding an authorization: `POST /v1/payments/{id}/void`
+
+Scope `refunds:create`. Releases a payment whose card was **authorized but not captured** (`status: requires_capture`): no money moves, nothing is refunded and the payer's bank releases the hold. The answer is the payment, now `canceled`, and `payment.canceled` is sent with `reason: merchant_requested`. The link goes back to `active`, so the payer can try again: if you do not want that, cancel the link too (`POST /v1/payment_links/{id}/cancel`).
+
+```sh
+curl -sS -X POST https://api.example.com/v1/payments/pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S/void \
+  -H "Authorization: Bearer $AXISPAY_API_KEY"
+```
+
+- A payment is `requires_capture` only for a moment: the capture follows the authorization at once, after your [pre-payment validation](#8-pre-payment-validation-callback) when the link has one. Use `void` to stop a payment while it waits; to stop one at the validation itself, answer `reject` there.
+- It shares the payment's lock with the capture and the validation, so it never races them. If one of them is working on the payment right now the answer is `409 payment_busy`: retry in a few seconds. If the capture finished first, the payment is `succeeded` and the answer is `409 payment_not_voidable`: refund it instead.
+- Any other status (`processing`, `succeeded`, `failed`...) answers `409 payment_not_voidable`; voiding a payment that is already `canceled` answers `200` with it unchanged, so a retry is safe. If the payment gateway cannot be reached the answer is `502 gateway_error`, nothing changed and you can send the same request again.
+
+### Refunds: `POST /v1/refunds`
+
+Scope `refunds:create`. Refunds a **captured** payment (`status: succeeded`), fully or in part, on the payment gateway account it was charged on. `Idempotency-Key` is required.
+
+```json
+{ "payment": "pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S", "amount": "500.00", "reason": "requested_by_customer" }
+```
+
+| Field | Description |
+|---|---|
+| `payment` | Required. The `pay_...` ID of a `succeeded` payment. |
+| `amount` | Optional decimal string, **in the currency charged** (MXN when the payment was converted, see `fx`). Omitted: everything that is still refundable. |
+| `reason` | Optional: `requested_by_customer`, `duplicate`, `fraudulent` or `other` (default). |
+
+```sh
+curl -sS -X POST https://api.example.com/v1/refunds \
+  -H "Authorization: Bearer $AXISPAY_API_KEY" \
+  -H "Idempotency-Key: refund-ORDER-1029-1" \
+  -H "Content-Type: application/json" \
+  -d '{"payment":"pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S","amount":"500.00","reason":"requested_by_customer"}'
+```
+
+```json
+{
+  "id": "re_01J8Z6Q6T4Y0V8KX2M1N5P7R9S",
+  "object": "refund",
+  "livemode": true,
+  "payment": "pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S",
+  "status": "succeeded",
+  "amount": "500.00",
+  "amount_minor": 50000,
+  "currency": "USD",
+  "reason": "requested_by_customer",
+  "origin": "api",
+  "failure": null,
+  "created_at": "2026-09-30T15:02:09Z",
+  "succeeded_at": "2026-09-30T15:02:11Z"
+}
+```
+
+- **The sum of the refunds that are pending or done never exceeds the payment.** A larger amount answers `422 refund_exceeds_available` and says how much is left; a refund still `pending` holds its money, so two refunds sent at once cannot add up to more than the payment. A payment that is not `succeeded` answers `409 payment_not_refundable`.
+- **`status` is what the gateway answered right after creating the refund**: most card refunds come back `succeeded`, some `pending`. The final state always arrives as a `refund.succeeded` or `refund.failed` event (or read `GET /v1/refunds/{id}`); `refund.created` is sent as soon as the refund is accepted. A refund that `succeeded` can, rarely, still become `failed` when the card network returns it; one that is `failed` or `canceled` never changes again.
+- **A refusal is an answer, not an error.** If the gateway refuses the refund (for example the payment was already refunded in its own dashboard) the answer is still `201`, with `status: failed` and `failure.code` (`gateway_refused`; `gateway_access_denied` when the account's connection no longer works); `refund.failed` is sent and the money can be refunded again with another `Idempotency-Key`.
+- **If the gateway cannot be reached the answer is `502 gateway_error`** and the refund stays `pending`. Send the **same request with the same `Idempotency-Key`**: it finishes that refund and never makes a second one, even when the first call reached the gateway and only its answer was lost. A refund that never reached the gateway is failed after a day (`failure.code: refund_not_sent`).
+- Platform fees are not returned (ADR-0012): you get back the amount of the refund, minus nothing else the platform decides.
+- **What a refund means for your business is yours to decide** (credit, stock, access): AxisPay only administers the payment. Act when `refund.succeeded` arrives, after confirming it with `GET /v1/refunds/{id}`.
+
+`GET /v1/refunds/{id}` returns one refund; `GET /v1/refunds` lists them newest first (scope `refunds:read`): `limit` (1 to 100, default 20), `starting_after` / `ending_before` (a refund ID, not both), `payment` (a `pay_...` ID: the refunds of one payment) and `status`. Refunds made in the payment gateway's own dashboard are listed too, with `origin: provider_dashboard`. A refund of another account or mode, an unknown ID and a wrong prefix answer `404`.
+
+### Disputes
+
+A **dispute** (a chargeback, or an earlier inquiry) is opened by the payer's bank against a payment. You answer it with the evidence the gateway asks for **in your own payment gateway dashboard**: AxisPay records it and tells you, it does not take part in the dispute. There is no dispute endpoint; you learn about it through the events [`dispute.created` and `dispute.closed`](#event-body) and through the payment: `dispute_status` is `open` while a dispute is open, `lost` once one was lost, and `won` once it closed in your favour (an inquiry that closed without a chargeback counts as `won`: no money was lost). Disputed money is the gateway's business with you: AxisPay does not move it, and platform fees are not returned (ADR-0012).
 
 ### Currency conversion (USD links and Mexican cards)
 
@@ -844,16 +915,23 @@ Webhooks and the events API share one body:
 | `payment.succeeded` | The payment | `payment_link` (the link, summarized), `late_payment` |
 | `payment.failed` | The payment | `failure_count`, `failure_code` |
 | `payment.canceled` | The payment | `reason` |
+| `refund.created` | The refund | `payment` (the payment, as it is after the refund was accepted) |
+| `refund.succeeded` | The refund | `payment` (with the new `amount_refunded` and `refund_status`) |
+| `refund.failed` | The refund | `payment`; also sent for a refund the gateway canceled |
+| `dispute.created` | The dispute | `payment` (with `dispute_status: open`) |
+| `dispute.closed` | The dispute | `payment` (with the new `dispute_status`) |
 
-The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`), `client_reference_id` (the reference of the link, `null` when it has none), `captured_at` (when the payment was captured, `null` until it succeeds), `fx` (`null` unless a currency conversion applied, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
+The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`), `client_reference_id` (the reference of the link, `null` when it has none), `captured_at` (when the payment was captured, `null` until it succeeds), `amount_refunded` / `amount_refunded_minor` (what was refunded, in the currency charged), `refund_status` (`none`, `partial`, `full`), `dispute_status` (`none`, `open`, `won`, `lost`), `fx` (`null` unless a currency conversion applied, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
 
-**`payment.canceled`** is sent every time an authorized payment (or a 3D Secure step) is released and will not be charged: the merchant's pre-payment validation rejected it or failed under `fail_closed`, the capture window elapsed, the link was closed or canceled meanwhile, the payer abandoned a 3D Secure step, or the gateway released it on its own (for example the authorization expired before the capture). `data.reason` says which: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action` or `gateway_canceled` (new reasons may be added). `data.object` is the payment, with `status` `canceled` (or `failed` when a card had been declined before) and the same `pay_...` ID as the pre-payment validation call of that attempt. It is sent once per payment, only for payments that had been authorized or were waiting for the payer's bank (not for a card form the payer simply left), and an endpoint that lists its events explicitly must add it to receive it. If you did something on approval (reserved stock, credited a balance), undo it when this event arrives, after confirming it with `GET /v1/payments/{id}` (`status: canceled`).
+**`payment.canceled`** is sent every time an authorized payment (or a 3D Secure step) is released and will not be charged: the merchant's pre-payment validation rejected it or failed under `fail_closed`, the capture window elapsed, the link was closed or canceled meanwhile, the payer abandoned a 3D Secure step, or the gateway released it on its own (for example the authorization expired before the capture). `data.reason` says which: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action`, `merchant_requested` (you voided it with `POST /v1/payments/{id}/void`) or `gateway_canceled` (new reasons may be added). `data.object` is the payment, with `status` `canceled` (or `failed` when a card had been declined before) and the same `pay_...` ID as the pre-payment validation call of that attempt. It is sent once per payment, only for payments that had been authorized or were waiting for the payer's bank (not for a card form the payer simply left), and an endpoint that lists its events explicitly must add it to receive it. If you did something on approval (reserved stock, credited a balance), undo it when this event arrives, after confirming it with `GET /v1/payments/{id}` (`status: canceled`).
+
+**Refund and dispute events.** `data.object` is the **refund** (`re_...`, `object: "refund"`: `payment`, `status`, `amount`, `amount_minor`, `currency`, `reason`, `origin` (`api`, `panel` or `provider_dashboard`), `failure` (`null` or `{ "code": ... }`: `refund_failed`, `refund_canceled`, `gateway_refused`, `gateway_access_denied` or `refund_not_sent`), `created_at`, `succeeded_at`) or the **dispute** (`dsp_...`, `object: "dispute"`: `payment`, `status` (`needs_response`, `under_review`, `won`, `lost` or `warning_closed`), `amount`, `amount_minor`, `currency`, `reason` (the gateway's reason as text, for example `fraudulent`; new values may appear), `evidence_due_by`, `opened_at`, `closed_at`), and `data.payment` is the payment with your `client_reference_id`, so you can match it without a lookup. They are sent for refunds and disputes whoever started them: a refund made in the payment gateway's own dashboard sends `refund.created` (with `origin: provider_dashboard`) and `refund.succeeded`, and a dispute sends `dispute.created` and, when it closes, `dispute.closed` (a dispute first seen already closed sends both). Each is sent once per change, in order per object but not across objects, and none carries a gateway identifier. An endpoint that lists its events explicitly must add them to receive them.
 
 **Event types today**
 
 | Sent today | Defined and subscribable but not sent yet |
 |---|---|
-| `payment_link.opened` (first open, then at most once every 30 minutes; link previewers do not count), `payment_link.paid`, `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled` | `payment_link.created`, `payment_link.expired`, `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed` |
+| `payment_link.opened` (first open, then at most once every 30 minutes; link previewers do not count), `payment_link.paid`, `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed` | `payment_link.created`, `payment_link.expired`, `payment_link.canceled` |
 
 A `ping` event (`{ "object": "ping", "message": "Test event." }`) is sent when you press "Send test event" in the panel. New event types may be added: ignore the ones you do not know.
 
@@ -1004,9 +1082,8 @@ Full details, code examples for answering the call and the stock reservation pat
 
 These are **not implemented** in this version of the API. Do not build on them:
 
-- **Refunds.** There is no refund endpoint, the `refunds:*` scopes have no endpoint, and the events `refund.created`, `refund.succeeded` and `refund.failed` are never sent. A link's `refund_status` is `none` for now. Refunds are planned (Phase 7 of the project plan).
-- **Disputes.** The events `dispute.created` and `dispute.closed` are never sent and a link's `dispute_status` is `none` for now. Planned (Phase 7).
-- **Payer data, last digits and refunds in the payment object.** `GET /v1/payments` is read only and shows the card's brand and country, not the payer, the last digits, refunds or disputes (they come with Phase 7). The `payment` field of a link is still always `null`: read the link's payments with `GET /v1/payments?payment_link=...`.
+- **Refunds from the panel and disputes in the API.** Refunds are requested through the API (or in the payment gateway's own dashboard); the panel shows them but does not create them yet. There is no dispute endpoint and no way to send dispute evidence from AxisPay: answer disputes in your own payment gateway dashboard.
+- **Payer data and last digits in the payment object.** `GET /v1/payments` shows the card's brand and country, not the payer or the last digits. The `payment` field of a link is still always `null`: read the link's payments with `GET /v1/payments?payment_link=...`.
 - **Link events `payment_link.created`, `payment_link.expired`, `payment_link.canceled`** are defined but not sent yet.
 - **Editing a link.** There is no update endpoint; cancel and create a new link.
 - Currencies other than `USD` and `MXN`.
