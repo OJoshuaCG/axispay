@@ -44,6 +44,7 @@ final readonly class CheckoutPageBuilder
         private TenantLegalDocuments $legal,
         private CheckoutMerchantLogo $merchantLogo,
         private FxQuoter $quoter,
+        private ReturnLinks $returnLinks,
     ) {}
 
     public function build(PaymentLink $link, ?CheckoutPhase $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
@@ -69,14 +70,40 @@ final readonly class CheckoutPageBuilder
             money: $link->money(),
             expiresSoonAt: $expiresSoon,
             paidAt: $link->paid_at?->setTimezone($timezone),
-            returnUrl: $link->return_url,
+            returnUrl: $this->returnUrl($link, $state),
             paidInThisSession: $paidInThisSession,
             payerFields: self::payerFields($fields),
             client: $state === CheckoutState::Active ? $this->client($link, $fields, $sessionDeclines) : null,
             sandbox: SandboxMode::enabled(),
             phase: $phase,
             fxLegend: $state === CheckoutState::Active ? $this->fxLegend($link) : null,
+            lineItems: $link->lineItems(),
+            autoRedirectSeconds: $this->autoRedirectSeconds($link, $state, $paidInThisSession),
         );
+    }
+
+    /**
+     * The way back to the merchant (ADR-0064): the signed return once the link
+     * is paid, the plain URL once it ended without a payment (expired,
+     * canceled), nothing while it can still be paid.
+     */
+    private function returnUrl(PaymentLink $link, CheckoutState $state): ?string
+    {
+        return match ($state) {
+            CheckoutState::Paid => $this->returnLinks->paid($link),
+            CheckoutState::Expired, CheckoutState::Canceled => $this->returnLinks->closed($link),
+            default => null,
+        };
+    }
+
+    /** Only the session that just paid is sent back by itself, never a payer who returns to a paid link later. */
+    private function autoRedirectSeconds(PaymentLink $link, CheckoutState $state, bool $paidInThisSession): ?int
+    {
+        if (! $link->auto_redirect || $link->return_url === null || $state !== CheckoutState::Paid || ! $paidInThisSession) {
+            return null;
+        }
+
+        return max(0, config()->integer('axispay.checkout.redirect_countdown_seconds'));
     }
 
     /**

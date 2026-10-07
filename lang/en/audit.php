@@ -119,6 +119,7 @@ return [
         'validation_endpoint_test_sent' => 'Pre-payment validation tested',
         'tenant_payment_settings_updated' => 'Payment settings changed',
         'checkout_conversion_unavailable' => 'Checkout refused: no currency conversion available',
+        'return_secret_rotated' => 'Return signing secret rotated',
     ],
 
 ];

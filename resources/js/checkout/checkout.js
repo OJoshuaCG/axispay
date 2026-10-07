@@ -13,7 +13,8 @@
  * `currency_confirmed`); nothing is charged before that.
  *
  * Modules: api (transport), state, stripe-elements, turnstile, payer, ui,
- * polling, legal-dialog (the merchant's legal texts, every state), and the
+ * polling, auto-redirect (back to the merchant after paying, ADR-0064),
+ * legal-dialog (the merchant's legal texts, every state), and the
  * shared theme toggle (../theme, ADR-0056 part C): this is the only script of
  * every pay-host page, so the toggle starts here, before anything can return.
  * Whatever fails along the way, the Pay button never stays busy: the
@@ -21,6 +22,7 @@
  */
 import { initThemeToggle } from '../theme';
 import { appearance } from './appearance';
+import { initAutoRedirect } from './auto-redirect';
 import { postJson } from './api';
 import { createCurrencyConfirmation } from './currency-confirmation';
 import { initLegalDialogs } from './legal-dialog';
@@ -315,5 +317,6 @@ function initCheckout() {
 initThemeToggle();
 initCheckout();
 initPolling();
+initAutoRedirect();
 initAutofocus();
 initLegalDialogs();

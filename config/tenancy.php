@@ -52,6 +52,8 @@ return [
         'validation_calls',
         // Phase 6 (plan 7.5, 13.4; ADR-0063): the immutable FX quotes.
         'fx_quotes',
+        // ADR-0064: the secret that signs the return to the merchant.
+        'return_signing_secrets',
     ],
 
     /*

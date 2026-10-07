@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Tenancy\Filament\Pages;
 
+use App\Modules\Checkout\Actions\RotateReturnSigningSecret;
 use App\Modules\Fx\Enums\FxMode;
+use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
+use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Models\User;
 use App\Modules\Shared\Money\ExchangeRate;
 use App\Modules\Tenancy\Actions\UpdateTenantPaymentSettings;
@@ -12,6 +15,8 @@ use App\Modules\Tenancy\Data\TenantPaymentSettingsData;
 use App\Modules\Tenancy\Data\TenantSettings;
 use App\Modules\Tenancy\Exceptions\InvalidPaymentSettingsException;
 use App\Modules\Tenancy\Services\TenantAccess;
+use App\Modules\Webhooks\Filament\Concerns\ShowsIssuedSecret;
+use App\Support\Filament\DomainErrors;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -40,12 +45,16 @@ use Illuminate\Validation\ValidationException;
  * Only for `settings:manage` holders; a suspended or closed tenant, and an
  * impersonation session, only see it. No business logic here: the form
  * goes to UpdateTenantPaymentSettings, which checks the platform limits,
- * keeps the rest of the settings document and audits the change.
+ * keeps the rest of the settings document and audits the change. A header
+ * action rotates the return signing secret (RotateReturnSigningSecret,
+ * ADR-0064).
  *
  * @property-read Schema $form
  */
 final class TenantPaymentSettings extends Page
 {
+    use ShowsIssuedSecret;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
 
     protected static ?int $navigationSort = 83;
@@ -80,6 +89,42 @@ final class TenantPaymentSettings extends Page
     public function getSubheading(): string
     {
         return __('fx.settings.subheading');
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [$this->rotateReturnSecretAction()];
+    }
+
+    /**
+     * Rotates the secret that signs the proof of the return to the merchant
+     * (ADR-0064) and shows the new one once; the previous secret keeps signing
+     * for 24 hours. The first time it also generates the secret the links
+     * already use, so this is how a merchant reads it.
+     */
+    private function rotateReturnSecretAction(): Action
+    {
+        return Action::make('rotateReturnSecret')
+            ->label(__('fx.settings.return_secret.action'))
+            ->icon(Heroicon::OutlinedKey)
+            ->color('gray')
+            ->visible(fn (): bool => $this->canManage())
+            ->requiresConfirmation()
+            ->modalIcon(Heroicon::OutlinedKey)
+            ->modalHeading(__('fx.settings.return_secret.heading'))
+            ->modalDescription(__('fx.settings.return_secret.help'))
+            ->modalSubmitActionLabel(__('fx.settings.return_secret.submit'))
+            ->schema([Reauthentication::field()])
+            ->action(function (array $data, Action $action): void {
+                try {
+                    Reauthentication::confirm($data);
+                    $secret = app(RotateReturnSigningSecret::class)->handle($this->user());
+                } catch (ReauthenticationRequiredException) {
+                    DomainErrors::stop(__('webhooks.errors.reauthentication_required'));
+                }
+
+                $this->showIssuedSecret($secret, 'rotated', __('fx.settings.return_secret.rotated'));
+            });
     }
 
     public function mount(): void

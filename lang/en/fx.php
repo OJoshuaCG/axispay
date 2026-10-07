@@ -32,6 +32,14 @@ return [
         'save' => 'Save settings',
         'saved' => 'Payment settings saved.',
 
+        'return_secret' => [
+            'action' => 'Return secret',
+            'heading' => 'Rotate the return secret',
+            'help' => 'Payers who pay a link with a return URL come back to your site with a signed proof of the payment. This secret signs it: you verify it on your side. A new secret is generated and shown once; the current one keeps signing for 24 hours so you can deploy the new one without downtime.',
+            'submit' => 'Rotate and show the secret',
+            'rotated' => 'Return secret rotated.',
+        ],
+
         'fx' => [
             'heading' => 'Currency conversion',
             'description' => 'A card issued in Mexico can only be charged in Mexican pesos. When a USD link is paid with one, the payer sees the amount in MXN and confirms it before being charged.',

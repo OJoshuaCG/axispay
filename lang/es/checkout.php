@@ -18,7 +18,13 @@ return [
     'summary' => [
         'pay_to' => 'Pago a :merchant',
         'total' => 'Total a pagar',
+        'breakdown' => 'Detalle del pago',
         'expires' => 'Vence el :date',
+    ],
+
+    'redirect' => [
+        'countdown' => 'Te llevaremos de vuelta a :merchant en :seconds s.',
+        'stop' => 'Quedarme aquí',
     ],
 
     'payer' => [

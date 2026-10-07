@@ -8,6 +8,7 @@ use App\Modules\Checkout\Data\CheckoutStatus;
 use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
 use App\Modules\Checkout\Services\CheckoutConnection;
+use App\Modules\Checkout\Services\ReturnLinks;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
@@ -40,6 +41,7 @@ final readonly class ReadCheckoutStatus
         private Repository $cache,
         private TenantAccess $access,
         private CheckoutConnection $connection,
+        private ReturnLinks $returnLinks,
     ) {}
 
     /** The status, re-reading a payment under way from the gateway when due. */
@@ -60,7 +62,7 @@ final readonly class ReadCheckoutStatus
 
         $state = $this->state($link, $attempt);
 
-        return new CheckoutStatus($state, $link->status === PaymentLinkStatus::Processing ? self::phase($attempt) : null, $state === CheckoutState::Paid ? $link->return_url : null);
+        return new CheckoutStatus($state, $link->status === PaymentLinkStatus::Processing ? self::phase($attempt) : null, $state === CheckoutState::Paid ? $this->returnLinks->paid($link) : null);
     }
 
     /**

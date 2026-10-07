@@ -157,6 +157,12 @@ return [
         'long_block_declines' => 10,
         'long_block_hours' => 24,
 
+        // Return to the merchant (ADR-0064): seconds shown before a link with
+        // `auto_redirect` sends the payer back by itself, and how long the
+        // previous return secret keeps signing after a rotation.
+        'redirect_countdown_seconds' => 5,
+        'return_previous_secret_hours' => 24,
+
         // Plan 11.6: `payment_link.opened` at most once per link in this many
         // minutes; link previewers (by user agent) are not counted.
         'opened_event_debounce_minutes' => 30,

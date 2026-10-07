@@ -20,6 +20,13 @@
             @if ($page->paidInThisSession)
                 <p><x-amount :value="$page->money->minorAmount" :currency="$page->money->currency->value" minor :signed="false" class="text-xl font-semibold" /></p>
             @endif
+            @if ($page->autoRedirectSeconds !== null && $page->returnUrl)
+                {{-- ADR-0064: shown by the script only; the countdown never promises a redirect that cannot happen. --}}
+                <p class="flex flex-wrap items-baseline gap-x-stack-sm text-fg-secondary" hidden data-redirect-countdown data-auto-redirect="{{ $page->autoRedirectSeconds }}" data-redirect-url="{{ $page->returnUrl }}">
+                    <span>{!! __('checkout.redirect.countdown', ['merchant' => e($merchant), 'seconds' => '<span class="font-numeric" data-redirect-seconds>'.$page->autoRedirectSeconds.'</span>']) !!}</span>
+                    <button type="button" class="inline-flex min-h-touch items-center text-link underline" data-redirect-stop>{{ __('checkout.redirect.stop') }}</button>
+                </p>
+            @endif
             @if ($page->paidAt)
                 <p class="text-fg-secondary">{!! __('checkout.states.paid.paid_on', ['date' => '<time datetime="'.e($page->paidAt->toIso8601String()).'">'.e($page->paidAt->isoFormat('LLL').' '.$page->paidAt->format('T')).'</time>']) !!}</p>
             @endif
@@ -43,7 +50,8 @@
             @endif
     @endswitch
 
-    @if ($page->state === CheckoutState::Paid && $page->returnUrl)
+    {{-- The way back to the merchant (ADR-0064): the signed return once paid, the plain URL once expired or canceled. --}}
+    @if ($page->returnUrl && in_array($page->state, [CheckoutState::Paid, CheckoutState::Expired, CheckoutState::Canceled], true))
         <x-slot:actions>
             <x-button :href="$page->returnUrl" rel="noopener noreferrer" size="lg" class="w-full sm:w-auto">{{ __('checkout.states.paid.return', ['merchant' => $merchant]) }}</x-button>
         </x-slot:actions>

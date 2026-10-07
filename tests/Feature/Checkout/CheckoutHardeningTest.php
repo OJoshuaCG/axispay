@@ -290,12 +290,19 @@ it('refuses a gateway payment whose amount or currency differ from the attempt',
 
 // Items 11 and 12 ----------------------------------------------------------
 
-it('returns the return URL in the status once paid', function (): void {
+it('returns the return URL, with its signed proof (ADR-0064), in the status once paid', function (): void {
     [, $link] = Checkout::scenario(static fn ($f) => $f->state(['return_url' => 'https://demo.test/gracias']));
 
     Checkout::status($link)->assertExactJson(['state' => 'active']);
     Checkout::pay($link);
-    Checkout::status($link)->assertExactJson(['state' => 'paid', 'return_url' => 'https://demo.test/gracias']);
+
+    $status = Checkout::status($link)->assertJsonPath('state', 'paid');
+    $polled = $status->json('return_url');
+    $returnUrl = is_string($polled) ? $polled : '';
+
+    expect($returnUrl)->toStartWith('https://demo.test/gracias?plink='.$link->prefixedId().'&payment=pay_')
+        ->and($returnUrl)->toContain('&status=paid&ts=')
+        ->and($returnUrl)->toMatch('/&sig=[0-9a-f]{64}$/');
 });
 
 it('releases a lease only with its own token', function (): void {

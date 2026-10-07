@@ -119,6 +119,7 @@ return [
         'validation_endpoint_test_sent' => 'Validación previa probada',
         'tenant_payment_settings_updated' => 'Ajustes de pago modificados',
         'checkout_conversion_unavailable' => 'Cobro rechazado: sin conversión de moneda disponible',
+        'return_secret_rotated' => 'Clave secreta de firma del retorno rotada',
     ],
 
 ];

@@ -32,6 +32,14 @@ return [
         'save' => 'Guardar ajustes',
         'saved' => 'Se guardaron los ajustes de pago.',
 
+        'return_secret' => [
+            'action' => 'Clave de retorno',
+            'heading' => 'Rotar la clave de retorno',
+            'help' => 'Los pagadores que pagan un link con URL de retorno vuelven a tu sitio con una prueba firmada del pago. Esta clave la firma: tú la verificas de tu lado. Se genera una clave nueva y se muestra una sola vez; la actual sigue firmando durante 24 horas para que puedas desplegar la nueva sin interrupciones.',
+            'submit' => 'Rotar y mostrar la clave',
+            'rotated' => 'Clave de retorno rotada.',
+        ],
+
         'fx' => [
             'heading' => 'Conversión de moneda',
             'description' => 'Una tarjeta emitida en México solo puede cobrarse en pesos mexicanos. Cuando un link en USD se paga con una, el pagador ve el monto en MXN y lo confirma antes de que se le cobre.',
