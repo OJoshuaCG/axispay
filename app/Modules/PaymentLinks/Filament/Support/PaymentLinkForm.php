@@ -24,8 +24,8 @@ final class PaymentLinkForm
     /** Form fields named like their API parameter (refusals are shown on them). */
     public const array FIELDS = ['amount', 'currency', 'description', 'client_reference_id', 'expires_in_hours', 'locale', 'metadata'];
 
-    /** Expiry presets in hours (24 h, 3, 7, 30 and 90 days). */
-    public const array EXPIRY_PRESETS = [24, 72, 168, 720, 2160];
+    /** Expiry presets in hours (24 h, 3, 7, 30 and 60 days; 60 days is the platform maximum, ADR-0048). */
+    public const array EXPIRY_PRESETS = [24, 72, 168, 720, 1440];
 
     public const string CUSTOM_EXPIRY = 'custom';
 

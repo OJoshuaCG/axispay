@@ -15,6 +15,7 @@ use App\Modules\Legal\Filament\Pages\TenantLegalSettings;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\PaymentLinkResource;
 use App\Modules\Payments\Filament\Resources\Payments\PaymentResource;
 use App\Modules\PlatformAdmin\Http\Middleware\EnforceImpersonationWindow;
+use App\Modules\Tenancy\Filament\Pages\TenantPaymentSettings;
 use App\Modules\Tenancy\Http\Middleware\ApplyTenantTimezone;
 use App\Modules\Tenancy\Http\Middleware\ResolveTenantContext;
 use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
@@ -55,7 +56,7 @@ final class AppPanelProvider extends PanelProvider
                 ApiKeyResource::class,
                 WebhookEndpointResource::class,
             ])
-            ->pages([Dashboard::class, StripeConnection::class, TenantBrandingSettings::class, TenantLegalSettings::class, PrePaymentValidationSettings::class])
+            ->pages([Dashboard::class, StripeConnection::class, TenantBrandingSettings::class, TenantLegalSettings::class, TenantPaymentSettings::class, PrePaymentValidationSettings::class])
             ->widgets([AccountWidget::class])
             ->authMiddleware([
                 Authenticate::class,

@@ -117,6 +117,8 @@ return [
         'validation_endpoint_secret_rotated' => 'Pre-payment validation secret rotated',
         'validation_endpoint_removed' => 'Pre-payment validation URL removed',
         'validation_endpoint_test_sent' => 'Pre-payment validation tested',
+        'tenant_payment_settings_updated' => 'Payment settings changed',
+        'checkout_conversion_unavailable' => 'Checkout refused: no currency conversion available',
     ],
 
 ];

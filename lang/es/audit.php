@@ -117,6 +117,8 @@ return [
         'validation_endpoint_secret_rotated' => 'Clave secreta de validación previa rotada',
         'validation_endpoint_removed' => 'URL de validación previa eliminada',
         'validation_endpoint_test_sent' => 'Validación previa probada',
+        'tenant_payment_settings_updated' => 'Ajustes de pago modificados',
+        'checkout_conversion_unavailable' => 'Cobro rechazado: sin conversión de moneda disponible',
     ],
 
 ];

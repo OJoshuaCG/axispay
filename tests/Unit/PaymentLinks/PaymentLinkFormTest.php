@@ -20,6 +20,10 @@ it('maps a preset or the custom hours to expires_in_hours', function (): void {
         ->and(PaymentLinkForm::toInput(['expiry' => 'custom']))->not->toHaveKey('expires_in_hours');
 });
 
+it('offers presets up to the 60-day platform maximum', function (): void {
+    expect(array_keys(PaymentLinkForm::expiryOptions(TenantSettings::defaults())))->toBe([24, 72, 168, 720, 1440, 'custom']);
+});
+
 it('offers only the presets the tenant allows, the tenant default preselected', function (): void {
     $settings = TenantSettings::fromArray(['links' => ['max_expiration_hours' => 200, 'default_expiration_hours' => 72]]);
 

@@ -84,6 +84,8 @@ enum AuditAction: string
     case ValidationEndpointSecretRotated = 'validation_endpoint.secret_rotated';
     case ValidationEndpointRemoved = 'validation_endpoint.removed';
     case ValidationEndpointTestSent = 'validation_endpoint.test_sent';
+    case TenantPaymentSettingsUpdated = 'tenant.payment_settings_updated';
+    case CheckoutConversionUnavailable = 'checkout.conversion_unavailable';
 
     public function label(): string
     {
