@@ -44,6 +44,7 @@ final readonly class CheckoutAttemptController
         $payer = $request->input('payer');
         $confirmationToken = $request->input('confirmation_token');
         $turnstile = $request->input('turnstile_token');
+        $quoteId = $request->input('fx_quote_id');
 
         try {
             $result = $start->handle($link, new CheckoutPaymentInput(
@@ -53,6 +54,9 @@ final readonly class CheckoutAttemptController
                 clientIp: $request->ip(),
                 userAgent: $request->userAgent(),
                 sessionDeclines: CheckoutSession::declines($request, $link->id),
+                fxQuoteId: is_string($quoteId) ? $quoteId : null,
+                // Only a literal true confirms the conversion (plan 13.4): never a truthy string.
+                currencyConfirmed: $request->input('currency_confirmed') === true,
             ));
         } catch (InvalidPayerDataException $e) {
             return $this->responses->invalidFields($e->errors);

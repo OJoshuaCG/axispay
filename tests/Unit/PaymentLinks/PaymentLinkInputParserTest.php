@@ -112,7 +112,7 @@ it('accepts every field at its upper limit', function (): void {
         'description' => '   '.str_repeat('d', 500).'   ',
         'metadata' => $metadata,
         'client_reference_id' => str_repeat('r', 200),
-        'expires_in_hours' => 2160,
+        'expires_in_hours' => 1440,
         'fx' => ['mode' => 'fixed', 'rate' => '999999999999.999999'],
         'payer_fields' => ['email' => 'required', 'notes' => 'optional'],
         'return_url' => 'https://shop.example.com/'.str_repeat('a', 2048 - 25),
@@ -123,7 +123,7 @@ it('accepts every field at its upper limit', function (): void {
     expect($data->description)->toBe(str_repeat('d', 500))
         ->and($data->metadata)->toHaveCount(20)
         ->and($data->clientReferenceId)->toHaveLength(200)
-        ->and($data->expiresInHours)->toBe(2160)
+        ->and($data->expiresInHours)->toBe(1440)
         ->and($data->fxMode)->toBe(FxMode::Fixed)
         ->and($data->fxRate?->toString())->toBe('999999999999.999999')
         ->and($data->payerFields['email'])->toBe(PayerFieldRequirement::Required)

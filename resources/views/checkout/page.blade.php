@@ -51,6 +51,7 @@
                     :money="$page->money"
                     :expires-at="$page->expiresSoonAt"
                     :show-amount="$page->showsAmount()"
+                    :fx-legend="$page->fxLegend"
                     class="lg:col-span-2"
                 >
                     {{-- ADR-0056: "Privacy notice · Terms", below the amount, in every state. --}}
@@ -81,6 +82,32 @@
                                 @if ($page->client['turnstile']['enabled'] ?? true)
                                     <x-checkout.turnstile />
                                 @endif
+
+                                {{-- Currency confirmation (plan 13.5, ADR-0063): a Mexican card on a USD link. The script fills it with the quote the server answered and shows it; nothing is charged until the payer presses the pay button again. --}}
+                                <x-alert variant="info" role="group" tabindex="-1" data-fx-confirmation hidden>
+                                    <div class="flex flex-col gap-stack-sm">
+                                        <h2 class="text-base font-semibold text-fg" data-fx-title></h2>
+                                        <p data-fx-intro></p>
+                                        <dl class="flex flex-col gap-stack-xs">
+                                            <div>
+                                                <dt class="text-sm text-fg-secondary" data-fx-original-caption></dt>
+                                                <dd class="font-numeric text-fg" data-fx-original></dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm text-fg-secondary" data-fx-amount-caption></dt>
+                                                <dd class="font-numeric text-xl font-semibold text-fg" data-fx-amount></dd>
+                                            </div>
+                                            <div>
+                                                <dt class="text-sm text-fg-secondary" data-fx-rate-caption></dt>
+                                                <dd class="font-numeric text-fg" data-fx-rate></dd>
+                                            </div>
+                                        </dl>
+                                        <p class="text-sm text-fg-secondary" data-fx-markup hidden></p>
+                                        <div>
+                                            <x-button type="button" variant="secondary" size="md" data-fx-cancel>{{ __('checkout.fx.confirm.cancel') }}</x-button>
+                                        </div>
+                                    </div>
+                                </x-alert>
                             </div>
 
                             <div class="flex flex-col gap-stack-sm">

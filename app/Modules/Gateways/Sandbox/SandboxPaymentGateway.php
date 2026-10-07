@@ -42,6 +42,11 @@ use LogicException;
  * | funds        | declined (insufficient_funds)                   |
  * | threeds      | requires_action; the stub's bank dialog decides |
  * | processing   | processing, authorized a few seconds later      |
+ * | foreign      | authorized; the card was issued in the US       |
+ *
+ * Every card but `foreign` is issued in Mexico, so a USD link of a Mexican
+ * account asks the payer to confirm the MXN conversion (ADR-0063); `foreign`
+ * is charged in USD as it is.
  *
  * Live-mode connections are refused: the sandbox only fakes test mode.
  * Capturing succeeds, canceling voids. Idempotency keys are honored like
@@ -56,12 +61,14 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     private const string PREFIX = 'axispay:sandbox:';
 
+    /** @var array<string, array{0: string, 1: string, 2: string}> scenario => brand, last four, issuing country */
     private const array CARDS = [
-        'success' => ['visa', '4242'],
-        'decline' => ['visa', '0002'],
-        'funds' => ['mastercard', '9995'],
-        'threeds' => ['visa', '3155'],
-        'processing' => ['visa', '1111'],
+        'success' => ['visa', '4242', 'MX'],
+        'decline' => ['visa', '0002', 'MX'],
+        'funds' => ['mastercard', '9995', 'MX'],
+        'threeds' => ['visa', '3155', 'MX'],
+        'processing' => ['visa', '1111', 'MX'],
+        'foreign' => ['visa', '0077', 'US'],
     ];
 
     public function __construct(
@@ -91,9 +98,9 @@ final class SandboxPaymentGateway implements PaymentGateway
     {
         self::assertTestMode($connection);
 
-        [$brand, $last4] = self::CARDS[self::scenario($confirmationToken)];
+        [$brand, $last4, $country] = self::CARDS[self::scenario($confirmationToken)];
 
-        return new PaymentMethodPreview('MX', $brand, $last4, 'fp_sandbox_'.$last4);
+        return new PaymentMethodPreview($country, $brand, $last4, 'fp_sandbox_'.$last4);
     }
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
@@ -129,12 +136,12 @@ final class SandboxPaymentGateway implements PaymentGateway
             }
 
             $scenario = self::scenario($confirmationToken);
-            [$brand, $last4] = self::CARDS[$scenario];
-            $state['card'] = ['brand' => $brand, 'last4' => $last4, 'country' => 'MX'];
+            [$brand, $last4, $country] = self::CARDS[$scenario];
+            $state['card'] = ['brand' => $brand, 'last4' => $last4, 'country' => $country];
             $state['failure'] = null;
 
             $state['status'] = match ($scenario) {
-                'success' => ProviderPaymentStatus::RequiresCapture->value,
+                'success', 'foreign' => ProviderPaymentStatus::RequiresCapture->value,
                 'threeds' => ProviderPaymentStatus::RequiresAction->value,
                 'processing' => ProviderPaymentStatus::Processing->value,
                 default => ProviderPaymentStatus::RequiresPaymentMethod->value, // decline, funds
@@ -265,7 +272,7 @@ final class SandboxPaymentGateway implements PaymentGateway
 
     private static function scenario(string $confirmationToken): string
     {
-        if (preg_match('/^ctoken_sandbox_(success|decline|funds|threeds|processing)_[A-Za-z0-9]+$/', $confirmationToken, $match) !== 1) {
+        if (preg_match('/^ctoken_sandbox_(success|decline|funds|threeds|processing|foreign)_[A-Za-z0-9]+$/', $confirmationToken, $match) !== 1) {
             throw new GatewayRequestException('Unknown sandbox confirmation token.', 'resource_missing', null, 404);
         }
 

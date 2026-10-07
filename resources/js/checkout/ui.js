@@ -90,7 +90,8 @@ export function createFieldErrors(form) {
 
 /** The Pay button: busy (with the phase announced), idle, or disabled. */
 export function createPayButton(button, strings) {
-    const content = button.innerHTML;
+    const original = button.innerHTML;
+    let content = original;
 
     return {
         busy(label) {
@@ -103,6 +104,16 @@ export function createPayButton(button, strings) {
             button.removeAttribute('aria-busy');
             button.removeAttribute('aria-disabled');
             button.innerHTML = content;
+        },
+        /** The idle label becomes `text` (e.g. "Pay 246.00 MXN" once the payer is asked to confirm the conversion). */
+        relabel(text) {
+            button.textContent = text;
+            content = button.innerHTML;
+        },
+        /** Back to the label the page was rendered with. */
+        restore() {
+            content = original;
+            button.innerHTML = original;
         },
         disable() {
             button.setAttribute('aria-disabled', 'true');

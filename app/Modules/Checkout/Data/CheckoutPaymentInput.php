@@ -9,7 +9,9 @@ use SensitiveParameter;
 /**
  * One press of "Pay" (plan 11.4): the confirmation token created by the
  * gateway SDK in the browser, the raw payer fields (validated by the
- * action), the Turnstile token when required, and request metadata.
+ * action), the Turnstile token when required, and request metadata. After a
+ * currency confirmation was asked (plan 13.4), the quote the payer saw and
+ * whether they confirmed it (only a literal `true` counts).
  */
 final readonly class CheckoutPaymentInput
 {
@@ -23,5 +25,7 @@ final readonly class CheckoutPaymentInput
         public ?string $clientIp,
         public ?string $userAgent,
         public int $sessionDeclines,
+        public ?string $fxQuoteId = null,
+        public bool $currencyConfirmed = false,
     ) {}
 }

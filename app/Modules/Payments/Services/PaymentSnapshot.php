@@ -42,10 +42,10 @@ final class PaymentSnapshot
             'amount' => $money->toDecimalString(),
             'amount_minor' => $money->minorAmount,
             'currency' => $money->currency->value,
-            // The conversion applied to this payment (mode, rate, source, rate
-            // date, original amount). Null until the tenant FX exists (CRX-6/7):
-            // the key is already part of the contract so integrators can code for it.
-            'fx' => null,
+            // The conversion applied to this payment (FxBlock: mode, rate, source,
+            // rate date, original amount); null when the payment was charged in
+            // the link's own currency. The key is always present.
+            'fx' => FxBlock::of($attempt),
             'late_payment' => $attempt->late_payment,
             'failure_count' => $attempt->failure_count,
             'failure' => $failure !== null ? ['code' => $failure] : null,

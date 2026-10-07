@@ -24,7 +24,7 @@ final class ListPayments
     public function handle(ListPaymentsData $data): PaymentPage
     {
         $query = PaymentAttempt::query()
-            ->with('link')
+            ->with(['link', 'fxQuote'])
             ->when($data->status !== null, static fn (Builder $q): Builder => $q->where('status', $data->status?->value))
             ->when($data->paymentLinkId !== null, static fn (Builder $q): Builder => $q->where('payment_link_id', $data->paymentLinkId))
             ->when($data->createdGte !== null, static fn (Builder $q): Builder => $q->where('created_at', '>=', $data->createdGte?->utc()->format(self::TIME_FORMAT)))

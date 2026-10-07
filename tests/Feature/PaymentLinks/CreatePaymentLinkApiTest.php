@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Modules\Audit\Enums\ActorType;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
+use App\Modules\Fx\Models\StoredExchangeRate;
 use App\Modules\Gateways\Enums\ConnectionStatus;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\PaymentLinks\Enums\CreatedVia;
@@ -164,7 +165,7 @@ it('rejects invalid input with the documented envelope, code and param', functio
     'unsupported currency' => [ApiTestHelpers::body(['currency' => 'EUR']), ApiErrorCode::CurrencyNotSupported, 'currency'],
     'unknown parameter' => [ApiTestHelpers::body(['expire_in_hours' => 5]), ApiErrorCode::ParameterInvalid, 'expire_in_hours'],
     'metadata as a list' => [ApiTestHelpers::body(['metadata' => ['a', 'b']]), ApiErrorCode::MetadataInvalid, 'metadata'],
-    'expires_in_hours above 90 days' => [ApiTestHelpers::body(['expires_in_hours' => 2161]), ApiErrorCode::ExpirationOutOfRange, 'expires_in_hours'],
+    'expires_in_hours above 60 days' => [ApiTestHelpers::body(['expires_in_hours' => 1441]), ApiErrorCode::ExpirationOutOfRange, 'expires_in_hours'],
     'expires_at in the past' => [ApiTestHelpers::body(['expires_at' => '2020-01-01T00:00:00Z']), ApiErrorCode::ExpirationOutOfRange, 'expires_at'],
     'fx on an MXN link (rule 3)' => [ApiTestHelpers::body(['currency' => 'MXN', 'fx' => ['mode' => 'banxico_fix']]), ApiErrorCode::FxNotAvailable, 'fx.mode'],
     'fx while the tenant has it off (rule 4)' => [ApiTestHelpers::body(['fx' => ['mode' => 'banxico_fix']]), ApiErrorCode::FxNotAvailable, 'fx.mode'],
@@ -205,21 +206,20 @@ it('accepts fx mode none on any currency', function (): void {
         ->assertJsonPath('fx.mode', 'none');
 });
 
-it('refuses conversion until the platform offers it, even when the tenant enabled it', function (): void {
+it('refuses conversion when the tenant has it off, and stores mode none when none is asked', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
     [, $key] = ApiTestHelpers::key($tenant);
 
-    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true]]])->save();
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => false]]])->save();
 
     expectApiError(createLink($key, ApiTestHelpers::body(['fx' => ['mode' => 'banxico_fix']])), ApiErrorCode::FxNotAvailable, 'fx.mode');
     createLink($key, ApiTestHelpers::body())->assertCreated()->assertJsonPath('fx.mode', 'none');
 });
 
-it('stores the conversion mode once the platform and the tenant enable it', function (): void {
+it('stores the conversion mode once the tenant enables it (ADR-0063)', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
     [, $key] = ApiTestHelpers::key($tenant);
 
-    config(['axispay.fx.available' => true]);
     $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true]]])->save();
 
     createLink($key, ApiTestHelpers::body(['fx' => ['mode' => 'fixed', 'rate' => '17.25']]))
@@ -227,6 +227,88 @@ it('stores the conversion mode once the platform and the tenant enable it', func
         ->assertJsonPath('fx', ['mode' => 'fixed', 'rate' => '17.250000']);
     createLink($key, ApiTestHelpers::body())->assertCreated()->assertJsonPath('fx.mode', 'banxico_fix');
     createLink($key, ApiTestHelpers::body(['currency' => 'MXN', 'amount' => '100.00']))->assertCreated()->assertJsonPath('fx.mode', 'none');
+});
+
+it('uses the tenant default conversion mode when the request sends no fx, and leaves the rate to the tenant', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true, 'default_mode' => 'fixed', 'fixed_rate' => '20']]])->save();
+
+    // `rate: null` in a fixed link means "the tenant's fixed rate at the time of the payment".
+    createLink($key, ApiTestHelpers::body(['amount' => '12.30']))
+        ->assertCreated()
+        ->assertJsonPath('fx', ['mode' => 'fixed', 'rate' => null]);
+});
+
+it('refuses a fixed conversion that has no rate to use (fx_rate_invalid)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true, 'default_mode' => 'fixed']]])->save();
+
+    expectApiError(createLink($key, ApiTestHelpers::body()), ApiErrorCode::FxRateInvalid, 'fx.rate');
+    expect(PaymentLink::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('refuses a fixed rate more than 30 % away from the latest stored FIX, and accepts it up to 30 % (fx_rate_invalid)', function (string $rate, bool $accepted): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true]]])->save();
+    $fix = new StoredExchangeRate;
+    $fix->forceFill(['source' => 'banxico_fix', 'base_currency' => 'USD', 'quote_currency' => 'MXN', 'rate' => '20.000000', 'rate_date' => now()->toDateString(), 'fetched_at' => now(), 'requires_review' => false])->save();
+
+    $response = createLink($key, ApiTestHelpers::body(['fx' => ['mode' => 'fixed', 'rate' => $rate]]));
+
+    if ($accepted) {
+        $response->assertCreated();
+
+        return;
+    }
+
+    expectApiError($response, ApiErrorCode::FxRateInvalid, 'fx.rate');
+})->with([
+    'exactly +30 %' => ['26.00', true],
+    'exactly -30 %' => ['14.00', true],
+    'just above +30 %' => ['26.01', false],
+    'just below -30 %' => ['13.99', false],
+    'the FIX itself' => ['20', true],
+]);
+
+it('does not check the fixed rate against a FIX when none is stored', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true]]])->save();
+
+    createLink($key, ApiTestHelpers::body(['fx' => ['mode' => 'fixed', 'rate' => '999']]))->assertCreated();
+});
+
+it('refuses a USD amount that converts below the MXN minimum (amount_below_minimum_after_conversion)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true, 'default_mode' => 'fixed', 'fixed_rate' => '17']]])->save();
+
+    // 0.50 USD at 17 = 8.50 MXN, under the MXN 10.00 minimum.
+    expectApiError(createLink($key, ApiTestHelpers::body(['amount' => '0.50'])), ApiErrorCode::AmountBelowMinimumAfterConversion, 'amount');
+    // The same amount is fine when the link does not convert.
+    createLink($key, ApiTestHelpers::body(['amount' => '0.50', 'fx' => ['mode' => 'none']]))->assertCreated();
+    // And at 20 the converted amount reaches the minimum exactly.
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true, 'default_mode' => 'fixed', 'fixed_rate' => '20']]])->save();
+    createLink($key, ApiTestHelpers::body(['amount' => '0.50']))->assertCreated();
+});
+
+it('checks the minimum after conversion with the latest FIX and the markup in banxico_fix mode, when one is stored', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    $tenant->forceFill(['settings' => ['fx' => ['conversion_enabled' => true]]])->save();
+
+    // No FIX stored: nothing to estimate with, the link is accepted.
+    createLink($key, ApiTestHelpers::body(['amount' => '0.50']))->assertCreated();
+
+    $fix = new StoredExchangeRate;
+    $fix->forceFill(['source' => 'banxico_fix', 'base_currency' => 'USD', 'quote_currency' => 'MXN', 'rate' => '17.000000', 'rate_date' => now()->toDateString(), 'fetched_at' => now(), 'requires_review' => false])->save();
+
+    expectApiError(createLink($key, ApiTestHelpers::body(['amount' => '0.50'])), ApiErrorCode::AmountBelowMinimumAfterConversion, 'amount');
 });
 
 it('applies the tenant limits for amount and expiration, never above the platform', function (): void {
@@ -451,16 +533,16 @@ it('accepts the upper limits end to end', function (): void {
         'description' => '  '.str_repeat('d', 500).'  ',
         'metadata' => $metadata,
         'client_reference_id' => str_repeat('r', 200),
-        'expires_at' => '2026-12-25T12:00:00Z',
+        'expires_at' => '2026-11-25T12:00:00Z',
         'return_url' => $returnUrl,
     ]), str_pad('key_with.dots:', 255, 'x'))
         ->assertCreated()
         ->assertJsonPath('description', str_repeat('d', 500))
         ->assertJsonCount(20, 'metadata')
-        ->assertJsonPath('expires_at', '2026-12-25T12:00:00Z')
+        ->assertJsonPath('expires_at', '2026-11-25T12:00:00Z')
         ->assertJsonPath('return_url', $returnUrl);
 
-    createLink($key, ApiTestHelpers::body(['expires_in_hours' => 2160]))->assertCreated()->assertJsonPath('expires_at', '2026-12-25T12:00:00Z');
+    createLink($key, ApiTestHelpers::body(['expires_in_hours' => 1440]))->assertCreated()->assertJsonPath('expires_at', '2026-11-25T12:00:00Z');
 });
 
 it('checks the tenant before the gateway (ADR-0048 §6)', function (): void {

@@ -25,6 +25,10 @@ enum CheckoutOutcome: string
     case Expired = 'expired';
     case Canceled = 'canceled';
     case Unavailable = 'unavailable';
+    /** A Mexican card pays a USD link: nothing was charged; the payer must confirm the MXN amount first (plan 13.4, ADR-009). */
+    case CurrencyConfirmationRequired = 'requires_currency_confirmation';
+    /** A Mexican card pays a USD link but the merchant cannot convert (plan 13.2): nothing was charged. */
+    case ConversionUnavailable = 'conversion_unavailable';
     case Error = 'error';
 
     /** The page leaves the form for the completion page. */
@@ -41,6 +45,7 @@ enum CheckoutOutcome: string
             self::Error, self::Unavailable => 503,
             self::Expired, self::Canceled, self::AlreadyPaid, self::InProgress, self::Blocked => 409,
             self::Declined, self::AuthenticationFailed, self::TurnstileRequired, self::MerchantRejected => 402,
+            self::ConversionUnavailable => 422,
             default => 200,
         };
     }

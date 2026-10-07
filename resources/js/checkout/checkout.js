@@ -6,7 +6,11 @@
  * Flow: Payment Element (deferred intent, card only, manual capture) →
  * elements.submit() → stripe.createConfirmationToken() → POST attempts →
  * requires_action? stripe.handleNextAction() → POST attempts/continue →
- * paid/processing → the completion page (which polls).
+ * paid/processing → the completion page (which polls). A card issued in
+ * Mexico on a USD link first answers `requires_currency_confirmation` (plan
+ * 13.5): the converted amount is shown and the SAME button, relabeled with
+ * the MXN amount, confirms it (the next POST carries the quote id and
+ * `currency_confirmed`); nothing is charged before that.
  *
  * Modules: api (transport), state, stripe-elements, turnstile, payer, ui,
  * polling, legal-dialog (the merchant's legal texts, every state), and the
@@ -18,6 +22,7 @@
 import { initThemeToggle } from '../theme';
 import { appearance } from './appearance';
 import { postJson } from './api';
+import { createCurrencyConfirmation } from './currency-confirmation';
 import { initLegalDialogs } from './legal-dialog';
 import { billingDetails, readPayer } from './payer';
 import { initPolling } from './polling';
@@ -56,7 +61,8 @@ function initCheckout() {
 
     const fieldErrors = createFieldErrors(form);
     const { stripe, elements, paymentElement, never } = createStripeElements(config);
-    const { get, setState } = createState({ ready: false, inFlight: false });
+    const { get, setState } = createState({ ready: false, inFlight: false, quote: null });
+    const currency = createCurrencyConfirmation(form);
 
     // Turnstile is required but the page has no site key: never skip the
     // check silently; the server would refuse the payment anyway.
@@ -112,6 +118,15 @@ function initCheckout() {
         }
     });
 
+    // The payer declines the conversion: back to the link's own amount and currency.
+    currency.onCancel(() => {
+        setState({ quote: null });
+        currency.hide();
+        elements.update({ amount: config.amount, currency: config.currency });
+        button.restore();
+        alerts.hide();
+    });
+
     if (config.pausedMinutes && strings.pausedMessage) {
         alerts.show(strings.pausedMessage, 'warning');
     }
@@ -144,6 +159,23 @@ function initCheckout() {
                 setBusy(false);
                 alerts.show(data.message);
                 fieldErrors.show(data.errors ?? {});
+
+                return false;
+            case 'requires_currency_confirmation': {
+                const confirmation = data.currency_confirmation;
+
+                setBusy(false);
+                setState({ quote: confirmation.quote_id });
+                // The deferred intent must carry the amount that will be charged.
+                elements.update({ amount: confirmation.amount_minor, currency: confirmation.currency.toLowerCase() });
+                currency.show(confirmation);
+                button.relabel(confirmation.pay_label);
+
+                return false;
+            }
+            case 'conversion_unavailable':
+                setBusy(false);
+                alerts.show(data.message);
 
                 return false;
             case 'merchant_rejected':
@@ -230,7 +262,14 @@ function initCheckout() {
             return false;
         }
 
-        return handle(await postJson(config.endpoints.attempts, { confirmation_token: confirmationToken.id, payer, turnstile_token: turnstile.token() }));
+        const confirmedQuote = get('quote');
+
+        return handle(await postJson(config.endpoints.attempts, {
+            confirmation_token: confirmationToken.id,
+            payer,
+            turnstile_token: turnstile.token(),
+            ...(confirmedQuote ? { fx_quote_id: confirmedQuote, currency_confirmed: true } : {}),
+        }));
     }
 
     form.addEventListener('submit', async (event) => {

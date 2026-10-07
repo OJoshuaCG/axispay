@@ -71,6 +71,30 @@ return [
         'session_expired' => 'Recarga la página para continuar.',
         'security_unavailable' => 'Los pagos en esta página no están disponibles en este momento. Vuelve a intentarlo más tarde.',
         'fix_fields' => 'Revisa los campos marcados.',
+        'conversion_unavailable' => ':merchant no puede cobrar este monto en USD a tarjetas emitidas en México. No se hizo ningún cargo. Contacta a :merchant.',
+    ],
+
+    /*
+    | Conversión de USD a pesos mexicanos (plan 13, ADR-0063): la leyenda de la
+    | página y la pantalla de confirmación antes del cobro.
+    */
+    'fx' => [
+        'date_format' => 'd/m/Y',
+        'legend' => 'Si pagas con una tarjeta emitida en México, se cobrarán :amount. Tipo de cambio: :rate. :markup',
+        'source' => [
+            'banxico_fix' => 'Banxico FIX del :date',
+            'merchant' => 'tipo de cambio definido por el comercio',
+        ],
+        'markup' => 'Incluye un ajuste del comercio de :percent %.',
+        'confirm' => [
+            'title' => 'Confirma el cobro en pesos mexicanos',
+            'intro' => 'Tu tarjeta fue emitida en México. Este cobro se realizará en pesos mexicanos.',
+            'original' => 'Monto original',
+            'amount' => 'Monto a cobrar',
+            'rate' => 'Tipo de cambio aplicado',
+            'pay' => 'Pagar :amount',
+            'cancel' => 'Cancelar',
+        ],
     ],
 
     'turnstile' => [
@@ -192,6 +216,7 @@ return [
             'funds' => 'Fondos insuficientes',
             'threeds' => 'Verificación del banco (3D Secure)',
             'processing' => 'Procesamiento lento',
+            'foreign' => 'Tarjeta extranjera aprobada (EE. UU.)',
         ],
         'bank' => [
             'title' => 'Banco de sandbox',

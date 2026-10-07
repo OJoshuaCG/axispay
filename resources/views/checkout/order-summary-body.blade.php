@@ -1,7 +1,7 @@
 {{--
     Content of <x-checkout.order-summary> (included by it with its props and
     slot, so the card and the bare variant share one markup). Order: who is
-    paid, the description, the total, the FX slot, the expiry, the slot (the
+    paid, the description, the total, the FX legend (only when the link may be converted), the expiry, the slot (the
     legal links). No heading: the page's h1 is in the form or the status
     panel; the section is labelled by "Payment to {merchant}".
 --}}
@@ -16,7 +16,9 @@
             <x-amount :value="$money->minorAmount" :currency="$money->currency->value" minor :signed="false" split class="text-3xl font-semibold sm:text-4xl" code-class="text-xl text-fg-secondary" />
         </dd>
 
-        {{-- Phase 6: FX legend slot (<dd class="text-sm text-fg-secondary">). --}}
+        @if ($fxLegend)
+            <dd class="text-sm text-fg-secondary break-words" data-fx-legend>{{ $fxLegend }}</dd>
+        @endif
     </dl>
 @endif
 

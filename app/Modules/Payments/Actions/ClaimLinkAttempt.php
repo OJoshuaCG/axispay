@@ -116,6 +116,7 @@ final readonly class ClaimLinkAttempt
             [$attempt, $token] = $this->newAttempt($locked, $request);
         }
 
+        $this->recordCharge($attempt, $request);
         $this->payerDetails->handle($attempt, $request->payer);
 
         // Forensics only (card testing): never shown to payers (ADR-0051).
@@ -128,6 +129,24 @@ final readonly class ClaimLinkAttempt
         }
 
         return new AttemptClaim($attempt, (string) $token);
+    }
+
+    /**
+     * A reused attempt takes the quote of THIS confirmation (or none): the
+     * payer may retry with another card after a decline, and a Mexican card
+     * (converted) followed by a foreign one (charged in the link's currency)
+     * must not keep the first card's conversion. The stored amount is NOT
+     * touched here: a create whose answer was lost may exist at the gateway
+     * under its fixed key, so ConfirmAttemptPayment repeats it unchanged and
+     * then updates the gateway payment and the stored amount together.
+     */
+    private function recordCharge(PaymentAttempt $attempt, AttemptClaimRequest $request): void
+    {
+        $quoteId = $request->fxQuote?->id;
+
+        if ($attempt->fx_quote_id !== $quoteId) {
+            $attempt->forceFill(['fx_quote_id' => $quoteId])->save();
+        }
     }
 
     /**
@@ -147,6 +166,7 @@ final readonly class ClaimLinkAttempt
             'currency' => $request->amount->currency,
             'original_amount_minor' => $link->amount_minor,
             'original_currency' => $link->currency,
+            'fx_quote_id' => $request->fxQuote?->id,
             'client_ip' => $request->clientIp,
             'user_agent' => $request->userAgent !== null ? mb_substr($request->userAgent, 0, PaymentAttempt::USER_AGENT_MAX) : null,
         ]);

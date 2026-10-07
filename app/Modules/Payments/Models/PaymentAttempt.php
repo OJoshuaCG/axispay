@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Models;
 
+use App\Modules\Fx\Models\FxQuote;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderFailureKind;
 use App\Modules\PaymentLinks\Models\PaymentLink;
@@ -146,6 +147,16 @@ final class PaymentAttempt extends Model
     public function link(): BelongsTo
     {
         return $this->belongsTo(PaymentLink::class, 'payment_link_id');
+    }
+
+    /**
+     * The conversion that was charged, when the amount is the converted one (ADR-0063).
+     *
+     * @return BelongsTo<FxQuote, $this>
+     */
+    public function fxQuote(): BelongsTo
+    {
+        return $this->belongsTo(FxQuote::class, 'fx_quote_id');
     }
 
     /**

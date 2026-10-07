@@ -7,6 +7,7 @@ namespace App\Modules\Checkout\Http;
 use App\Modules\Checkout\Data\CheckoutResult;
 use App\Modules\Checkout\Enums\CheckoutOutcome;
 use App\Modules\Checkout\Services\CheckoutUrls;
+use App\Modules\Checkout\Services\FxCopy;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Illuminate\Contracts\View\Factory as ViewFactory;
@@ -37,6 +38,7 @@ final readonly class CheckoutResponses
             CheckoutOutcome::TurnstileRequired => __('checkout.messages.turnstile'),
             CheckoutOutcome::RateLimited => trans_choice('checkout.messages.rate_limited', $result->minutes ?? 1, ['minutes' => $result->minutes ?? 1]),
             CheckoutOutcome::Blocked, CheckoutOutcome::Unavailable => __('checkout.messages.unavailable', ['merchant' => $merchant]),
+            CheckoutOutcome::ConversionUnavailable => __('checkout.messages.conversion_unavailable', ['merchant' => $merchant]),
             CheckoutOutcome::Error => __('checkout.messages.error'),
             default => null,
         };
@@ -51,6 +53,7 @@ final readonly class CheckoutResponses
             'turnstile_required' => $result->turnstileRequired || $result->outcome === CheckoutOutcome::TurnstileRequired,
             'retry_after_minutes' => $result->minutes,
             'payer_message' => $result->payerMessage,
+            'currency_confirmation' => $result->currencyConfirmation !== null ? FxCopy::confirmation($result->currencyConfirmation) : null,
             'redirect_url' => $result->outcome->leavesForm() ? $this->urls->complete($link) : null,
         ], static fn (mixed $value): bool => $value !== null), $result->outcome->httpStatus(), $headers);
     }

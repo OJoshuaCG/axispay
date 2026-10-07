@@ -23,6 +23,7 @@ final readonly class CheckoutPage
      * @param  array<string, LegalDocument>  $legal  the merchant's published legal documents, by kind (ADR-0056)
      * @param  list<array{field: string, required: bool}>  $payerFields
      * @param  array<string, mixed>|null  $client  the page script's configuration (active only)
+     * @param  string|null  $fxLegend  what a card issued in Mexico would be charged in MXN (plan 11.3), when the link may be converted
      */
     public function __construct(
         public CheckoutState $state,
@@ -41,6 +42,7 @@ final readonly class CheckoutPage
         public ?array $client,
         public bool $sandbox,
         public ?CheckoutPhase $phase,
+        public ?string $fxLegend = null,
     ) {}
 
     /** Plan 11.2: informative pages show the description and date, not the amount. */

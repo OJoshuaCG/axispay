@@ -71,6 +71,30 @@ return [
         'session_expired' => 'Reload the page to continue.',
         'security_unavailable' => 'Payments on this page are unavailable right now. Please try again later.',
         'fix_fields' => 'Check the highlighted fields.',
+        'conversion_unavailable' => ':merchant cannot charge this amount in USD to cards issued in Mexico. No charge was made. Contact :merchant.',
+    ],
+
+    /*
+    | USD to Mexican peso conversion (plan 13, ADR-0063): the page legend and
+    | the confirmation screen before the charge.
+    */
+    'fx' => [
+        'date_format' => 'Y-m-d',
+        'legend' => 'If you pay with a card issued in Mexico, you will be charged :amount. Exchange rate: :rate. :markup',
+        'source' => [
+            'banxico_fix' => 'Banxico FIX of :date',
+            'merchant' => 'exchange rate set by the merchant',
+        ],
+        'markup' => 'Includes a merchant adjustment of :percent %.',
+        'confirm' => [
+            'title' => 'Confirm the charge in Mexican pesos',
+            'intro' => 'Your card was issued in Mexico. This payment will be charged in Mexican pesos.',
+            'original' => 'Original amount',
+            'amount' => 'Amount to be charged',
+            'rate' => 'Exchange rate applied',
+            'pay' => 'Pay :amount',
+            'cancel' => 'Cancel',
+        ],
     ],
 
     'turnstile' => [
@@ -192,6 +216,7 @@ return [
             'funds' => 'Insufficient funds',
             'threeds' => 'Bank verification (3D Secure)',
             'processing' => 'Slow processing',
+            'foreign' => 'Approved foreign card (US)',
         ],
         'bank' => [
             'title' => 'Sandbox bank',

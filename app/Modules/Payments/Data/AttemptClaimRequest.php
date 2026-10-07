@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Payments\Data;
 
+use App\Modules\Fx\Models\FxQuote;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\PayerFields\Data\PayerData;
 use App\Modules\Shared\Money\Money;
@@ -11,7 +12,8 @@ use App\Modules\Shared\Money\Money;
 /**
  * What ClaimLinkAttempt needs to reuse or create a link's attempt: the
  * connection that will charge, the amount, the payer's validated data and
- * the client details kept for fraud analysis.
+ * the client details kept for fraud analysis. `fxQuote` is the conversion the
+ * payer confirmed when the amount is the converted one (ADR-0063).
  */
 final readonly class AttemptClaimRequest
 {
@@ -22,5 +24,6 @@ final readonly class AttemptClaimRequest
         public ?string $clientIp,
         public ?string $userAgent,
         public ?string $cardFingerprint,
+        public ?FxQuote $fxQuote = null,
     ) {}
 }

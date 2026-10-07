@@ -17,6 +17,7 @@ use App\Modules\PaymentLinks\Enums\CreatedVia;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Exceptions\PaymentLinkRejectedException;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\PaymentLinks\Services\LinkConversionCheck;
 use App\Modules\Shared\Http\Errors\ApiErrorCode;
 use App\Modules\Shared\Ids\SecureToken;
 use App\Modules\Shared\Money\CurrencyCode;
@@ -43,8 +44,11 @@ use Illuminate\Support\Facades\Gate;
  *    `suspended`/`closed` → `tenant_suspended`, `pending_onboarding` →
  *    `gateway_not_ready`);
  *  - a connection in this mode can charge (`gateway_not_ready`);
- *  - conversion only for USD links, only when the tenant enabled it and the
- *    platform offers it (`fx_not_available`; Phase 6 turns it on);
+ *  - conversion only for USD links and only when the tenant enabled it
+ *    (`fx_not_available`); omitted, a USD link of a tenant with conversion on
+ *    takes the tenant's default mode. A converting link must have a usable
+ *    rate (`fx_rate_invalid`) and reach the MXN minimum once converted
+ *    (`amount_below_minimum_after_conversion`), see LinkConversionCheck;
  *  - the tenant's amount cap, the expiration range, the return URL domain
  *    and pre-payment validation (plan 15.8.1: `true` needs a validation URL
  *    in this mode, else `validation_endpoint_not_configured`; omitted, the
@@ -65,6 +69,7 @@ final readonly class CreatePaymentLink
         private AuditLogger $audit,
         private TenantAccess $access,
         private ValidationEndpoints $validationEndpoints,
+        private LinkConversionCheck $conversionCheck,
     ) {}
 
     /**
@@ -99,6 +104,7 @@ final readonly class CreatePaymentLink
         $this->assertTenantCanCreate($tenant);
         $this->assertGatewayReady();
         $fxMode = $this->resolveFx($data, $settings);
+        $this->conversionCheck->assertAcceptable($data->amount, $fxMode, $data->fxRate, $settings);
         $this->assertAmountWithinTenantCap($data->amount, $settings);
         $expiresAt = $this->expiresAt($data, $settings);
         $this->assertReturnUrlAllowed($data->returnUrl, $tenant, $livemode);
@@ -201,16 +207,16 @@ final readonly class CreatePaymentLink
     }
 
     /**
-     * Plan 10.5 business validations 3 and 4. Omitted: the tenant's default
-     * mode applies to USD links when conversion is on; otherwise `none`.
+     * Plan 10.5 business validations 3 and 4. Omitted: a USD link of a tenant
+     * with conversion on takes the tenant's default mode (`banxico_fix` or
+     * `fixed`); otherwise `none`.
      */
     private function resolveFx(CreatePaymentLinkData $data, TenantSettings $settings): FxMode
     {
         $isUsd = $data->amount->currency === CurrencyCode::USD;
-        $available = $settings->fxConversionEnabled && config()->boolean('axispay.fx.available');
 
         if ($data->fxMode === null) {
-            return $isUsd && $available && $settings->fxDefaultMode === FxMode::BanxicoFix ? FxMode::BanxicoFix : FxMode::None;
+            return $isUsd && $settings->fxConversionEnabled ? $settings->fxDefaultMode : FxMode::None;
         }
 
         if ($data->fxMode === FxMode::None) {
@@ -221,7 +227,7 @@ final readonly class CreatePaymentLink
             throw PaymentLinkRejectedException::of(ApiErrorCode::FxNotAvailable, 'Currency conversion only applies to USD links; this link is already in MXN.', 'fx.mode');
         }
 
-        if (! $available) {
+        if (! $settings->fxConversionEnabled) {
             throw PaymentLinkRejectedException::of(ApiErrorCode::FxNotAvailable, 'Currency conversion is not enabled for this account.', 'fx.mode');
         }
 
@@ -241,7 +247,7 @@ final readonly class CreatePaymentLink
 
     /**
      * Plan 10.5 / ADR-0048: at least 15 minutes ahead, at most the tenant's
-     * maximum (never above 90 days); the tenant's default when omitted.
+     * maximum (never above 60 days); the tenant's default when omitted.
      */
     private function expiresAt(CreatePaymentLinkData $data, TenantSettings $settings): CarbonImmutable
     {

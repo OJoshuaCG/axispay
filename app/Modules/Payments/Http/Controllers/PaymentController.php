@@ -27,7 +27,7 @@ final class PaymentController
     public function show(string $id): JsonResponse
     {
         // Wrong prefix, unknown ID, another tenant or another mode: all 404.
-        $attempt = PaymentAttempt::query()->with('link')->find(PrefixedId::decode($id, ResourceType::Payment))
+        $attempt = PaymentAttempt::query()->with(['link', 'fxQuote'])->find(PrefixedId::decode($id, ResourceType::Payment))
             ?? throw ApiException::of(ApiErrorCode::ResourceNotFound, 'No such payment.');
 
         return self::json(PaymentPresenter::toApi($attempt, self::linkOf($attempt)));

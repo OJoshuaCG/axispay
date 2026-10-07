@@ -8,6 +8,7 @@ use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Models\PayerDetails;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Services\FxBlock;
 use App\Modules\Shared\Ids\PrefixedId;
 use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Shared\Ids\Ulid;
@@ -25,7 +26,8 @@ use Carbon\CarbonImmutable;
  *  - `payment_link`: our identifiers and the integrator's own references
  *    (the top-level `livemode` completes them);
  *  - `charge`: the amount and currency that will be captured (already
- *    converted when FX applies);
+ *    converted when FX applies, with the `fx` block that says how: mode,
+ *    rate, source, rate date, original amount and currency, ADR-0063);
  *  - `card`: the brand and the country only; nothing else of the card is
  *    ever sent (we never receive it);
  *  - `payer`: the e-mail and the full name, when the link collected them.
@@ -68,8 +70,10 @@ final class ValidationPayload
                 'charge' => [
                     'amount' => $charge->toDecimalString(),
                     'currency' => $charge->currency->value,
-                    // Phase 6 adds the source and the effective rate of the quote.
-                    'fx' => ['applied' => $attempt->fx_quote_id !== null],
+                    // `{applied: false}`, or the conversion that was applied
+                    // (mode, rate, source, rate date, original amount): the
+                    // merchant's system can check the charge against the link.
+                    'fx' => FxBlock::forValidation($attempt),
                 ],
                 'card' => [
                     'brand' => $attempt->card_brand,

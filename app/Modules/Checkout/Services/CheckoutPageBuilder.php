@@ -8,12 +8,15 @@ use App\Modules\Checkout\Actions\ReadCheckoutStatus;
 use App\Modules\Checkout\Data\CheckoutPage;
 use App\Modules\Checkout\Enums\CheckoutPhase;
 use App\Modules\Checkout\Enums\CheckoutState;
+use App\Modules\Fx\Exceptions\FxUnavailableException;
+use App\Modules\Fx\Services\FxQuoter;
 use App\Modules\Gateways\Sandbox\SandboxMode;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\Legal\Services\TenantLegalDocuments;
 use App\Modules\PayerFields\Enums\PayerField;
 use App\Modules\PayerFields\Enums\PayerFieldRequirement;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Shared\Money\CurrencyCode;
 use App\Modules\Tenancy\Services\TenantAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
@@ -40,6 +43,7 @@ final readonly class CheckoutPageBuilder
         private CheckoutConnection $connection,
         private TenantLegalDocuments $legal,
         private CheckoutMerchantLogo $merchantLogo,
+        private FxQuoter $quoter,
     ) {}
 
     public function build(PaymentLink $link, ?CheckoutPhase $phase = null, bool $paidInThisSession = false, int $sessionDeclines = 0): CheckoutPage
@@ -71,7 +75,31 @@ final readonly class CheckoutPageBuilder
             client: $state === CheckoutState::Active ? $this->client($link, $fields, $sessionDeclines) : null,
             sandbox: SandboxMode::enabled(),
             phase: $phase,
+            fxLegend: $state === CheckoutState::Active ? $this->fxLegend($link) : null,
         );
+    }
+
+    /**
+     * The FX legend (plan 11.3): only for a USD link the merchant may convert
+     * (link not opted out, tenant conversion on) on a Mexican account, and only
+     * while a quote can be made (a stale or missing Banxico FIX shows no
+     * amount; the card step then refuses). An estimate, not a stored quote: the
+     * binding amount is the one on the confirmation screen.
+     */
+    private function fxLegend(PaymentLink $link): ?string
+    {
+        $settings = $this->access->settings($link->tenant_id);
+        $account = $this->connection->current();
+
+        if ($link->currency !== CurrencyCode::USD || ! $link->fx_mode->converts() || ! $settings->fxConversionEnabled || strtoupper((string) $account?->country) !== 'MX') {
+            return null;
+        }
+
+        try {
+            return FxCopy::legend($this->quoter->estimate($link, $settings));
+        } catch (FxUnavailableException) {
+            return null;
+        }
     }
 
     /**

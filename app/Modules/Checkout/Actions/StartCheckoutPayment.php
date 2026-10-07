@@ -7,8 +7,8 @@ namespace App\Modules\Checkout\Actions;
 use App\Modules\Checkout\Data\CheckoutPaymentInput;
 use App\Modules\Checkout\Data\CheckoutResult;
 use App\Modules\Checkout\Enums\CheckoutOutcome;
-use App\Modules\Checkout\Services\ChargeAmount;
 use App\Modules\Checkout\Services\CheckoutConnection;
+use App\Modules\Checkout\Services\CheckoutConversion;
 use App\Modules\Checkout\Services\CheckoutRateLimiter;
 use App\Modules\Checkout\Services\CheckoutUrls;
 use App\Modules\Checkout\Services\EffectivePayerFields;
@@ -58,7 +58,9 @@ use LogicException;
  *  3. card-testing protection: rate limits, then Turnstile when required,
  *     verified on the server (plan 11.7);
  *  4. the card behind the confirmation token is read (country, brand);
- *  5. the amount to charge (ChargeAmount: FX hook, Phase 6);
+ *  5. the currency (CheckoutConversion, plan 13.2, 13.4): a Mexican card on a
+ *     USD link of a Mexican account is converted to MXN, but only after the
+ *     payer confirmed the exact amount; nothing is charged until then;
  *  6. ClaimLinkAttempt: THE active attempt of the link is reused or created
  *     (one per link, rules.md rule 9) under the link's lock and its lease
  *     taken, so a second tab or device waits instead of paying twice (plan
@@ -82,7 +84,7 @@ final readonly class StartCheckoutPayment
         private LinkDeclineCounter $declines,
         private TurnstileVerifier $turnstile,
         private GatewayFactory $gateways,
-        private ChargeAmount $amounts,
+        private CheckoutConversion $conversion,
         private AttemptLease $lease,
         private CaptureAuthorizedPayment $capture,
         private ExpirePaymentLink $expire,
@@ -151,8 +153,14 @@ final readonly class StartCheckoutPayment
             return CheckoutResult::of(CheckoutOutcome::Error);
         }
 
-        $amount = $this->amounts->for($link, $card);
-        $claim = $this->claim->handle($link, new AttemptClaimRequest($connection, $amount, $payer, $input->clientIp, $input->userAgent, $card->fingerprint));
+        $plan = $this->conversion->plan($link, $connection, $card, $input);
+
+        if ($plan->answer !== null) {
+            return $plan->answer;
+        }
+
+        $amount = $plan->amount ?? throw new LogicException('A charge plan without an answer has an amount.');
+        $claim = $this->claim->handle($link, new AttemptClaimRequest($connection, $amount, $payer, $input->clientIp, $input->userAgent, $card->fingerprint, $plan->quote));
 
         if ($claim instanceof ClaimRefusal) {
             return CheckoutResult::of(match ($claim) {

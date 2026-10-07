@@ -141,6 +141,8 @@ final class FakePaymentGateway implements PaymentGateway
      * Confirmation tokens of the fake: `ctoken_<scenario>[_suffix]` with
      * scenario success | decline | funds | threeds | processing | succeed
      * (authorized AND captured by the gateway at once, like automatic capture).
+     * The card is issued in Mexico unless the suffix has `_us` (ADR-0063: a
+     * foreign card is charged in the link's currency, a Mexican one converted).
      */
     public function inspectPaymentMethod(GatewayConnection $connection, string $confirmationToken): PaymentMethodPreview
     {
@@ -153,7 +155,7 @@ final class FakePaymentGateway implements PaymentGateway
 
         $last4 = self::scenario($confirmationToken) === 'decline' ? '0002' : '4242';
 
-        return new PaymentMethodPreview('MX', 'visa', $last4, 'fp_fake_'.$last4);
+        return new PaymentMethodPreview(self::countryOf($confirmationToken), 'visa', $last4, 'fp_fake_'.$last4);
     }
 
     public function createOrUpdatePayment(GatewayConnection $connection, PaymentRequest $request): ProviderPayment
@@ -221,6 +223,7 @@ final class FakePaymentGateway implements PaymentGateway
         $payment['failure'] = null;
         $scenario = self::scenario($confirmationToken);
         $payment['last4'] = $scenario === 'decline' ? '0002' : '4242';
+        $payment['country'] = self::countryOf($confirmationToken);
         $payment['status'] = match ($scenario) {
             'threeds' => ProviderPaymentStatus::RequiresAction,
             'processing' => ProviderPaymentStatus::Processing,
@@ -378,6 +381,21 @@ final class FakePaymentGateway implements PaymentGateway
         return $status instanceof ProviderPaymentStatus ? $status : null;
     }
 
+    /**
+     * What the gateway holds as the amount to charge of a payment (ADR-0063:
+     * the converted MXN amount of a Mexican card), or null if unknown.
+     *
+     * @return array{amount: int, currency: string}|null
+     */
+    public function chargeOf(string $providerPaymentId): ?array
+    {
+        $payment = $this->payments[$providerPaymentId] ?? null;
+
+        return is_array($payment) && is_int($payment['amount'] ?? null) && is_string($payment['currency'] ?? null)
+            ? ['amount' => $payment['amount'], 'currency' => $payment['currency']]
+            : null;
+    }
+
     /** @return list<string> */
     public function callsTo(string $method): array
     {
@@ -411,6 +429,12 @@ final class FakePaymentGateway implements PaymentGateway
         }
     }
 
+    /** The issuing country of the fake card: Mexico, unless the token carries a `_us` suffix (a foreign card). */
+    private static function countryOf(string $token): string
+    {
+        return str_contains($token, '_us') ? 'US' : 'MX';
+    }
+
     private static function scenario(string $token): string
     {
         return preg_match('/^ctoken_(?:sandbox_)?(success|decline|funds|threeds|processing|succeed)/', $token, $match) === 1 ? $match[1] : 'success';
@@ -429,6 +453,7 @@ final class FakePaymentGateway implements PaymentGateway
         $amount = is_int($payment['amount'] ?? null) ? $payment['amount'] : 0;
         $currency = is_string($payment['currency'] ?? null) ? $payment['currency'] : 'MXN';
         $last4 = is_string($payment['last4'] ?? null) ? $payment['last4'] : '4242';
+        $country = is_string($payment['country'] ?? null) ? $payment['country'] : 'MX';
 
         return new ProviderPayment(
             providerPaymentId: $id,
@@ -437,7 +462,7 @@ final class FakePaymentGateway implements PaymentGateway
             currency: $currency,
             amountCapturableMinor: $status === ProviderPaymentStatus::RequiresCapture ? $amount : 0,
             clientSecret: $status === ProviderPaymentStatus::RequiresAction ? $id.'_secret_fake' : null,
-            cardPreview: new PaymentMethodPreview('MX', 'visa', $last4, 'fp_fake_'.$last4),
+            cardPreview: new PaymentMethodPreview($country, 'visa', $last4, 'fp_fake_'.$last4),
             failure: $status === ProviderPaymentStatus::RequiresPaymentMethod && $failure instanceof ProviderPaymentFailure ? $failure : null,
             attemptReference: isset($metadata['axispay_attempt_id']) && is_string($metadata['axispay_attempt_id']) ? $metadata['axispay_attempt_id'] : null,
             createdAt: is_int($payment['created'] ?? null) ? $payment['created'] : null,

@@ -30,6 +30,9 @@ final class CheckoutTestHelpers
 {
     /**
      * A tenant ready to charge in test mode, one link and the fake gateway.
+     * The connected account is in the United States unless `$connection` says
+     * otherwise: USD links are then charged as they are, whatever the card
+     * (the conversion rule needs a Mexican account, ADR-0063).
      *
      * @param  (Closure(PaymentLinkFactory): PaymentLinkFactory)|null  $link
      * @param  (Closure(GatewayConnectionFactory): GatewayConnectionFactory)|null  $connection
@@ -39,7 +42,7 @@ final class CheckoutTestHelpers
     {
         $tenant = Tenant::factory()->status(TenantStatus::Active)->create(['display_name' => 'Tienda Demo', 'support_email' => 'soporte@demo.test']);
         self::legalDocument($tenant, LegalDocumentKind::Privacy, url: 'https://demo.test/privacidad');
-        GatewayTestHelpers::connection($tenant, false, $connection);
+        GatewayTestHelpers::connection($tenant, false, static fn (GatewayConnectionFactory $factory): GatewayConnectionFactory => ($connection ?? static fn (GatewayConnectionFactory $f): GatewayConnectionFactory => $f)($factory->state(['country' => 'US'])));
         $fake = FakePaymentGateway::install();
 
         return [$tenant, ApiTestHelpers::link($tenant, false, $link), $fake];
