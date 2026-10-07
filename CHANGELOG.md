@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Currency conversion for Mexican cards** (ADR-0063, proposed; Phase 6
+  subset): a USD link of a Mexican account paid with a card issued in Mexico is
+  charged in MXN, after the payer confirms the exact amount. Two modes:
+  `fixed` (the link's rate, else the tenant's new `fx.fixed_rate`, no markup;
+  12.30 USD x 20 = 246.00 MXN) and `banxico_fix` (the stored FIX plus the
+  tenant markup). The checkout answers `requires_currency_confirmation` with
+  the quote (original amount, MXN amount, rate and source, markup) and
+  charges nothing until the payer confirms; a page legend shows the MXN
+  amount. When the merchant cannot convert (tenant off, link opted out, no
+  rate, stale or missing FIX, converted amount under MXN 10.00) the payer is
+  told so and nothing is charged, instead of a Stripe decline. New tables
+  `exchange_rates` and the immutable `fx_quotes`; the attempt keeps the original
+  and the charged amounts and points at its quote.
+- **`fx` block in payments**: `GET /v1/payments`, every `payment.*` event, the
+  payment of `payment_link.paid` and the pre-payment validation body carry
+  `applied`, `mode`, `source`, `rate`, `rate_date`, `markup_bps`,
+  `effective_rate`, `original_amount` and `original_currency` when a conversion
+  applied (`null` otherwise; `{"applied": false}` in the validation body). The
+  charged `amount` and `currency` are then MXN: reconcile with both.
+- **Banxico FIX** (`FetchBanxicoFixJob`, scheduled on weekdays at 12:30, 13:30
+  and 17:00 Mexico City time with a 09:00 fallback, `BANXICO_SIE_TOKEN`; a
+  no-op without the token). Stored once per date; a FIX that moves more than
+  10 % is held for review; a FIX older than 4 days blocks `banxico_fix`
+  conversions; both alert the superadmins. The checkout never calls Banxico.
+- **Tenant "Payment settings" page** (`settings:manage`): conversion on or off,
+  mode, fixed rate, markup and quote validity, and the link expiration default
+  and maximum. Audited as `tenant.payment_settings_updated`.
+- Sandbox: a `foreign` card scenario (issued in the US, charged in USD); the
+  other sandbox cards are Mexican.
+
 - **`payment.canceled` event** (ADR-0062, proposed): sent every time an
   authorized payment (or a 3D Secure step) is released and will not be
   charged, with `data.reason` (`merchant_rejected`, `validation_failed`,
@@ -21,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Payment events carry `client_reference_id`, `captured_at` and `fx`**: the
   payment of every `payment.*` event and of `payment_link.paid` now has the
   link's reference, the capture time (null until it succeeds) and an `fx`
-  block (null until currency conversion ships).
+  block (null unless a currency conversion applied, ADR-0063).
 - **`GET /v1/payments/{id}` and `GET /v1/payments`** with the new use of the
   `payments:read` scope: status (including `processing`, `requires_capture`
   and `canceled`), link, `client_reference_id`, amount, currency, `fx`, card
@@ -414,6 +444,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attempt.
 
 ### Changed
+
+- **Link expiration maximum is 60 days** (it was 90): `axispay.limits.max_expiration_hours`
+  1440. A tenant default or maximum stored above it is clamped when read; links
+  already created keep their expiry (ADR-0048 amended).
+- **Link creation and conversion**: `fx_not_available` now only answers MXN links
+  and tenants with conversion off (the platform switch is gone); a USD link
+  without `fx` of a tenant with conversion on takes the tenant's default mode;
+  `fx_rate_invalid` (no usable fixed rate, or more than 30 % from the latest
+  FIX) and `amount_below_minimum_after_conversion` are now returned.
 
 - The panel texts of the pre-payment validation (how it works, failure
   policies, the timeout failure) and the guides read the timeout in force

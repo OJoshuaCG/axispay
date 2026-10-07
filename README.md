@@ -29,7 +29,7 @@ Phases from the [master plan, section 27](docs/plans/master.md#27-plan-de-implem
 | 4 | Checkout and card payments | Done (acceptance pending the Stripe contract tests, ADR-0051) |
 | 4B | `oauth` and `api_key` connection methods | Partial: `api_key` built in Phase 2 (ADR-0047); `oauth` pending |
 | 5 | Outgoing webhooks and pre-payment validation | In progress |
-| 6 | Currency conversion (Banxico) | Pending |
+| 6 | Currency conversion (Banxico) | Partly done: tenant fixed rate, Banxico FIX storage and job, quotes, payer confirmation, `fx` in payments and events, the tenant payment settings page (ADR-0063, proposed); reports by charged currency pending |
 | 7 | Refunds and disputes | Pending |
 | 8 | Metrics, branding, payer fields | Pending |
 | 9 | Plans, usage reports, operations | Pending |

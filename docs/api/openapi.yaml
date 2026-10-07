@@ -88,8 +88,11 @@ paths:
         Scope `links:create`. `Idempotency-Key` is required. The account must be `active` or
         `grace` (`403 tenant_suspended` when suspended or closed) and have a gateway connection
         in this mode that can charge (`409 gateway_not_ready`). Unknown parameters are refused.
-        Currency conversion (`fx`) is accepted in the request but refused until its phase
-        (`fx_not_available`). `pre_payment_validation: true` needs a pre-payment validation URL
+        Currency conversion (`fx`, ADR-0063) applies to USD links when the account enabled it:
+        `fx_not_available` on MXN links and when it is off; `fx_rate_invalid` when a fixed rate
+        is missing or more than 30 % from the latest published rate; and
+        `amount_below_minimum_after_conversion` when the amount converts to less than MXN 10.00.
+        `pre_payment_validation: true` needs a pre-payment validation URL
         configured in the panel for this mode (`400 validation_endpoint_not_configured`).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
@@ -321,7 +324,7 @@ paths:
         Scope `payments:read`. The payment as it is now: its `status` (`requires_capture` is an
         authorization waiting for the capture, `processing`, `succeeded`, `canceled` is a void,
         `failed`), its link and `client_reference_id`, amount and currency, the applied `fx` block
-        (null while no conversion applies), and the card's brand and country. Use it to confirm an
+        (null when no conversion applied), and the card's brand and country. Use it to confirm an
         event before acting on it (fetch-back). No gateway identifier, last digits, fingerprint or
         payer data is returned. Another account's or mode's payment, an unknown ID and a wrong
         prefix all answer `404`.
@@ -878,8 +881,9 @@ components:
           minimum: 1
           description: |
             Not with `expires_at`. Default: the account's default (7 days unless lowered).
-            The expiry must be 15 minutes to the account's maximum (90 days at most) from now,
-            else `expiration_out_of_range`.
+            The expiry must be 15 minutes to the account's maximum (60 days at most; the account
+            may set a lower default and maximum in its payment settings) from now, else
+            `expiration_out_of_range`.
         expires_at:
           type: string
           format: date-time
@@ -889,9 +893,12 @@ components:
           additionalProperties: false
           required: [mode]
           description: |
-            Currency conversion for USD links (plan 13). Refused with `fx_not_available` on MXN
-            links, when the account has not enabled conversion, and until conversion is offered
-            by the platform (Phase 6).
+            Currency conversion for USD links (plan 13, ADR-0063). A card issued in Mexico paying
+            a USD link of a Mexican account is charged in MXN, after the payer confirms the exact
+            amount. Refused with `fx_not_available` on MXN links and when the account has not
+            enabled conversion. Omitted: a USD link of an account with conversion on takes the
+            account's default mode. `fixed` takes this `rate`; without one (a link that took the
+            account's default mode) the account's fixed rate applies when the payment is made.
           properties:
             mode:
               type: string
@@ -996,7 +1003,7 @@ components:
               enum: [none, banxico_fix, fixed]
             rate:
               type: [string, 'null']
-              description: Only with `fixed`.
+              description: Only with `fixed`. Null when the link uses the account's own fixed rate.
         payer_fields:
           $ref: '#/components/schemas/PayerFields'
         return_url:
@@ -1107,6 +1114,49 @@ components:
         - succeeded
         - failed
         - canceled
+    PaymentFx:
+      type: object
+      description: |
+        The conversion applied to a payment (ADR-0063): a card issued in Mexico that paid a USD
+        link, charged in MXN with the exact amount the payer confirmed.
+      required: [applied, mode, source, rate, rate_date, markup_bps, effective_rate, original_amount, original_currency]
+      properties:
+        applied:
+          type: boolean
+          const: true
+        mode:
+          type: string
+          enum: [fixed, banxico_fix]
+        source:
+          type: string
+          enum: [merchant, banxico_fix]
+          description: Who set the rate, the merchant (a fixed rate) or Banxico's FIX.
+        rate:
+          $ref: '#/components/schemas/ExchangeRate'
+        rate_date:
+          type: [string, 'null']
+          format: date
+          description: Publication date of the FIX; null with a fixed rate.
+        markup_bps:
+          type: integer
+          description: The merchant's markup over the FIX in basis points; always 0 with a fixed rate.
+        effective_rate:
+          $ref: '#/components/schemas/ExchangeRate'
+        original_amount:
+          type: string
+          description: The link's amount, e.g. `12.30`.
+        original_currency:
+          $ref: '#/components/schemas/Currency'
+      examples:
+        - applied: true
+          mode: fixed
+          source: merchant
+          rate: '20.000000'
+          rate_date: null
+          markup_bps: 0
+          effective_rate: '20.000000'
+          original_amount: '12.30'
+          original_currency: USD
     Payment:
       type: object
       description: |
@@ -1141,11 +1191,13 @@ components:
         currency:
           $ref: '#/components/schemas/Currency'
         fx:
-          type: [object, 'null']
+          oneOf:
+            - $ref: '#/components/schemas/PaymentFx'
+            - type: 'null'
           description: |
-            The currency conversion applied to this payment. Null while no conversion applies, which
-            is always the case until the tenant FX phase ships; the key is already part of the
-            contract so integrators can handle it. Its shape will be documented with that phase.
+            The currency conversion applied to this payment, null when it was charged in the
+            link's own currency. `amount` and `currency` are what was charged (MXN);
+            `fx.original_amount` and `fx.original_currency` are the link's. Reconcile with both.
         late_payment:
           type: boolean
           description: The payment succeeded after its link expired or was canceled.
@@ -1326,17 +1378,21 @@ components:
                 expires_at: { type: string, format: date-time }
             charge:
               type: object
-              description: The amount and currency about to be charged.
+              description: |
+                The amount and currency about to be charged: already converted to MXN when `fx` says so
+                (`payment_link.amount` and `currency` stay the link's).
               required: [amount, currency, fx]
               properties:
                 amount: { type: string }
                 currency: { $ref: '#/components/schemas/Currency' }
                 fx:
-                  type: object
-                  required: [applied]
-                  properties:
-                    applied: { type: boolean }
-                  additionalProperties: true
+                  description: '`{"applied": false}`, or the conversion applied (the `PaymentFx` block).'
+                  oneOf:
+                    - $ref: '#/components/schemas/PaymentFx'
+                    - type: object
+                      required: [applied]
+                      properties:
+                        applied: { type: boolean, const: false }
             card:
               type: object
               description: Brand and country only; never the number.

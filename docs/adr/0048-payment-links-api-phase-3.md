@@ -1,6 +1,6 @@
 # ADR-0048: Payment links API (Phase 3) — limits, API keys, idempotency and link rules
 
-- **Status:** Accepted (owner decisions of 2026-09-26 for expiration, amounts and rate limits; the rest by project owner delegation)
+- **Status:** Accepted (owner decisions of 2026-09-26 for expiration, amounts and rate limits; the rest by project owner delegation). **Amended 2026-10-06** ([ADR-0063](0063-currency-conversion-tenant-fixed-rate-and-payment-settings.md), proposed): the maximum expiration is 60 days (it was 90), link rules 3 and 4 no longer refuse conversion for supported modes, and the tenant settings screen for expiration exists (see the notes under each section).
 - **Date:** 2026-09-26
 - **Source:** project owner decisions (2026-09-26) on open questions #5, #6 and #12; master plan sections 3 (ADR-006, ADR-007, ADR-013, ADR-015, ADR-020), 6, 7.2, 7.5, 7.8, 8, 9.1, 10.1–10.5, 11.1, 12.3.4, 17.3, 19.1, 21.3, 26.2 (cases 11, 12, 14, 15), 27 (Phase 3); [ADR-0031](0031-tenancy-enforcement.md), [ADR-0047](0047-stripe-connection-phase-2-and-api-key-reordering.md)
 
@@ -14,15 +14,15 @@ Phase 3 delivers API keys, API idempotency, the `payment_link` endpoints, the li
 
 | Topic | Rule | Who can change it |
 |---|---|---|
-| Link expiration | Default **7 days**; minimum **15 minutes**; maximum **90 days**. | Platform configuration. A tenant may lower its default and its maximum, never above the platform maximum. |
+| Link expiration | Default **7 days**; minimum **15 minutes**; maximum **60 days** (1,440 hours; **90 days until 2026-10-06**, lowered by the owner so every link layer shares one ceiling). | Platform configuration. A tenant may lower its default and its maximum, never above the platform maximum; a tenant value stored above the new maximum is clamped when read, and links already created keep their expiry. |
 | Minimum amount | Stripe's documented minimum charge: **USD 0.50**, **MXN 10.00**. | Platform configuration (follows Stripe). |
 | Maximum amount | Platform risk cap: **USD 10,000.00**, **MXN 200,000.00** per link. | Platform configuration. A tenant may lower it per currency, never raise it. |
 | API rate limit | **100 requests per minute per API key**, in live and in test. | Platform configuration, separately per mode. |
 
 - The minimums were checked on 2026-09-26 in Stripe's documentation ("Minimum and maximum charge amounts", docs.stripe.com/currencies): USD 0.50, MXN 10.
-- **Known caveat (Stripe rule):** Stripe applies the minimum of the account's *settlement* currency after conversion. A USD link paid into a merchant account that settles in MXN must also reach MXN 10 once converted, so a USD link close to USD 0.50 may be refused by Stripe at charge time. We accept the link and let the charge report Stripe's refusal (Phase 4). The platform's own conversion check (`amount_below_minimum_after_conversion`) arrives with FX in Phase 6.
+- **Known caveat (Stripe rule):** Stripe applies the minimum of the account's *settlement* currency after conversion. A USD link paid into a merchant account that settles in MXN must also reach MXN 10 once converted, so a USD link close to USD 0.50 may be refused by Stripe at charge time. We accept the link and let the charge report Stripe's refusal (Phase 4). The platform's own conversion check (`amount_below_minimum_after_conversion`) arrived with FX (ADR-0063).
 - The plan suggested 50 requests per minute in test mode; the owner chose the same 100 for both modes. The plan does not suggest a separate lower limit for creation, so there is none.
-- Tenant-level overrides exist for expiration and maximum amount (tenant settings); there is no tenant-level override of the rate limit yet. The settings screen that edits these values arrives with the other tenant settings (Phase 8).
+- Tenant-level overrides exist for expiration and maximum amount (tenant settings); there is no tenant-level override of the rate limit yet. The expiration values (and the currency conversion settings) are edited in the tenant panel's "Payment settings" page since 2026-10-06 (ADR-0063); the amount caps still wait for the other tenant settings (Phase 8).
 
 ### 2. API keys (plan 10.2, ADR-015)
 
@@ -116,7 +116,7 @@ Key: 1 to 255 characters from letters, digits, `_`, `-`, `:` and `.`; anything e
 | 1 | Tenant `active` or `grace` (plan 21.3). `suspended` and `closed` cannot create links; `pending_onboarding` has no gateway yet. | `403 tenant_suspended`; `409 gateway_not_ready` for `pending_onboarding` |
 | 2 | A gateway connection **in the link's mode** that is `active` with charges enabled, read from our database (ADR-017). | `409 gateway_not_ready` |
 | 3 | Conversion is refused on MXN links. | `fx_not_available` |
-| 4 | Conversion needs the tenant to have enabled it **and the platform to offer it**. The platform switch stays off until Phase 6 (Banxico rates, quotes), so every request for conversion is refused now; links are stored with mode `none`. | `fx_not_available` |
+| 4 | Conversion needs the tenant to have enabled it. *(Amended 2026-10-06, ADR-0063: the platform switch is gone; supported modes are accepted. A converting link also needs a usable rate, `fx_rate_invalid`, and an amount that reaches the MXN minimum once converted, `amount_below_minimum_after_conversion`.)* | `fx_not_available` |
 | 5 | Tenant maximum amount, if set. | `amount_above_maximum` |
 | 6 | Expiration range with the tenant's limits. | `expiration_out_of_range` |
 | 7 | Return URL domain and scheme. | `return_url_not_allowed` |

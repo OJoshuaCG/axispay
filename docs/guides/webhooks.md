@@ -60,7 +60,9 @@ Adding, changing, deleting an endpoint or rotating its secret sends an e-mail to
 
 You can subscribe to the events of later phases now; they start arriving when those features ship.
 
-The payment inside every `payment.*` event (and inside `payment_link.paid`) carries your link's `client_reference_id` (so you can match it to your order without a lookup; `null` when the link has none), `captured_at` (when the payment was captured; `null` until it succeeds) and `fx` (`null` until a currency conversion applies). `payment.canceled` can arrive for a payment you approved in the pre-payment validation: if you reserved stock or credited a balance on approval, undo it then.
+The payment inside every `payment.*` event (and inside `payment_link.paid`) carries your link's `client_reference_id` (so you can match it to your order without a lookup; `null` when the link has none), `captured_at` (when the payment was captured; `null` until it succeeds) and `fx` (`null` unless a currency conversion applied; see below). `payment.canceled` can arrive for a payment you approved in the pre-payment validation: if you reserved stock or credited a balance on approval, undo it then.
+
+**Converted payments.** When a card issued in Mexico pays a USD link, the payer confirms the amount in Mexican pesos and the payment is charged in MXN: the payment's `amount` and `currency` are what was charged (for example `246.00` MXN) and `fx` says how the link's USD amount was converted (`mode`, `source`, `rate`, `rate_date`, `markup_bps`, `effective_rate`, `original_amount`, `original_currency`; for example `12.30` USD at `20.000000`). Match your order with the link's `client_reference_id` and reconcile with both amounts, never by comparing the charged `amount` with the USD price. See the integration guide, "Currency conversion".
 
 Each event has an ID (`evt_…`), a type, the mode, the time it happened and the object it is about, in the same shape as the public API. The body of an event never changes: every retry sends exactly the same bytes.
 
@@ -115,7 +117,7 @@ A signed `POST` with the same signature headers as the events and an extra heade
 
 - the payment: the ID of this payment attempt (`data.payment.id`, `pay_…`). It is the same in the immediate retry after a connection failure and in every other call about that attempt, and different for each new attempt of the link (a payer who retries after a declined card). Use it, with `data.payment_link.id`, to recognize a repeated call and to match the attempt later with the events and the payment you read from the API;
 - the link: its ID, your reference (`client_reference_id`), your metadata, its description, amount, currency and expiry; the mode is the `livemode` of the body;
-- the charge: the exact amount and currency about to be charged;
+- the charge: the exact amount and currency about to be charged, already converted to Mexican pesos when a card issued in Mexico pays a USD link, with `fx` (`{ "applied": false }`, or the conversion applied: mode, source, rate, rate date, original amount and currency). `data.payment_link.amount` and `currency` stay the link's;
 - the card: only its brand and country (never the number);
 - the payer: the details the payer entered, such as the e-mail and name.
 

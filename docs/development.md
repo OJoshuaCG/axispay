@@ -91,6 +91,7 @@ code, and `docs/frontend/README.md` before touching UI. For production see
 | `AXISPAY_MAX_CHARGE_USD_MINOR` / `AXISPAY_MAX_CHARGE_MXN_MINOR` | `1000000` / `20000000` | Platform maximum per link in cents (USD 10,000.00 / MXN 200,000.00, ADR-0048). The minimums follow Stripe and are not variables. |
 | `AXISPAY_API_RATE_LIMIT_LIVE` / `AXISPAY_API_RATE_LIMIT_TEST` | `100` / `100` | API requests per minute per key (ADR-0048). |
 | `AXISPAY_VALIDATION_TIMEOUT_SECONDS` | `30` (default) | Seconds a payment waits for the merchant's pre-payment validation, whole seconds from 5 to 60 (ADR-0061). The only timeout to set: the checkout request budget and lease, the job timeouts, the queue `retry_after` and the container's web and worker limits are derived from it, and the application refuses to boot with a value outside the range (or with a `*_QUEUE_RETRY_AFTER` override that is too short for the jobs). `5` reproduces the limits used before the setting existed. |
+| `BANXICO_SIE_TOKEN` | none | Token of the Banxico SIE API for `FetchBanxicoFixJob` (ADR-0063). Not needed locally: tests fake the HTTP call, and the `fixed` conversion mode needs no token. Never commit it. |
 | `AXISPAY_API_FAILED_AUTH_PER_MINUTE` | `30` | Failed API authentications per IP and minute before that IP gets `429` (ADR-0048). Locally, `php artisan cache:clear` lifts a lock. |
 
 The local credentials are defined in `compose.yaml` and the init script. They

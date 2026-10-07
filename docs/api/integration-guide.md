@@ -239,11 +239,11 @@ When a request has several problems, the first failing field is reported.
 | `amount_invalid` | 400 | The amount format is invalid for the currency (too many decimals, sign, separators, empty). |
 | `amount_below_minimum` | 400 | Below the minimum charge: USD 0.50, MXN 10.00. |
 | `amount_above_maximum` | 400 | Above the maximum: USD 10,000.00 or MXN 200,000.00 by default; the account may have lowered it. |
-| `amount_below_minimum_after_conversion` | 400 | Reserved for currency conversion, which is not available yet. |
+| `amount_below_minimum_after_conversion` | 400 | The link converts (see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)) and its amount, converted to MXN, is below the MXN minimum charge (MXN 10.00). |
 | `currency_not_supported` | 400 | Only `USD` and `MXN` are supported. |
-| `expiration_out_of_range` | 400 | The expiry is outside 15 minutes to the account's maximum (90 days at most) from now, or `expires_in_hours` is below 1. |
-| `fx_not_available` | 400 | Currency conversion (`fx`) was requested; it is not available yet. |
-| `fx_rate_invalid` | 400 | Reserved for currency conversion. |
+| `expiration_out_of_range` | 400 | The expiry is outside 15 minutes to the account's maximum (60 days at most) from now, or `expires_in_hours` is below 1. |
+| `fx_not_available` | 400 | Currency conversion (`fx`) was requested for an MXN link, or the account has not enabled it. |
+| `fx_rate_invalid` | 400 | A `fixed` conversion has no rate to use (send `fx.rate` or set the account's fixed rate), or the rate is more than 30 % away from the latest published exchange rate. |
 | `metadata_invalid` | 400 | `metadata` breaks its limits (see section 6). |
 | `return_url_not_allowed` | 400 | The `return_url` host is not in the account's allowed return domains, or it is not HTTPS in live mode. |
 | `payer_field_invalid` | 400 | `payer_fields` has an unknown field or an invalid requirement. |
@@ -291,9 +291,9 @@ Unknown fields are refused (`parameter_invalid`), which catches typos such as `e
 | `return_url` | string (URL) | No | Where the payer can return after paying. Absolute `http(s)` URL of at most 2048 characters, without user or password. **HTTPS is required in live mode** and the **host must exactly match** one of the account's allowed return domains (subdomains are not implied). Error: `return_url_not_allowed`. |
 | `locale` | string | No | `es` or `en`: language of the payment page. Default: the account's checkout language. |
 | `pre_payment_validation` | boolean | No | `true` asks your server to approve each payment of this link (see [section 8](#8-pre-payment-validation-callback)); needs a validation URL for this mode (`validation_endpoint_not_configured` otherwise). `false` turns it off for this link. Omitted: the account's "use for new links" setting decides. Fixed when the link is created. |
-| `fx` | object | No | Currency conversion. **Not available yet**: any value answers `fx_not_available`. Do not send it. |
+| `fx` | object | No | Currency conversion of a USD link paid with a Mexican card, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards): `{ "mode": "none" \| "fixed" \| "banxico_fix", "rate": "20.000000" }` (`rate` only with `fixed`). Omit it to use the account's default. |
 
-**Expiration.** If you send neither `expires_in_hours` nor `expires_at`, the account's default applies (7 days unless the account lowered it). The expiry must fall between **15 minutes** and the account's maximum (**90 days** at most) from now, otherwise `expiration_out_of_range`.
+**Expiration.** If you send neither `expires_in_hours` nor `expires_at`, the account's default applies (7 days unless the account lowered it). The expiry must fall between **15 minutes** and the account's maximum (**60 days** at most; the account sets its own default and maximum, never above 60 days, in its payment settings) from now, otherwise `expiration_out_of_range`.
 
 #### Minimal request
 
@@ -600,10 +600,38 @@ curl -sS -G https://api.example.com/v1/payments \
 
 - `status` tells where the payment is: `requires_capture` (authorized, waiting for the capture or for your pre-payment validation answer), `processing`, `succeeded` (captured), `canceled` (voided: the money will not be taken) or `failed` (closed after at least one declined card).
 - `client_reference_id` is the reference of the link (`null` when it has none). `payment_link` is its `plink_` ID.
-- `fx` is `null` while no currency conversion applies (the only case today, see [section 10](#10-not-available-yet)).
+- `fx` is `null` when the payment was charged in the link's own currency. When a Mexican card paid a USD link it describes the conversion (see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)), and `amount` and `currency` are what was charged, in MXN: reconcile with both.
 - `card` has the brand and country only; either can be `null` before a card was read. Never the number, the last digits or a fingerprint. No gateway identifier and no payer data is returned.
 - `captured_at` is set once the payment succeeded, `authorized_at` once it was authorized and `canceled_at` once it was canceled; otherwise `null`.
 - An ID with a wrong prefix, an unknown ID, another account's or another mode's payment answers `404 resource_not_found`.
+
+### Currency conversion (USD links and Mexican cards)
+
+A Stripe account in Mexico can only charge a card issued in Mexico in Mexican pesos. So when a **USD** link of a Mexican account is paid with a card issued in Mexico, the platform converts the link's total to **MXN**: `converted = round_half_up(amount x rate)`, rounded once, to the cent. Example: a link of `12.30` USD with a rate of `20` is charged `246.00` MXN. A card issued anywhere else pays the USD amount as it is, and an MXN link is never converted.
+
+- **It is the account's setting**, edited in the panel's *Payment settings* page: conversion on or off, the mode, the account's fixed rate, the markup and the quote validity. With conversion off, a Mexican card cannot pay a USD link: the payer is told the merchant cannot charge that amount in USD, and nothing is charged.
+- **Modes.** `fixed`: your own rate (the link's `fx.rate`, else the account's fixed rate); no markup is applied on top. `banxico_fix`: the FIX that Banxico publishes (kept by the platform, never fetched while a payer pays), plus the account's markup; if the newest FIX is more than 4 days old the conversion is blocked until a new one arrives. A link sent without `fx` takes the account's default mode when it is USD and conversion is on; `{ "mode": "none" }` opts a link out.
+- **Create-time checks.** `fx_rate_invalid` (no rate to use, or a rate more than 30 % away from the latest published one) and `amount_below_minimum_after_conversion` (the converted amount is below MXN 10.00). In the link object, `fx.rate` is `null` when the link uses the account's own fixed rate.
+- **The payer confirms first.** The page shows a legend with the MXN amount; when the card turns out to be Mexican, a confirmation step shows the original amount, the amount to be charged, the rate and where it comes from, and the markup if there is one. Nothing is charged until the payer presses "Pay $X MXN". If a Banxico quote expires and the new amount differs, the payer is asked again.
+- **What you receive.** The payment (in `GET /v1/payments`, in every `payment.*` event, in the payment of `payment_link.paid` and in the pre-payment validation body) has `amount` and `currency` = what was charged (MXN) and an `fx` block:
+
+```json
+"amount": "246.00",
+"currency": "MXN",
+"fx": {
+  "applied": true,
+  "mode": "fixed",
+  "source": "merchant",
+  "rate": "20.000000",
+  "rate_date": null,
+  "markup_bps": 0,
+  "effective_rate": "20.000000",
+  "original_amount": "12.30",
+  "original_currency": "USD"
+}
+```
+
+`mode` is `fixed` or `banxico_fix`; `source` is `merchant` (a fixed rate) or `banxico_fix`; `rate` and `rate_date` are the fixed or published rate and, for Banxico, its publication date; `markup_bps` and `effective_rate` are the markup and the rate that produced the charge; `original_amount` and `original_currency` are the link's. **Reconcile with both amounts**: the link says USD, the payment charged MXN. In the pre-payment validation body `charge.amount` is already the MXN amount while `payment_link.amount` stays the link's.
 
 ### Status lifecycle
 
@@ -635,6 +663,7 @@ Possible transitions:
 ### What the payer sees
 
 - The payer opens the link `url` and sees a payment page in the link's `locale` with the merchant's branding, the description, the amount and currency, the fields requested by `payer_fields`, and the card form.
+- A card issued in Mexico paying a USD link: a currency confirmation step with the exact MXN amount before anything is charged (see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)).
 - After paying: a "Payment complete" page. If you set `return_url`, it shows a **"Return to <merchant>"** button pointing to it (the payer is not redirected automatically, and no data is appended to the URL: do not rely on the return as proof of payment, see [section 9](#9-integration-checklist-and-recommended-patterns)).
 - Opening a `paid` link shows "This payment has already been made"; an `expired` link shows "This payment link has expired"; a `canceled` link shows "This payment link is no longer available".
 - If the card is declined, the payer sees the error and can try again on the same link. Repeated declines are limited (card-testing protection): after too many attempts the page asks to wait or blocks the link for a while.
@@ -722,7 +751,7 @@ Webhooks and the events API share one body:
 | `payment.failed` | The payment | `failure_count`, `failure_code` |
 | `payment.canceled` | The payment | `reason` |
 
-The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`), `client_reference_id` (the reference of the link, `null` when it has none), `captured_at` (when the payment was captured, `null` until it succeeds), `fx` (`null` until a currency conversion applies) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
+The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`), `client_reference_id` (the reference of the link, `null` when it has none), `captured_at` (when the payment was captured, `null` until it succeeds), `fx` (`null` unless a currency conversion applied, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
 
 **`payment.canceled`** is sent every time an authorized payment (or a 3D Secure step) is released and will not be charged: the merchant's pre-payment validation rejected it or failed under `fail_closed`, the capture window elapsed, the link was closed or canceled meanwhile, the payer abandoned a 3D Secure step, or the gateway released it on its own (for example the authorization expired before the capture). `data.reason` says which: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action` or `gateway_canceled` (new reasons may be added). `data.object` is the payment, with `status` `canceled` (or `failed` when a card had been declined before) and the same `pay_...` ID as the pre-payment validation call of that attempt. It is sent once per payment, only for payments that had been authorized or were waiting for the payer's bank (not for a card form the payer simply left), and an endpoint that lists its events explicitly must add it to receive it. If you did something on approval (reserved stock, credited a balance), undo it when this event arrives, after confirming it with `GET /v1/payments/{id}` (`status: canceled`).
 
@@ -818,7 +847,7 @@ An optional, **synchronous** check that lets your system veto a payment: "may we
 
 - **When:** only for links with `pre_payment_validation` on, after the payer's card was authorized and before it is charged. The payer waits on a "Verifying your order" screen.
 - **Setup:** the merchant configures **one validation URL per mode** in the panel (**Settings -> Pre-payment validation**) with its own signing secret, and chooses a failure policy. Without a configured URL you cannot create links with `pre_payment_validation: true`.
-- **The call:** a signed `POST` (same Standard Webhooks signature as events, with the validation URL's own secret) with `webhook-id` = the call ID (`val_...`) and the extra header `x-axispay-kind: pre_payment_validation`. The body has `id`, `type: "payment.pre_validation"`, `livemode`, `test` (`true` for the panel's "Test validation" button), `created_at`, `attempt_number` (a payer who retries after a declined card is validated again) and `data` with `payment` (`id`: the `pay_...` ID of this payment attempt, the same in the immediate retry and in every other call about that attempt, different for each new attempt of the link), `payment_link` (`id`, `client_reference_id`, `metadata`, `description`, `amount`, `currency`, `expires_at`), `charge` (the exact `amount`, `currency` and `fx.applied`), `card` (`brand` and `country` only, never the number) and `payer` (e-mail and full name, when collected).
+- **The call:** a signed `POST` (same Standard Webhooks signature as events, with the validation URL's own secret) with `webhook-id` = the call ID (`val_...`) and the extra header `x-axispay-kind: pre_payment_validation`. The body has `id`, `type: "payment.pre_validation"`, `livemode`, `test` (`true` for the panel's "Test validation" button), `created_at`, `attempt_number` (a payer who retries after a declined card is validated again) and `data` with `payment` (`id`: the `pay_...` ID of this payment attempt, the same in the immediate retry and in every other call about that attempt, different for each new attempt of the link), `payment_link` (`id`, `client_reference_id`, `metadata`, `description`, `amount`, `currency`, `expires_at`), `charge` (the exact `amount` and `currency`, already converted to MXN when `fx` says so, and `fx`: `{ "applied": false }` or the conversion applied, with the same fields as the payment's `fx`), `card` (`brand` and `country` only, never the number) and `payer` (e-mail and full name, when collected).
 - **Your answer:** HTTP **200** with a JSON object of at most **4 KB**, **within 30 seconds in total** by default (2 seconds to connect; the platform operator can set the limit between 5 and 60 seconds, and the panel's help screen shows the value in force):
 
   ```json
@@ -882,7 +911,6 @@ These are **not implemented** in this version of the API. Do not build on them:
 
 - **Refunds.** There is no refund endpoint, the `refunds:*` scopes have no endpoint, and the events `refund.created`, `refund.succeeded` and `refund.failed` are never sent. A link's `refund_status` is `none` for now. Refunds are planned (Phase 7 of the project plan).
 - **Disputes.** The events `dispute.created` and `dispute.closed` are never sent and a link's `dispute_status` is `none` for now. Planned (Phase 7).
-- **Currency conversion (FX).** The `fx` field of the create request is refused with `fx_not_available`; links are always charged in their own currency (`fx.mode` is always `none`). The related codes `amount_below_minimum_after_conversion` and `fx_rate_invalid` are reserved. Planned (Phase 6).
 - **Payer data, last digits and refunds in the payment object.** `GET /v1/payments` is read only and shows the card's brand and country, not the payer, the last digits, refunds or disputes (they come with Phase 7). The `payment` field of a link is still always `null`: read the link's payments with `GET /v1/payments?payment_link=...`.
 - **Link events `payment_link.created`, `payment_link.expired`, `payment_link.canceled`** are defined but not sent yet.
 - **Editing a link.** There is no update endpoint; cancel and create a new link.
