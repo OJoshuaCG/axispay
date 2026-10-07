@@ -9,6 +9,7 @@ use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
 use App\Modules\Payments\Data\CallBudget;
+use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -51,13 +52,20 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
 
     private const int BATCH = 200;
 
-    /** Below the queue's retry_after (150 s): no new sync starts after the 25 s budget, and one sync takes at most about 90 s (ADR-0051). */
-    public int $timeout = 115;
+    /**
+     * Below the queue's retry_after: no new sync starts after the 25 s
+     * budget, and one sync takes at most about 90 s plus the merchant
+     * validation (ADR-0051). Derived from the validation timeout when the job
+     * is created (ADR-0061): 115 s at 5 s.
+     */
+    public int $timeout;
 
+    /** One run per tenant and mode per schedule slot (15 minutes); always above the timeout (at most 170 s). */
     public int $uniqueFor = 900;
 
     public function __construct()
     {
+        $this->timeout = ValidationTimeouts::current()->jobTimeoutSeconds();
         $this->captureTenantContext();
     }
 

@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Modules\Payments\Data\ValidationTimeouts;
+
+// retry_after must exceed every job's timeout, and the payment jobs wait for
+// the merchant's validation: both follow AXISPAY_VALIDATION_TIMEOUT_SECONDS
+// (ADR-0061). The default is derived; a shorter override is refused at boot.
+$queueRetryAfter = ValidationTimeouts::fromSeconds((int) env('AXISPAY_VALIDATION_TIMEOUT_SECONDS', ValidationTimeouts::DEFAULT_SECONDS))->queueRetryAfterSeconds();
+
 return [
 
     /*
@@ -37,15 +44,16 @@ return [
             'driver' => 'sync',
         ],
 
-        // retry_after (150 s) must exceed every job's timeout: the longest are
-        // the payment jobs (115 s, two bounded Stripe calls plus the merchant
-        // validation, ADR-0051) and the worker default QUEUE_TIMEOUT (120 s).
+        // retry_after must exceed every job's timeout: the longest are the
+        // payment jobs (validation timeout + 110 s: two bounded Stripe calls
+        // plus the merchant validation, ADR-0051, ADR-0061) and the worker
+        // default QUEUE_TIMEOUT (5 s more). 150 s at a 5 s validation timeout.
         'database' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 150),
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', $queueRetryAfter),
             'after_commit' => false,
         ],
 
@@ -53,7 +61,7 @@ return [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),
             'queue' => env('BEANSTALKD_QUEUE', 'default'),
-            'retry_after' => (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', 150),
+            'retry_after' => (int) env('BEANSTALKD_QUEUE_RETRY_AFTER', $queueRetryAfter),
             'block_for' => 0,
             'after_commit' => false,
         ],
@@ -73,7 +81,7 @@ return [
             'driver' => 'redis',
             'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
             'queue' => env('REDIS_QUEUE', 'default'),
-            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', 150),
+            'retry_after' => (int) env('REDIS_QUEUE_RETRY_AFTER', $queueRetryAfter),
             'block_for' => null,
             'after_commit' => false,
         ],

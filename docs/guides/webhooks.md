@@ -11,7 +11,7 @@ Source of truth: master plan sections 15.1 to 15.8 (Spanish), [ADR-0057](../adr/
 | What it is | A question: "may we charge this payment?" | A notice: "this happened" |
 | When | During the payment, after the card is authorized and before it is charged | After something changed: a payment succeeded, a card was declined, a link was paid... |
 | Does your answer matter? | Yes. Your answer decides whether the payment is charged | Only as a receipt: any 2xx status means "received" |
-| Timing | Synchronous: the payer waits, at most 5 seconds | Asynchronous: sent in the background, retried for about 27 hours |
+| Timing | Synchronous: the payer waits, at most 30 seconds by default (see [Timeouts and failures](#timeouts-and-failures)) | Asynchronous: sent in the background, retried for about 27 hours |
 | How many | One URL per mode (test and live) | Up to 5 endpoints per mode, each with the events it wants |
 | Optional? | Yes. Without it, payments are charged without asking you | Yes |
 
@@ -110,14 +110,15 @@ The first time you save, a signing secret of its own is shown once. Rotating it 
 
 A signed `POST` with the same signature headers as the events and an extra header that says it is a pre-payment validation. The body identifies the call (`val_…`), the mode, the time, the sequence number of this validation for the link, and:
 
-- the link: its ID, your reference, your metadata, its description, amount, currency and expiry;
+- the payment: the ID of this payment attempt (`data.payment.id`, `pay_…`). It is the same in the immediate retry after a connection failure and in every other call about that attempt, and different for each new attempt of the link (a payer who retries after a declined card). Use it, with `data.payment_link.id`, to recognize a repeated call and to match the attempt later with the events and the payment you read from the API;
+- the link: its ID, your reference (`client_reference_id`), your metadata, its description, amount, currency and expiry; the mode is the `livemode` of the body;
 - the charge: the exact amount and currency about to be charged;
 - the card: only its brand and country (never the number);
 - the payer: the details the payer entered, such as the e-mail and name.
 
 ### What your server must answer
 
-HTTP status **200**, a JSON object, at most **4 KB**, within **5 seconds** in total.
+HTTP status **200**, a JSON object, at most **4 KB**, within the **time limit** in total (**30 seconds** by default; see [Timeouts and failures](#timeouts-and-failures)).
 
 | Field | Required | Rules |
 |---|---|---|
@@ -132,7 +133,7 @@ HTTP status **200**, a JSON object, at most **4 KB**, within **5 seconds** in to
 
 ### Timeouts and failures
 
-- We wait 2 seconds to connect and **5 seconds in total**.
+- We wait 2 seconds to connect and **30 seconds in total** by default. The operator of the platform sets this limit with one setting (`AXISPAY_VALIDATION_TIMEOUT_SECONDS`, from 5 to 60 seconds; ADR-0061), and the "How it works" help of the validation settings page shows the value in force. Answer well before it: the payer is waiting.
 - If the connection could not be opened at all, we retry once, immediately. We never retry after your server received the request, because it may already have processed it.
 - These are failures, and your policy applies: no answer in time, a connection or TLS error, any status other than 200 (redirects are not followed), an answer that is not valid, and a destination blocked by our security rules.
 - After **10 failures in a row**, the managers get an e-mail (at most one per hour) and the settings page shows a red alert. Validation is **never switched off by itself**. The first valid answer clears the alert.
@@ -474,7 +475,7 @@ For platform operators running AxisPay locally or on a test server: plain `http`
 | Your server rejects every signature | The body was parsed or re-encoded before verifying, the wrong secret is used (each endpoint and the validation have their own), or the server clock is off | Verify on the raw body, copy the right secret, sync the clock |
 | Test validation: "The answer has no decision field" or "must be approve or reject" | Wrong field name or value | Answer `{"decision": "approve"}` or `"reject"`, exactly |
 | Test validation: "The answer must have HTTP status 200" | Your server answered 201, 204 or a redirect | Answer 200 with a JSON body |
-| Test validation: "No answer within 5 seconds" | Your checks are too slow | Keep the validation fast; do slow work after the payment |
+| Test validation: "No answer within 30 seconds" (the limit in force) | Your checks are too slow | Keep the validation fast; do slow work after the payment |
 | Red alert "Your pre-payment validation is failing" | 10 failed calls in a row | Fix your server and run **Test validation**; the alert clears with the next valid answer |
 | Payers of links with validation cannot pay after you removed the URL | Links created with validation are not charged without a URL | Configure the URL again, or create new links without validation |
 | "Failing since…" on an endpoint | Every delivery fails | Open the delivery log, fix the cause, send a test event, then resend what you missed |

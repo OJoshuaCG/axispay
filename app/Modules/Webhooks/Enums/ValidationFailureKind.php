@@ -22,6 +22,6 @@ enum ValidationFailureKind: string
 
     public function label(): string
     {
-        return __('webhooks.validation.failure_kind.'.$this->value);
+        return __('webhooks.validation.failure_kind.'.$this->value, ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')]);
     }
 }

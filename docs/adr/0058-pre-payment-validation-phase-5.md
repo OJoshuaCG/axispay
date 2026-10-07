@@ -1,6 +1,6 @@
 # ADR-0058: Pre-payment validation in Phase 5: how answers are read, failures, the alert and removing the URL
 
-- **Status:** Accepted (by the project owner, 2026-10-02)
+- **Status:** Accepted (by the project owner, 2026-10-02); the 5-second total is amended by [ADR-0061](0061-validation-timeout-single-setting.md) (one setting, 30 s by default)
 - **Date:** 2026-10-07
 - **Source:** master plan sections 7.4, 7.6, 15.8 and 27 (Phase 5); [ADR-024](0024-pre-payment-validation.md), [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) (authorize, validate, capture), [ADR-0057](0057-outgoing-webhooks-delivery-phase-5.md) (signature and protection of merchant URLs shared with the webhooks).
 

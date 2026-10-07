@@ -297,7 +297,7 @@ return [
             ],
             'not_configured' => 'Not configured',
             'not_configured_help' => 'Payments in this mode are charged without asking your server.',
-            'how_it_works' => 'When configured, each payment waits up to 5 seconds for your server to answer "approve" or "reject" (for example, to check stock or the order). Links can use it by default or per link.',
+            'how_it_works' => 'When configured, each payment waits up to :seconds seconds for your server to answer "approve" or "reject" (for example, to check stock or the order). Links can use it by default or per link.',
             'settings' => 'Settings',
             'default_on' => 'Yes: new links ask your server unless the API says otherwise',
             'default_off' => 'No: only links created with validation ask your server',
@@ -306,7 +306,7 @@ return [
         'fields' => [
             'url' => 'Validation URL',
             'failure_policy' => 'If your server fails',
-            'failure_policy_help' => 'A failure is no answer in 5 seconds, an error, or an answer that is not valid.',
+            'failure_policy_help' => 'A failure is no answer in :seconds seconds, an error, or an answer that is not valid.',
             'enabled_by_default' => 'Use it for new links by default',
             'enabled_by_default_help' => 'Applies when the API does not say whether a link uses validation. Links created in the panel follow this setting.',
             'last_success_at' => 'Last valid answer',
@@ -345,7 +345,7 @@ return [
             'failed' => 'Failed',
         ],
         'failure_kind' => [
-            'timeout' => 'No answer within 5 seconds',
+            'timeout' => 'No answer within :seconds seconds',
             'connection_error' => 'The connection failed',
             'tls_error' => 'Secure connection (TLS) failed',
             'http_error' => 'HTTP status other than 200',
@@ -386,11 +386,11 @@ return [
         'policy' => [
             'fail_closed' => [
                 'label' => 'Do not charge (recommended)',
-                'explanation' => 'If your server does not answer in 5 seconds, answers with an error or sends an invalid answer, the payment is not charged: the card authorization is released and the payer is told to contact you. No money is taken without your approval, but an outage of your server stops your sales.',
+                'explanation' => 'If your server does not answer in :seconds seconds, answers with an error or sends an invalid answer, the payment is not charged: the card authorization is released and the payer is told to contact you. No money is taken without your approval, but an outage of your server stops your sales.',
             ],
             'fail_open' => [
                 'label' => 'Charge anyway',
-                'explanation' => 'If your server does not answer in 5 seconds, answers with an error or sends an invalid answer, the payment is charged anyway and marked in the payment and its webhook as "validation failed, charged". Your sales continue during an outage, but you must review those payments yourself and refund them if needed.',
+                'explanation' => 'If your server does not answer in :seconds seconds, answers with an error or sends an invalid answer, the payment is charged anyway and marked in the payment and its webhook as "validation failed, charged". Your sales continue during an outage, but you must review those payments yourself and refund them if needed.',
             ],
         ],
         'problems' => [

@@ -32,7 +32,11 @@ final class CloseAttemptOfClosedLinkJob implements ShouldQueue, TenantAware
     use InteractsWithQueue;
     use Queueable;
 
-    /** Below the queue's retry_after (150 s): two bounded Stripe calls (42 s each) plus the merchant validation (ADR-0051). */
+    /**
+     * Below the queue's retry_after (150 s or more): two bounded Stripe calls
+     * (42 s each) (ADR-0051). It only voids a payment and never calls the
+     * merchant, so it does not follow the validation timeout (ADR-0061).
+     */
     public int $timeout = 115;
 
     public int $tries = 5;

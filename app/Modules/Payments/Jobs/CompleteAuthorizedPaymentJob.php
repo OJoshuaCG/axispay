@@ -8,6 +8,7 @@ use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Payments\Actions\CaptureAuthorizedPayment;
 use App\Modules\Payments\Data\CallBudget;
+use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use Illuminate\Bus\Queueable;
@@ -28,21 +29,28 @@ final class CompleteAuthorizedPaymentJob implements ShouldBeUnique, ShouldQueue,
     use InteractsWithQueue;
     use Queueable;
 
-    /** Below the queue's retry_after (150 s): two bounded Stripe calls (42 s each) plus the merchant validation (ADR-0051). */
-    public int $timeout = 115;
+    /**
+     * Below the queue's retry_after: two bounded Stripe calls (42 s each)
+     * plus the merchant validation (ADR-0051). Derived from the validation
+     * timeout when the job is created (ADR-0061): 115 s at 5 s.
+     */
+    public int $timeout;
 
     public int $tries = 3;
 
     /**
      * One queued completion per attempt: covers the dispatch delay (60 s),
-     * every try's time limit and the backoffs (60 + 3 × 115 + 30 + 120 =
-     * 555 s), with a margin. Further dispatches while one is pending are
-     * dropped; the pending one completes the attempt.
+     * every try's time limit and the backoffs (60 + 3 × timeout + 30 + 120,
+     * 555 s at 5 s), with a margin of 45 s. Further dispatches while one is
+     * pending are dropped; the pending one completes the attempt.
      */
-    public int $uniqueFor = 600;
+    public int $uniqueFor;
 
     public function __construct(public readonly string $paymentAttemptId)
     {
+        $timeouts = ValidationTimeouts::current();
+        $this->timeout = $timeouts->jobTimeoutSeconds();
+        $this->uniqueFor = $timeouts->completionUniqueForSeconds();
         $this->captureTenantContext();
         $this->onQueue('critical');
     }

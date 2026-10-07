@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\Models\Tenant;
@@ -60,6 +61,28 @@ final class ValidationTestHelpers
         [$tenant, $link, $fake] = CheckoutTestHelpers::scenario(static fn ($factory) => $factory->state(['pre_payment_validation' => true]));
 
         return [$tenant, $link, $fake, self::endpoint($tenant, false, $endpoint)];
+    }
+
+    /**
+     * Runs the application with the merchant validation timeout T and every
+     * limit derived from it (ADR-0061), as the configuration files would
+     * derive them. Tests that count seconds of a request budget, a lease or a
+     * job timeout pin T = 5, the value those numbers were written for.
+     */
+    public static function pinValidationTimeout(int $seconds): void
+    {
+        $timeouts = ValidationTimeouts::fromSeconds($seconds);
+
+        config([
+            'axispay.pre_payment_validation.timeout_seconds' => $timeouts->validationSeconds,
+            'axispay.pre_payment_validation.connect_timeout_seconds' => $timeouts->connectTimeoutSeconds(),
+            'axispay.checkout.pre_payment_validation_seconds' => $timeouts->validationSeconds,
+            'axispay.checkout.request_budget_seconds' => $timeouts->requestBudgetSeconds(),
+            'axispay.checkout.confirmation_lease_seconds' => $timeouts->confirmationLeaseSeconds(),
+            'queue.connections.database.retry_after' => $timeouts->queueRetryAfterSeconds(),
+            'queue.connections.redis.retry_after' => $timeouts->queueRetryAfterSeconds(),
+            'queue.connections.beanstalkd.retry_after' => $timeouts->queueRetryAfterSeconds(),
+        ]);
     }
 
     /** An authorized attempt of the link, written directly (for the validator alone). */

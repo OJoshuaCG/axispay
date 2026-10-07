@@ -18,6 +18,7 @@ use App\Modules\Shared\Database\Transactions;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Models\DomainEvent;
 use Tests\Support\CheckoutTestHelpers as Checkout;
+use Tests\Support\ValidationTestHelpers as Validation;
 
 use function Pest\Laravel\travel;
 
@@ -266,8 +267,10 @@ it('shows "Payment complete" on the completion page only to the session that pai
 });
 
 // Request time budget (ADR-0051) ---------------------------------------------
+// These two count seconds of the 50 s request budget of a 5 s merchant validation timeout (ADR-0061).
 
 it('stops before confirming when Stripe was slow and no time is left: nothing is charged', function (): void {
+    Validation::pinValidationTimeout(5);
     [, $link, $fake] = Checkout::scenario();
     $fake->beforeNext('createOrUpdatePayment', static fn () => travel(20)->seconds());
 
@@ -278,6 +281,7 @@ it('stops before confirming when Stripe was slow and no time is left: nothing is
 });
 
 it('answers processing when Stripe was slow and no time is left to capture; the status poll completes it', function (): void {
+    Validation::pinValidationTimeout(5);
     [, $link, $fake] = Checkout::scenario();
     $fake->beforeNext('confirmPayment', static fn () => travel(46)->seconds());
 

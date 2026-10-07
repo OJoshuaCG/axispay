@@ -141,6 +141,7 @@ Secrets are marked **secret**: set them in Dokploy and never commit them.
 | `QUEUE_CONNECTION` | yes | `database` | ADR-0016 |
 | `TRUSTED_PROXIES` | yes | `10.0.0.0/8` | Traefik's network. See [Trusted proxies](#trusted-proxies). Required: the application refuses to start in production without it, and `axispay:doctor` fails on `*` (ADR-0051). |
 | `AXISPAY_TURNSTILE_ENABLED` | no | `true` | The bot check (Turnstile) after a decline. **`false` is a temporary measure until a Cloudflare account exists** ([ADR-0052](../adr/0052-temporary-turnstile-switch.md)): the check is never asked for, the two keys below are not needed, and `axispay:doctor` shows a warning (not an error). Every other card-testing limit still applies. Set it back to `true` (with the keys) as soon as the account exists. |
+| `AXISPAY_VALIDATION_TIMEOUT_SECONDS` | no | `30` | How long a payment waits for the merchant's pre-payment validation, in whole seconds, from `5` to `60` ([ADR-0061](../adr/0061-validation-timeout-single-setting.md)). It is the only timeout to set: the checkout budget and lease, the job timeouts, the queue `retry_after`, the worker `QUEUE_TIMEOUT` default and the web server limits (nginx `fastcgi_read_timeout`, PHP-FPM `request_terminate_timeout`, `max_execution_time`) are derived from it, and the application refuses to start with a value outside the range. **Every Application must have the same value** (web, workers and scheduler): define it here and add `AXISPAY_VALIDATION_TIMEOUT_SECONDS=${{environment.AXISPAY_VALIDATION_TIMEOUT_SECONDS}}` to each. `5` reproduces the limits of earlier versions. Raising it also raises the stop grace period (below) |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | yes (unless `AXISPAY_TURNSTILE_ENABLED=false`) | Cloudflare Turnstile keys of the pay host | Required while the check is on: the application refuses to start in production without both, and `axispay:doctor` fails without them. Without Turnstile a link stops taking payments after its first decline (ADR-0051). |
 | `MAIL_MAILER` | yes | `smtp` | Invitations and owner notifications are sent today |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SCHEME` | yes | `smtp.postmarkapp.com` / `587` / `smtp` | Transactional SMTP (plan 5). `smtp` on 587 upgrades with STARTTLS; implicit TLS on 465 is `smtps`. `MAIL_ENCRYPTION` is **ignored** (Laravel 13 reads `MAIL_SCHEME` only). Example: [Outgoing mail](#outgoing-mail) |
@@ -345,7 +346,7 @@ Worker settings:
 | Variable | Default | Description |
 |---|---|---|
 | `QUEUE_NAMES` | `critical,default,low` | Queues in priority order |
-| `QUEUE_TIMEOUT` | `120` | Seconds per job before it is killed. Keep it below the queue's `retry_after` (150): a job still running when `retry_after` passes is handed to a second worker. The payment and gateway-event jobs stop themselves at 115 s. |
+| `QUEUE_TIMEOUT` | derived: validation timeout + 115 (`145` with the default 30 s) | Seconds per job before it is killed. Leave it unset: the entrypoint derives it from `AXISPAY_VALIDATION_TIMEOUT_SECONDS`. If you set it, it must be at least the job timeout (validation timeout + 110) and below the queue's `retry_after` (validation timeout + 145), or the container refuses to start: a job still running when `retry_after` passes is handed to a second worker. The payment and gateway-event jobs stop themselves at validation timeout + 110 s (140 s by default; 115 s at 5 s). |
 | `QUEUE_TRIES` | `3` | Attempts per job |
 | `QUEUE_SLEEP` | `3` | Seconds to sleep when the queue is empty |
 | `QUEUE_MEMORY` | `192` | MB. Above this the worker exits, and Swarm starts a fresh one. |
@@ -364,7 +365,7 @@ Worker settings:
   For `scheduler`, use `"Order": "stop-first"`.
 
 - **Restart Policy:** `{"Condition": "any", "Delay": 5000000000}`.
-- **Stop grace period:** 150 seconds for the workers, which is more than `QUEUE_TIMEOUT` (120), so a running job can finish on SIGTERM. The Dokploy v0.30 source has a `stopGracePeriodSwarm` setting (nanoseconds: `150000000000`), but the docs do not show where it appears in the UI **(verify)**. Without it Docker's default is 10 seconds. A job cut off by the default grace period is retried after `retry_after`, so jobs must stay idempotent.
+- **Stop grace period:** `QUEUE_TIMEOUT` + 30 seconds for the workers (175 seconds with the default 30 s validation timeout, where `QUEUE_TIMEOUT` is 145), so a running job can finish on SIGTERM. The Dokploy v0.30 source has a `stopGracePeriodSwarm` setting (nanoseconds: `175000000000`), but the docs do not show where it appears in the UI **(verify)**. Without it Docker's default is 10 seconds. A job cut off by the default grace period is retried after `retry_after`, so jobs must stay idempotent.
 - **Resources** (suggested): memory limit `536870912` (512 MiB) for the workers and `268435456` (256 MiB) for the scheduler.
 - **Replicas:** `1` for each. For the scheduler, always exactly `1`.
 

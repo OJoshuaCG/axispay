@@ -2,6 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Modules\Payments\Data\ValidationTimeouts;
+
+// The merchant's validation timeout and every limit that follows it (ADR-0061).
+// AXISPAY_VALIDATION_TIMEOUT_SECONDS is the only number to set; its range is
+// checked at boot (ValidationTimeouts::assertConfigured()).
+$validationTimeouts = ValidationTimeouts::fromSeconds((int) env('AXISPAY_VALIDATION_TIMEOUT_SECONDS', ValidationTimeouts::DEFAULT_SECONDS));
+
 return [
 
     /*
@@ -159,8 +166,9 @@ return [
         ],
 
         // A confirmation holds the attempt this long at most (another tab
-        // waits; a crashed request frees it after this time).
-        'confirmation_lease_seconds' => 90,
+        // waits; a crashed request frees it after this time). Derived from
+        // the validation timeout (ADR-0061): 90 s at 5 s.
+        'confirmation_lease_seconds' => $validationTimeouts->confirmationLeaseSeconds(),
         // A payment left waiting for the bank's verification (3D Secure) this
         // long is canceled by the reconciliation: the payer abandoned it, and
         // the link becomes payable again (ADR-0051).
@@ -173,11 +181,13 @@ return [
         // A payer's Pay or 3D Secure continuation request answers within
         // this many seconds, below the web server's 60 s: a gateway call only
         // starts when its worst case still fits; otherwise the page says the
-        // payment is processing (ADR-0051).
-        'request_budget_seconds' => 50,
+        // payment is processing (ADR-0051). Derived from the validation
+        // timeout (ADR-0061): validation + one bounded Stripe call + 3 s,
+        // which is 50 s at 5 s.
+        'request_budget_seconds' => $validationTimeouts->requestBudgetSeconds(),
         // Worst case of the merchant's pre-payment validation: equal to
         // `pre_payment_validation.timeout_seconds` (plan 15.8.5).
-        'pre_payment_validation_seconds' => 5,
+        'pre_payment_validation_seconds' => $validationTimeouts->validationSeconds,
         // The status polled by the page is re-read from the gateway when the
         // attempt has not changed for this long (webhooks stay the source of
         // truth; this only speeds the page up).
@@ -289,11 +299,14 @@ return [
     */
 
     'pre_payment_validation' => [
-        // Plan 15.8.5: 2 s to connect and 5 s in total, the one immediate
-        // retry after a connection failure included. Keep
-        // `checkout.pre_payment_validation_seconds` equal to the total.
-        'connect_timeout_seconds' => 2,
-        'timeout_seconds' => 5,
+        // Plan 15.8.5 as amended by ADR-0061: 2 s to connect and T seconds in
+        // total (AXISPAY_VALIDATION_TIMEOUT_SECONDS, 30 by default, 5 to 60),
+        // the one immediate retry after a connection failure included. This
+        // is the single source: the checkout budget and lease, the job and
+        // queue timeouts and the web server limits are all derived from it
+        // (ValidationTimeouts) and checked at boot.
+        'connect_timeout_seconds' => $validationTimeouts->connectTimeoutSeconds(),
+        'timeout_seconds' => $validationTimeouts->validationSeconds,
         // Plan 15.8.4: an answer larger than this is invalid.
         'max_response_bytes' => 4096,
         // Bytes of the answer kept (sanitized) in `validation_calls`.

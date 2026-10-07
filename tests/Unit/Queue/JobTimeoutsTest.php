@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Modules\Payments\Data\CallBudget;
+use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\Payments\Jobs\CloseAttemptOfClosedLinkJob;
 use App\Modules\Payments\Jobs\CompleteAuthorizedPaymentJob;
 use App\Modules\Payments\Jobs\ReconcilePaymentAttemptsJob;
 use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
+use App\Modules\Shared\Ids\Ulid;
+use App\Modules\Tenancy\TenantContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
@@ -14,7 +17,40 @@ use Illuminate\Contracts\Queue\ShouldQueue;
  * is handed to a second worker, so every queued job must stop before it:
  * its own `$timeout` and the worker's default `--timeout` stay below
  * `retry_after`, and a unique job's lock outlives its run.
+ *
+ * The jobs that run the merchant validation take their `$timeout` and
+ * `$uniqueFor` from the validation timeout setting (ADR-0061), so they are
+ * read from a real instance rather than from a class constant.
  */
+
+/**
+ * The `timeout` and `uniqueFor` a queued job carries when it is dispatched.
+ *
+ * @param  class-string  $class
+ * @return array{timeout: mixed, uniqueFor: mixed}
+ */
+function dispatchedJobTimes(string $class): array
+{
+    $job = match ($class) {
+        CompleteAuthorizedPaymentJob::class => new CompleteAuthorizedPaymentJob(Ulid::generate()),
+        CloseAttemptOfClosedLinkJob::class => new CloseAttemptOfClosedLinkJob(Ulid::generate()),
+        ProcessProviderEventJob::class => new ProcessProviderEventJob(Ulid::generate(), Ulid::generate(), false),
+        ReconcilePaymentAttemptsJob::class => new ReconcilePaymentAttemptsJob,
+        default => null,
+    };
+
+    if ($job !== null) {
+        return ['timeout' => $job->timeout, 'uniqueFor' => $job->uniqueFor ?? null];
+    }
+
+    $defaults = (new ReflectionClass($class))->getDefaultProperties();
+
+    return ['timeout' => $defaults['timeout'] ?? null, 'uniqueFor' => $defaults['uniqueFor'] ?? null];
+}
+
+beforeEach(function (): void {
+    app(TenantContext::class)->set(Ulid::generate(), false);
+});
 
 /**
  * @return list<class-string>
@@ -42,8 +78,8 @@ it('gives every queued job an explicit timeout below retry_after', function (str
     $retryAfter = config()->integer('queue.connections.'.$connection.'.retry_after');
 
     foreach (queuedJobClasses() as $class) {
-        $defaults = (new ReflectionClass($class))->getDefaultProperties();
-        $timeout = $defaults['timeout'] ?? null;
+        $defaults = dispatchedJobTimes($class);
+        $timeout = $defaults['timeout'];
         $timeout = is_int($timeout) ? $timeout : null;
 
         expect($timeout)->toBeInt($class.' declares no $timeout')
@@ -55,20 +91,19 @@ it('gives every queued job an explicit timeout below retry_after', function (str
     }
 })->with(['database', 'redis', 'beanstalkd']);
 
-it('starts the workers with a timeout below retry_after', function (): void {
+it('starts the workers with the derived timeout, below retry_after', function (): void {
     $entrypoint = (string) file_get_contents(dirname(__DIR__, 3).'/docker/app/entrypoint.sh');
-    preg_match_all('/QUEUE_TIMEOUT:-(\d+)/', $entrypoint, $matches);
+    $timeouts = ValidationTimeouts::current();
 
-    expect($matches[1])->not->toBeEmpty();
-
-    foreach ($matches[1] as $default) {
-        expect((int) $default)->toBeLessThan(config()->integer('queue.connections.database.retry_after'));
-    }
+    // No number is written in the entrypoint: the default comes from ValidationTimeouts (ADR-0061).
+    expect($entrypoint)->not->toMatch('/QUEUE_TIMEOUT:-\d/')
+        ->and($entrypoint)->toContain('AXISPAY_QUEUE_TIMEOUT_DEFAULT')
+        ->and($timeouts->workerTimeoutSeconds())->toBeLessThan(config()->integer('queue.connections.database.retry_after'));
 });
 
 it('keeps the gateway time of every job under its budget below its own timeout, with room for one call and the merchant validation', function (string $job): void {
     expect(class_exists($job))->toBeTrue();
-    $timeout = class_exists($job) ? ((new ReflectionClass($job))->getDefaultProperties()['timeout'] ?? null) : null;
+    $timeout = class_exists($job) ? dispatchedJobTimes($job)['timeout'] : null;
     expect($timeout)->toBeInt();
     $timeout = is_int($timeout) ? $timeout : 0;
     $budget = CallBudget::jobSeconds($timeout);

@@ -44,7 +44,7 @@ Option 1. The `Dockerfile` at the repository root builds a single image. `docker
   - `HEALTHCHECK` runs `axispay-healthcheck`, which depends on the role. `web` requests `/up` on 127.0.0.1. `/up` is registered without `Route::domain()`, so it answers on any Host. `worker` and `scheduler` check that their Artisan process is alive.
 - **Shutdown.**
   - On SIGTERM, `web` sends SIGQUIT to Nginx and FPM, which drain gracefully. FPM waits for running requests up to `process_control_timeout = 25s`.
-  - `queue:work`, which needs `pcntl`, finishes the current job and then exits. The orchestrator's stop grace period must exceed `QUEUE_TIMEOUT` (default 60 s). ADR-0036 recommends 90 s.
+  - `queue:work`, which needs `pcntl`, finishes the current job and then exits. The orchestrator's stop grace period must exceed `QUEUE_TIMEOUT` (default derived from the validation timeout, 145 s: ADR-0061). ADR-0036 recommends `QUEUE_TIMEOUT` + 30 s.
 - **OPcache.** It is tuned for immutable code (`validate_timestamps=0`, 192 MB, 30000 files), and JIT is off. A new release is a new container.
 
 ## Rationale

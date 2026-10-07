@@ -1,6 +1,6 @@
 # ADR-0050: Linear payment flow: authorize, validate with the merchant, then capture
 
-- **Status:** Accepted (by the project owner, 2026-09-27). Amends [ADR-024](0024-pre-payment-validation.md) (moment of the pre-payment validation).
+- **Status:** Accepted (by the project owner, 2026-09-27). Amends [ADR-024](0024-pre-payment-validation.md) (moment of the pre-payment validation). The 5-second wait of step 4 is amended by [ADR-0061](0061-validation-timeout-single-setting.md) (one setting, 30 s by default).
 - **Date:** 2026-09-27
 - **Source:** plan ADR-024, sections 11.4, 15 and 15.8; Phase 4 and Phase 5 in section 27.
 

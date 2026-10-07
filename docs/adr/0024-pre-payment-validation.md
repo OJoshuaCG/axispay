@@ -1,6 +1,6 @@
 # ADR-0024: Pre-payment validation: synchronous callback, separate from webhooks
 
-- **Status:** Accepted; moment amended by [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) (2026-09-27): authorize first, validate, then capture.
+- **Status:** Accepted; moment amended by [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) (2026-09-27): authorize first, validate, then capture. The 5-second total is amended by [ADR-0061](0061-validation-timeout-single-setting.md) (one setting, 30 s by default).
 - **Date:** 2026-09 (master plan v1.1)
 - **Source:** `docs/plans/master.md`, section 3, ADR-024
 

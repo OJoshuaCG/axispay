@@ -95,8 +95,8 @@ it('explains the pre-payment validation, not configured and configured', functio
     $component->assertMountedActionModalSee(__('webhooks.help.validation.heading'));
     $component->assertMountedActionModalSee(PrePaymentValidationClient::KIND_HEADER);
     $component->assertMountedActionModalSee(ValidationPayload::TYPE);
-    $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.connect', ['seconds' => 2]));
-    $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.total', ['seconds' => 5]));
+    $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.connect', ['seconds' => config()->integer('axispay.pre_payment_validation.connect_timeout_seconds')]));
+    $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.total', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')]));
     $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.size', ['kb' => 4]));
     $component->assertMountedActionModalSee(__('webhooks.help.validation.response.payer_message', ['max' => 200]));
     $component->assertMountedActionModalSee(__('webhooks.help.validation.alert', ['count' => 10, 'minutes' => 60]));

@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Queue;
 use Tests\Support\CheckoutTestHelpers as Checkout;
 use Tests\Support\CountingValidator;
 use Tests\Support\FakePaymentGateway;
+use Tests\Support\ValidationTestHelpers as Validation;
 
 use function Pest\Laravel\travel;
 
@@ -36,7 +37,14 @@ use function Pest\Laravel\travel;
  * stored by the gateway under its idempotency key, so the call is repeated
  * under a derived key when the payment has not moved; confirmation keys
  * cover every parameter that can vary.
+ *
+ * The budget tests count seconds of the request budget (50 s), the lease
+ * (90 s) and the job timeout (115 s) of a 5 s merchant validation timeout:
+ * they pin that value (ADR-0061) instead of the shipped default of 30 s.
  */
+beforeEach(function (): void {
+    Validation::pinValidationTimeout(5);
+});
 
 /**
  * @return array{0: PaymentLink, 1: PaymentAttempt, 2: FakePaymentGateway}

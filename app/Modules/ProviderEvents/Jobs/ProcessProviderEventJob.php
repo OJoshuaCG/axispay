@@ -7,6 +7,7 @@ namespace App\Modules\ProviderEvents\Jobs;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Payments\Data\CallBudget;
+use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\ProviderEvents\Actions\ProcessProviderEvent;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\Middleware\RestoreTenantContext;
@@ -36,19 +37,26 @@ final class ProcessProviderEventJob implements ShouldBeUnique, ShouldQueue, Tena
     use InteractsWithQueue;
     use Queueable;
 
-    /** Below the queue's retry_after (150 s): two bounded Stripe calls (42 s each) plus the merchant validation (ADR-0051). */
-    public int $timeout = 115;
+    /**
+     * Below the queue's retry_after: two bounded Stripe calls (42 s each)
+     * plus the merchant validation (ADR-0051). Derived from the validation
+     * timeout when the job is created (ADR-0061): 115 s at 5 s.
+     */
+    public int $timeout;
 
     public int $tries = 5;
 
-    /** Every try's time limit plus every backoff, with a margin (see backoff()). */
-    public int $uniqueFor = 1500;
+    /** Every try's time limit plus every backoff, with a margin (see backoff()): 1500 s at a 5 s validation timeout. */
+    public int $uniqueFor;
 
     public function __construct(
         public readonly string $providerEventId,
         public readonly string $capturedTenantId,
         public readonly bool $capturedLivemode,
     ) {
+        $timeouts = ValidationTimeouts::current();
+        $this->timeout = $timeouts->jobTimeoutSeconds();
+        $this->uniqueFor = $timeouts->providerEventUniqueForSeconds();
         $this->onQueue('critical');
     }
 

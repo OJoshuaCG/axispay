@@ -217,7 +217,7 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
             ->schema([
                 TextEntry::make('how_it_works')
                     ->hiddenLabel()
-                    ->state(__('webhooks.validation.page.how_it_works')),
+                    ->state(__('webhooks.validation.page.how_it_works', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')])),
                 Actions::make([IntegrationHelp::hintAction('validationHelpFromSection', IntegrationHelp::VALIDATION_ACTION)]),
             ]);
     }
@@ -285,7 +285,7 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
                     ->extraInputAttributes(['class' => 'font-numeric']),
                 Radio::make('failure_policy')
                     ->label(__('webhooks.validation.fields.failure_policy'))
-                    ->helperText(__('webhooks.validation.fields.failure_policy_help'))
+                    ->helperText(__('webhooks.validation.fields.failure_policy_help', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')]))
                     ->options(self::policyOptions())
                     ->descriptions(self::policyDescriptions())
                     ->in(array_map(static fn (ValidationFailurePolicy $p): string => $p->value, ValidationFailurePolicy::cases()))

@@ -111,18 +111,54 @@ prepare_schema() {
     unset DB_MIGRATOR_USERNAME DB_MIGRATOR_PASSWORD DB_MIGRATOR_URL
 }
 
+# The limits that follow AXISPAY_VALIDATION_TIMEOUT_SECONDS (ADR-0061): the
+# web server's and PHP-FPM's request limits and the queue worker's default
+# timeout. The application computes them (axispay:validation-timeouts), so the
+# formulas exist once; the command also refuses an inconsistent setting, which
+# stops the container before it serves anything.
+derive_validation_timeouts() {
+    local derived line
+    # A separate assignment: set -e does not see a failure inside eval "$(...)".
+    derived="$(php artisan axispay:validation-timeouts --no-interaction)"
+    while IFS= read -r line; do
+        export "$line"
+    done <<< "$derived"
+
+    # An explicit QUEUE_TIMEOUT must still let every job finish (at least the
+    # job timeout) and stop before the queue hands the job to another worker.
+    if [[ -n "${QUEUE_TIMEOUT:-}" ]] \
+        && (( QUEUE_TIMEOUT < AXISPAY_JOB_TIMEOUT_SECONDS || QUEUE_TIMEOUT >= AXISPAY_QUEUE_RETRY_AFTER_SECONDS )); then
+        log ERROR "QUEUE_TIMEOUT=${QUEUE_TIMEOUT} must be at least ${AXISPAY_JOB_TIMEOUT_SECONDS} and below ${AXISPAY_QUEUE_RETRY_AFTER_SECONDS} (AXISPAY_VALIDATION_TIMEOUT_SECONDS=${AXISPAY_VALIDATION_TIMEOUT_SECONDS}); unset it to use ${AXISPAY_QUEUE_TIMEOUT_DEFAULT}"
+        exit 64
+    fi
+}
+
+# nginx has no environment variables in its configuration, and /etc/nginx is
+# not writable by the container user: the one derived limit goes in a file
+# under /tmp that nginx.conf includes.
+write_nginx_timeouts() {
+    cat > /tmp/axispay-timeouts.conf <<EOF
+fastcgi_read_timeout ${AXISPAY_NGINX_FASTCGI_READ_TIMEOUT}s;
+EOF
+}
+
 # queue:work with the flags shared by the `worker` role and the all-in-one
 # programs. SIGTERM (redeploy, scale down): the current job finishes, then the
 # process exits. --memory exits with a non-zero status so the orchestrator (or
 # supervisord) restarts a fresh process.
 run_queue_worker() {
     local queues="$1"
+    # Inside the all-in-one container the limits were derived once, before
+    # supervisord started.
+    if [[ -z "${AXISPAY_QUEUE_TIMEOUT_DEFAULT:-}" ]]; then
+        derive_validation_timeouts
+    fi
     log INFO "Worker started on queues ${queues}"
     exec php artisan queue:work "${QUEUE_CONNECTION:-database}" \
         --queue="$queues" \
         --sleep="${QUEUE_SLEEP:-3}" \
         --tries="${QUEUE_TRIES:-3}" \
-        --timeout="${QUEUE_TIMEOUT:-120}" \
+        --timeout="${QUEUE_TIMEOUT:-${AXISPAY_QUEUE_TIMEOUT_DEFAULT}}" \
         --memory="${QUEUE_MEMORY:-192}" \
         --no-interaction
 }
@@ -139,6 +175,8 @@ case "$role" in
         export PHP_FPM_MAX_CHILDREN="${PHP_FPM_MAX_CHILDREN:-10}"
         prepare_schema
         warm_caches
+        derive_validation_timeouts
+        write_nginx_timeouts
 
         php-fpm --nodaemonize &
         fpm_pid=$!
@@ -183,10 +221,12 @@ case "$role" in
         export PHP_FPM_MAX_CHILDREN="${PHP_FPM_MAX_CHILDREN:-10}"
         # supervisord expands these in its config: a worker gets its job's
         # timeout plus a margin before it is killed on stop.
-        export QUEUE_TIMEOUT="${QUEUE_TIMEOUT:-120}"
-        export QUEUE_STOP_WAIT_SECONDS=$((QUEUE_TIMEOUT + 15))
         prepare_schema
         warm_caches
+        derive_validation_timeouts
+        write_nginx_timeouts
+        export QUEUE_TIMEOUT="${QUEUE_TIMEOUT:-${AXISPAY_QUEUE_TIMEOUT_DEFAULT}}"
+        export QUEUE_STOP_WAIT_SECONDS=$((QUEUE_TIMEOUT + 15))
         log INFO "All-in-one role started (nginx :8080, php-fpm max_children=${PHP_FPM_MAX_CHILDREN}, workers critical and default,low, scheduler)"
         # supervisord receives SIGTERM from tini and stops the workers and the
         # scheduler first, then nginx, then php-fpm (priorities in the config).

@@ -26,6 +26,6 @@ enum ValidationFailurePolicy: string
     /** The consequences, in plain words, for the panel (plan 15.8.1). */
     public function explanation(): string
     {
-        return __('webhooks.validation.policy.'.$this->value.'.explanation');
+        return __('webhooks.validation.policy.'.$this->value.'.explanation', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')]);
     }
 }

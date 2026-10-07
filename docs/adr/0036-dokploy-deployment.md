@@ -47,7 +47,7 @@ Option 1. There are four Applications per Dokploy environment (staging and produ
 - **Health.**
   - The image `HEALTHCHECK` depends on the role.
   - `web` also sets an explicit Swarm health check with a long `StartPeriod`, so migrations can finish before the check counts.
-- **Stop grace period.** Set to 90 s for the workers, which is more than `QUEUE_TIMEOUT` (60 s).
+- **Stop grace period.** Set to `QUEUE_TIMEOUT` + 30 s for the workers (175 s with the default `QUEUE_TIMEOUT` of 145 s), so a running job can finish. The ADR first said 90 s against a `QUEUE_TIMEOUT` of 60 s; that was stale since the payment jobs (ADR-0051) and is now derived from the validation timeout (ADR-0061).
 
 ## How plan section 25 is met
 

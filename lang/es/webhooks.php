@@ -298,7 +298,7 @@ return [
             ],
             'not_configured' => 'Sin configurar',
             'not_configured_help' => 'Los pagos de este modo se cobran sin preguntarle a su servidor.',
-            'how_it_works' => 'Una vez configurada, cada pago espera hasta 5 segundos a que su servidor responda "approve" o "reject" (por ejemplo, para revisar el inventario o el pedido). Los links pueden usarla por defecto o link por link.',
+            'how_it_works' => 'Una vez configurada, cada pago espera hasta :seconds segundos a que su servidor responda "approve" o "reject" (por ejemplo, para revisar el inventario o el pedido). Los links pueden usarla por defecto o link por link.',
             'settings' => 'Configuración',
             'default_on' => 'Sí: los links nuevos le preguntan a su servidor salvo que la API indique otra cosa',
             'default_off' => 'No: solo los links creados con validación le preguntan a su servidor',
@@ -307,7 +307,7 @@ return [
         'fields' => [
             'url' => 'URL de validación',
             'failure_policy' => 'Si su servidor falla',
-            'failure_policy_help' => 'Es un fallo no responder en 5 segundos, responder con un error o enviar una respuesta que no es válida.',
+            'failure_policy_help' => 'Es un fallo no responder en :seconds segundos, responder con un error o enviar una respuesta que no es válida.',
             'enabled_by_default' => 'Usarla por defecto en los links nuevos',
             'enabled_by_default_help' => 'Aplica cuando la API no indica si un link usa la validación. Los links creados en el panel siguen esta opción.',
             'last_success_at' => 'Última respuesta válida',
@@ -346,7 +346,7 @@ return [
             'failed' => 'Fallida',
         ],
         'failure_kind' => [
-            'timeout' => 'Sin respuesta en 5 segundos',
+            'timeout' => 'Sin respuesta en :seconds segundos',
             'connection_error' => 'Falló la conexión',
             'tls_error' => 'Falló la conexión segura (TLS)',
             'http_error' => 'Estado HTTP distinto de 200',
@@ -387,11 +387,11 @@ return [
         'policy' => [
             'fail_closed' => [
                 'label' => 'No cobrar (recomendado)',
-                'explanation' => 'Si su servidor no responde en 5 segundos, responde con un error o envía una respuesta inválida, el pago no se cobra: se libera la autorización de la tarjeta y se le pide al pagador que lo contacte. Nunca se cobra sin su aprobación, pero una caída de su servidor detiene sus ventas.',
+                'explanation' => 'Si su servidor no responde en :seconds segundos, responde con un error o envía una respuesta inválida, el pago no se cobra: se libera la autorización de la tarjeta y se le pide al pagador que lo contacte. Nunca se cobra sin su aprobación, pero una caída de su servidor detiene sus ventas.',
             ],
             'fail_open' => [
                 'label' => 'Cobrar de todos modos',
-                'explanation' => 'Si su servidor no responde en 5 segundos, responde con un error o envía una respuesta inválida, el pago se cobra de todos modos y queda marcado en el pago y en su webhook como "validación fallida, cobrado". Sus ventas siguen durante una caída, pero debe revisar esos pagos y reembolsarlos si hace falta.',
+                'explanation' => 'Si su servidor no responde en :seconds segundos, responde con un error o envía una respuesta inválida, el pago se cobra de todos modos y queda marcado en el pago y en su webhook como "validación fallida, cobrado". Sus ventas siguen durante una caída, pero debe revisar esos pagos y reembolsarlos si hace falta.',
             ],
         ],
         'problems' => [
