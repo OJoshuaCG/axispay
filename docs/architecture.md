@@ -114,7 +114,7 @@ How a link gets paid (ADR-0050, ADR-0051):
 | Capture or void | Approved → captured; rejected → the authorization is voided, nothing charged |
 | Truth | Every Stripe state goes through one action; Stripe's events (re-read, never trusted) and the 15-minute reconciliation keep the database right; authorizations left uncaptured are voided |
 
-Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.processing`, `payment.failed`, `payment.succeeded`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks, as frozen snapshots (the link as `PaymentLinkPresenter` shows it, the payment as `PaymentSnapshot` builds it).
+Attempts, declines and payer data are tenant tables; payer data is encrypted. Business events (`payment_link.opened`, `payment.processing`, `payment.failed`, `payment.succeeded`, `payment.canceled`, `payment_link.paid`) are recorded in the same transaction for Phase 5's webhooks, as frozen snapshots (the link as `PaymentLinkPresenter` shows it, the payment as `PaymentSnapshot` builds it, which also feeds `GET /v1/payments`). `ApplyProviderPayment` records `payment.canceled` whenever an authorized payment or a 3D Secure step is reported canceled, with the `VoidReason` of our void or `gateway_canceled` when the gateway released it on its own (ADR-0062).
 
 ### Payment mechanics (technical detail of ADR-0051)
 

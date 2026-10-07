@@ -2,10 +2,11 @@ openapi: 3.1.0
 info:
   title: AxisPay API
   version: v1
-  summary: Public API for creating and tracking payment links, and reading their events.
+  summary: Public API for creating and tracking payment links, and reading their payments and events.
   description: |
     Contract of the public API v1 (master plan section 10; ADR-0048 for the
-    Phase 3 rules). Phase 3: payment links. Phase 5: the event history
+    Phase 3 rules). Phase 3: payment links. Payment reads (`GET /payments`, ADR-0062).
+    Phase 5: the event history
     (ADR-0060), and, under `webhooks`, what AxisPay sends to your server: the
     events (ADR-0057) and the pre-payment validation call (ADR-0058). The
     merchant guide is `docs/guides/webhooks.md`.
@@ -25,7 +26,7 @@ info:
     The prefix selects the mode; a test key never reaches live resources (another mode's
     resource answers `404`). A missing, unknown, revoked, expired or wrong-mode key, or a key of
     an account closed more than 30 days ago, answers `401 invalid_api_key`. Each endpoint needs a scope (`links:create`, `links:read`,
-    `links:cancel`, `events:read`); a key without it gets `403 insufficient_scope`. Keys are created and
+    `links:cancel`, `payments:read`, `events:read`); a key without it gets `403 insufficient_scope`. Keys are created and
     revoked in the tenant panel only. After 30 failed authentications in a minute from the
     same IP, every request from it answers `429 rate_limited` for the rest of the minute.
 
@@ -69,6 +70,8 @@ security:
 tags:
   - name: Payment links
     description: Single-use, reopenable payment links (plan 10.5, ADR-006).
+  - name: Payments
+    description: Read-only payments, one per gateway attempt of a link (plan 10.6, ADR-0062).
   - name: Events
     description: Event history for integrators (plan 10.8, ADR-0060).
   - name: Outgoing webhooks
@@ -254,6 +257,94 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
         '500': { $ref: '#/components/responses/ServerError' }
+  /payments:
+    get:
+      tags: [Payments]
+      operationId: listPayments
+      summary: List payments
+      description: |
+        Scope `payments:read`. The payments of the key's account and mode, newest first. A payment is
+        one attempt at the gateway for a link (a declined card does not create another one), so
+        `payment_link` is also the way to read the payments of one link. `starting_after` pages to
+        older payments, `ending_before` to newer ones (not both). A link of another account or mode
+        lists nothing. Unknown query parameters are ignored.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/PaymentStartingAfter'
+        - $ref: '#/components/parameters/PaymentEndingBefore'
+        - name: payment_link
+          in: query
+          required: false
+          description: Only the payments of this link.
+          schema:
+            type: string
+            pattern: '^plink_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        - name: status
+          in: query
+          required: false
+          description: Only payments in this status.
+          schema: { $ref: '#/components/schemas/PaymentStatus' }
+        - name: created[gte]
+          in: query
+          required: false
+          description: Created at or after. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - name: created[lte]
+          in: query
+          required: false
+          description: Created at or before. Unix seconds or ISO-8601 with a time zone.
+          schema: { type: string }
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: One page of payments.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
+  /payments/{id}:
+    get:
+      tags: [Payments]
+      operationId: retrievePayment
+      summary: Retrieve a payment
+      description: |
+        Scope `payments:read`. The payment as it is now: its `status` (`requires_capture` is an
+        authorization waiting for the capture, `processing`, `succeeded`, `canceled` is a void,
+        `failed`), its link and `client_reference_id`, amount and currency, the applied `fx` block
+        (null while no conversion applies), and the card's brand and country. Use it to confirm an
+        event before acting on it (fetch-back). No gateway identifier, last digits, fingerprint or
+        payer data is returned. Another account's or mode's payment, an unknown ID and a wrong
+        prefix all answer `404`.
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: '#/components/parameters/RequestIdIn'
+      responses:
+        '200':
+          description: The payment.
+          headers:
+            Request-Id: { $ref: '#/components/headers/RequestId' }
+            RateLimit-Limit: { $ref: '#/components/headers/RateLimitLimit' }
+            RateLimit-Remaining: { $ref: '#/components/headers/RateLimitRemaining' }
+            RateLimit-Reset: { $ref: '#/components/headers/RateLimitReset' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetail'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
   /events:
     get:
       tags: [Events]
@@ -373,6 +464,8 @@ webhooks:
                 $ref: '#/components/examples/PaymentSucceededEvent'
               payment.failed:
                 $ref: '#/components/examples/PaymentFailedEvent'
+              payment.canceled:
+                $ref: '#/components/examples/PaymentCanceledEvent'
       responses:
         '2XX':
           description: The event was received (the body of your answer is not used).
@@ -482,6 +575,30 @@ components:
         pattern: '^plink_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
         examples:
           - plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+    PaymentId:
+      name: id
+      in: path
+      required: true
+      description: Payment ID with its prefix.
+      schema:
+        type: string
+        pattern: '^pay_[0-7][0-9A-HJKMNP-TV-Z]{25}$'
+        examples:
+          - pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+    PaymentStartingAfter:
+      name: starting_after
+      in: query
+      required: false
+      description: A payment ID; returns the payments created before it.
+      schema:
+        type: string
+    PaymentEndingBefore:
+      name: ending_before
+      in: query
+      required: false
+      description: A payment ID; returns the payments created after it.
+      schema:
+        type: string
     EventId:
       name: id
       in: path
@@ -945,7 +1062,7 @@ components:
       type: string
       description: |
         Event types (plan 15.2). Sent today: `payment_link.opened`, `payment_link.paid`,
-        `payment.processing`, `payment.succeeded`, `payment.failed`. Defined and subscribable but
+        `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled`. Defined and subscribable but
         not sent until their phase: `payment_link.created`, `payment_link.expired`,
         `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`,
         `dispute.created`, `dispute.closed`. `ping` (the panel's test event) is not subscribable
@@ -959,6 +1076,7 @@ components:
         - payment.processing
         - payment.succeeded
         - payment.failed
+        - payment.canceled
         - refund.created
         - refund.succeeded
         - refund.failed
@@ -995,7 +1113,7 @@ components:
         The payment as an event carries it, frozen when the event happened. One payment is one
         attempt at the gateway; a declined card does not create another. Our identifiers only:
         no gateway IDs and no raw decline code.
-      required: [id, object, livemode, payment_link, status, amount, amount_minor, currency, late_payment, failure_count, failure, pre_validation, created_at]
+      required: [id, object, livemode, payment_link, client_reference_id, status, amount, amount_minor, currency, fx, late_payment, failure_count, failure, pre_validation, captured_at, created_at]
       properties:
         id:
           type: string
@@ -1008,6 +1126,10 @@ components:
           type: string
           description: ID of the payment link.
           examples: [plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S]
+        client_reference_id:
+          type: [string, 'null']
+          description: The `client_reference_id` of the link (your reference); null when the link has none.
+          examples: [ORDER-1029]
         status:
           $ref: '#/components/schemas/PaymentStatus'
         amount:
@@ -1018,6 +1140,12 @@ components:
           format: int64
         currency:
           $ref: '#/components/schemas/Currency'
+        fx:
+          type: [object, 'null']
+          description: |
+            The currency conversion applied to this payment. Null while no conversion applies, which
+            is always the case until the tenant FX phase ships; the key is already part of the
+            contract so integrators can handle it. Its shape will be documented with that phase.
         late_payment:
           type: boolean
           description: The payment succeeded after its link expired or was canceled.
@@ -1036,9 +1164,55 @@ components:
           oneOf:
             - $ref: '#/components/schemas/PreValidation'
             - type: 'null'
+        captured_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the payment was captured (it became `succeeded`); null until then.
         created_at:
           type: string
           format: date-time
+    PaymentDetail:
+      description: |
+        The payment as `GET /payments` shows it: the object the events carry plus the card's brand
+        and country and the authorization and cancellation times. Never the gateway ID, the number,
+        the last digits, a fingerprint or payer data.
+      allOf:
+        - $ref: '#/components/schemas/Payment'
+        - type: object
+          required: [card, authorized_at, canceled_at]
+          properties:
+            card:
+              type: object
+              required: [brand, country]
+              properties:
+                brand:
+                  type: [string, 'null']
+                  examples: [visa]
+                country:
+                  type: [string, 'null']
+                  description: ISO 3166-1 alpha-2 country of the card.
+                  examples: [MX]
+            authorized_at:
+              type: [string, 'null']
+              format: date-time
+              description: When the payment was first authorized; null if it never was.
+            canceled_at:
+              type: [string, 'null']
+              format: date-time
+              description: When the payment was voided or closed as canceled; null otherwise.
+    PaymentList:
+      type: object
+      required: [object, data, has_more]
+      properties:
+        object:
+          const: list
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentDetail'
+        has_more:
+          type: boolean
+          description: More payments exist in the direction paged.
     EventData:
       type: object
       description: |
@@ -1052,6 +1226,7 @@ components:
         | `payment.processing` | `Payment` | none |
         | `payment.succeeded` | `Payment` | `payment_link` (`PaymentLink`), `late_payment` (boolean) |
         | `payment.failed` | `Payment` | `failure_count` (integer), `failure_code` (string) |
+        | `payment.canceled` | `Payment` | `reason` (string: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action` or `gateway_canceled`; new reasons may be added) |
         | `ping` | `{ "object": "ping", "message": "Test event." }` | none |
 
         Ignore keys you do not know.
@@ -1222,14 +1397,17 @@ components:
             object: payment
             livemode: true
             payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            client_reference_id: ORDER-1029
             status: succeeded
             amount: '1500.00'
             amount_minor: 150000
             currency: MXN
+            fx: null
             late_payment: false
             failure_count: 0
             failure: null
             pre_validation: { outcome: approved }
+            captured_at: '2026-09-24T02:11:09Z'
             created_at: '2026-09-24T02:10:40Z'
           payment_link: { id: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S, object: payment_link, status: paid }
           late_payment: false
@@ -1247,17 +1425,47 @@ components:
             object: payment
             livemode: true
             payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            client_reference_id: ORDER-1029
             status: failed
             amount: '1500.00'
             amount_minor: 150000
             currency: MXN
+            fx: null
             late_payment: false
             failure_count: 1
             failure: { code: card_declined }
             pre_validation: null
+            captured_at: null
             created_at: '2026-09-24T02:08:40Z'
           failure_count: 1
           failure_code: card_declined
+    PaymentCanceledEvent:
+      summary: payment.canceled
+      value:
+        id: evt_01J8Z5Q6T4Y0V8KX2M1N5P7R9V
+        type: payment.canceled
+        api_version: v1
+        livemode: true
+        created_at: '2026-09-24T02:11:12Z'
+        data:
+          object:
+            id: pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S
+            object: payment
+            livemode: true
+            payment_link: plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S
+            client_reference_id: ORDER-1029
+            status: canceled
+            amount: '1500.00'
+            amount_minor: 150000
+            currency: MXN
+            fx: null
+            late_payment: false
+            failure_count: 0
+            failure: null
+            pre_validation: { outcome: approved }
+            captured_at: null
+            created_at: '2026-09-24T02:10:40Z'
+          reason: capture_window_elapsed
   responses:
     BadRequest:
       description: Invalid request (`invalid_request_error`).

@@ -7,6 +7,7 @@ use App\Modules\ApiKeys\Http\Middleware\AuthenticateApiKey;
 use App\Modules\ApiKeys\Http\Middleware\RequireApiScope;
 use App\Modules\ApiKeys\Http\Middleware\ThrottleApiKey;
 use App\Modules\PaymentLinks\Http\Controllers\PaymentLinkController;
+use App\Modules\Payments\Http\Controllers\PaymentController;
 use App\Modules\Webhooks\Http\Controllers\EventController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +42,14 @@ Route::middleware([AuthenticateApiKey::class, ThrottleApiKey::class])->group(fun
     Route::post('/payment_links/{id}/cancel', [PaymentLinkController::class, 'cancel'])
         ->middleware([RequireApiScope::class.':links:cancel', IdempotencyRequirement::Optional->middleware()])
         ->name('payment_links.cancel');
+
+    Route::get('/payments', [PaymentController::class, 'index'])
+        ->middleware(RequireApiScope::class.':payments:read')
+        ->name('payments.index');
+
+    Route::get('/payments/{id}', [PaymentController::class, 'show'])
+        ->middleware(RequireApiScope::class.':payments:read')
+        ->name('payments.show');
 
     Route::get('/events', [EventController::class, 'index'])
         ->middleware(RequireApiScope::class.':events:read')

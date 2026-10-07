@@ -130,9 +130,10 @@ A key can do only what its scopes allow; a request outside them answers `403 ins
 | `links:create` | `POST /v1/payment_links` |
 | `links:read` | `GET /v1/payment_links`, `GET /v1/payment_links/{id}` |
 | `links:cancel` | `POST /v1/payment_links/{id}/cancel` |
+| `payments:read` | `GET /v1/payments`, `GET /v1/payments/{id}` |
 | `events:read` | `GET /v1/events`, `GET /v1/events/{id}` |
 
-The panel may also offer `payments:read`, `refunds:create` and `refunds:read`. They are accepted when creating a key so you will not have to reissue it later, but **no endpoint uses them yet** (see [section 10](#10-not-available-yet)).
+The panel may also offer `refunds:create` and `refunds:read`. They are accepted when creating a key so you will not have to reissue it later, but **no endpoint uses them yet** (see [section 10](#10-not-available-yet)).
 
 ### Rate limit
 
@@ -367,7 +368,7 @@ Fields to know:
 | `paid_at`, `canceled_at`, `expired_at`, `cancel_reason` | Set when the link reaches that state, otherwise `null`. |
 | `open_count`, `first_opened_at` | How many times, and when first, the payer opened the page. |
 | `refund_status`, `dispute_status` | `none` for now (refunds and disputes are not implemented yet). |
-| `payment` | Always `null` for now. Read the payment from the events (`payment_link.paid` and `payment.succeeded` carry it). |
+| `payment` | Always `null` for now. Read the payments of a link with `GET /v1/payments?payment_link={id}` ([section 6](#payments-get-v1payments)), or from the events (`payment_link.paid` and `payment.succeeded` carry it). |
 
 #### `curl`
 
@@ -549,6 +550,61 @@ curl -sS -X POST https://api.example.com/v1/payment_links/plink_01J8Z3Q6T4Y0V8KX
 
 Canceling is still allowed while the account is suspended.
 
+### Payments: `GET /v1/payments`
+
+Scope `payments:read`. A **payment** is one attempt at the gateway for a link: a declined card does not create another one, a payer who comes back after a void or a rejection does. Use it to fetch back a payment before you act on an event (for example before you release goods, or to see whether an authorized payment is still waiting, was captured or was voided). Read only: it never changes anything.
+
+`GET /v1/payments/{id}` returns one payment (`pay_...`). `GET /v1/payments` lists the payments of your account and mode, newest first, which is also the way to read **the payments of a link**: `GET /v1/payments?payment_link=plink_...`.
+
+| Query parameter | Description |
+|---|---|
+| `limit` | 1 to 100, default 20. |
+| `starting_after` | A payment ID (`pay_...`): payments created before it (older). |
+| `ending_before` | A payment ID: payments created after it (newer). Not together with `starting_after`. |
+| `payment_link` | Only the payments of this link (`plink_...`). A link of another account or mode lists nothing. |
+| `status` | One of `requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`. |
+| `created[gte]`, `created[lte]` | Created at or after / at or before. Unix seconds or ISO-8601 with a time zone. |
+
+```sh
+curl -sS https://api.example.com/v1/payments/pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S \
+  -H "Authorization: Bearer $AXISPAY_API_KEY"
+
+curl -sS -G https://api.example.com/v1/payments \
+  -H "Authorization: Bearer $AXISPAY_API_KEY" \
+  --data-urlencode "payment_link=plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S"
+```
+
+```json
+{
+  "id": "pay_01J8Z4Q6T4Y0V8KX2M1N5P7R9S",
+  "object": "payment",
+  "livemode": true,
+  "payment_link": "plink_01J8Z3Q6T4Y0V8KX2M1N5P7R9S",
+  "client_reference_id": "ORDER-1029",
+  "status": "succeeded",
+  "amount": "1500.00",
+  "amount_minor": 150000,
+  "currency": "USD",
+  "fx": null,
+  "late_payment": false,
+  "failure_count": 0,
+  "failure": null,
+  "pre_validation": { "outcome": "approved" },
+  "captured_at": "2026-09-24T02:11:09Z",
+  "created_at": "2026-09-24T02:10:40Z",
+  "card": { "brand": "visa", "country": "MX" },
+  "authorized_at": "2026-09-24T02:11:05Z",
+  "canceled_at": null
+}
+```
+
+- `status` tells where the payment is: `requires_capture` (authorized, waiting for the capture or for your pre-payment validation answer), `processing`, `succeeded` (captured), `canceled` (voided: the money will not be taken) or `failed` (closed after at least one declined card).
+- `client_reference_id` is the reference of the link (`null` when it has none). `payment_link` is its `plink_` ID.
+- `fx` is `null` while no currency conversion applies (the only case today, see [section 10](#10-not-available-yet)).
+- `card` has the brand and country only; either can be `null` before a card was read. Never the number, the last digits or a fingerprint. No gateway identifier and no payer data is returned.
+- `captured_at` is set once the payment succeeded, `authorized_at` once it was authorized and `canceled_at` once it was canceled; otherwise `null`.
+- An ID with a wrong prefix, an unknown ID, another account's or another mode's payment answers `404 resource_not_found`.
+
 ### Status lifecycle
 
 | Status | Meaning |
@@ -664,14 +720,17 @@ Webhooks and the events API share one body:
 | `payment.processing` | The payment | none |
 | `payment.succeeded` | The payment | `payment_link` (the link, summarized), `late_payment` |
 | `payment.failed` | The payment | `failure_count`, `failure_code` |
+| `payment.canceled` | The payment | `reason` |
 
-The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
+The **payment** object has `id` (`pay_...`), `object: "payment"`, `livemode`, `payment_link` (the `plink_` ID), `status` (`requires_payment_method`, `requires_confirmation`, `requires_action`, `requires_capture`, `processing`, `succeeded`, `failed`, `canceled`), `amount`, `amount_minor`, `currency`, `late_payment`, `failure_count` (declined cards so far), `failure` (`null` or `{ "code": ... }` with one of `card_declined`, `insufficient_funds`, `expired_card`, `incorrect_card_details`, `authentication_failed`, `processing_error`; more codes may be added), `pre_validation` (`null`, or `{ "outcome": "approved" | "rejected" | "failed", "policy_applied": "fail_open" | "fail_closed" }` where `policy_applied` appears only with `failed`), `client_reference_id` (the reference of the link, `null` when it has none), `captured_at` (when the payment was captured, `null` until it succeeds), `fx` (`null` until a currency conversion applies) and `created_at`. A payment is one attempt at the gateway; a declined card does not create another payment object per retry.
+
+**`payment.canceled`** is sent every time an authorized payment (or a 3D Secure step) is released and will not be charged: the merchant's pre-payment validation rejected it or failed under `fail_closed`, the capture window elapsed, the link was closed or canceled meanwhile, the payer abandoned a 3D Secure step, or the gateway released it on its own (for example the authorization expired before the capture). `data.reason` says which: `merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action` or `gateway_canceled` (new reasons may be added). `data.object` is the payment, with `status` `canceled` (or `failed` when a card had been declined before) and the same `pay_...` ID as the pre-payment validation call of that attempt. It is sent once per payment, only for payments that had been authorized or were waiting for the payer's bank (not for a card form the payer simply left), and an endpoint that lists its events explicitly must add it to receive it. If you did something on approval (reserved stock, credited a balance), undo it when this event arrives, after confirming it with `GET /v1/payments/{id}` (`status: canceled`).
 
 **Event types today**
 
 | Sent today | Defined and subscribable but not sent yet |
 |---|---|
-| `payment_link.opened` (first open, then at most once every 30 minutes; link previewers do not count), `payment_link.paid`, `payment.processing`, `payment.succeeded`, `payment.failed` | `payment_link.created`, `payment_link.expired`, `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed` |
+| `payment_link.opened` (first open, then at most once every 30 minutes; link previewers do not count), `payment_link.paid`, `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled` | `payment_link.created`, `payment_link.expired`, `payment_link.canceled`, `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed` |
 
 A `ping` event (`{ "object": "ping", "message": "Test event." }`) is sent when you press "Send test event" in the panel. New event types may be added: ignore the ones you do not know.
 
@@ -824,7 +883,7 @@ These are **not implemented** in this version of the API. Do not build on them:
 - **Refunds.** There is no refund endpoint, the `refunds:*` scopes have no endpoint, and the events `refund.created`, `refund.succeeded` and `refund.failed` are never sent. A link's `refund_status` is `none` for now. Refunds are planned (Phase 7 of the project plan).
 - **Disputes.** The events `dispute.created` and `dispute.closed` are never sent and a link's `dispute_status` is `none` for now. Planned (Phase 7).
 - **Currency conversion (FX).** The `fx` field of the create request is refused with `fx_not_available`; links are always charged in their own currency (`fx.mode` is always `none`). The related codes `amount_below_minimum_after_conversion` and `fx_rate_invalid` are reserved. Planned (Phase 6).
-- **Payments endpoints.** There is no `GET /v1/payments`; the `payment` field of a link is always `null`. Read payments through the events (`payment_link.paid`, `payment.succeeded`, `payment.failed`). Planned (Phase 7).
+- **Payer data, last digits and refunds in the payment object.** `GET /v1/payments` is read only and shows the card's brand and country, not the payer, the last digits, refunds or disputes (they come with Phase 7). The `payment` field of a link is still always `null`: read the link's payments with `GET /v1/payments?payment_link=...`.
 - **Link events `payment_link.created`, `payment_link.expired`, `payment_link.canceled`** are defined but not sent yet.
 - **Editing a link.** There is no update endpoint; cancel and create a new link.
 - Currencies other than `USD` and `MXN`.

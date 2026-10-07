@@ -290,6 +290,12 @@ function isolatedApiRoutes(): array
         return PrefixedId::encode(ResourceType::Event, WebhookTestHelpers::events($tenant)[0]->id);
     };
 
+    // Tenant B's link gets one payment, whose ID the show case asks for.
+    $foreignPaymentId = static fn (PaymentLink $foreign): string => CheckoutTestHelpers::inTenant($foreign, static fn (): string => PaymentAttempt::factory()->createOne([
+        'payment_link_id' => $foreign->id,
+        'gateway_connection_id' => CheckoutTestHelpers::connectionOf($foreign)->id,
+    ])->prefixedId());
+
     $headers = static fn (string $key): array => ApiTestHelpers::headers($key, 'isolation-'.bin2hex(random_bytes(4)));
 
     return [
@@ -301,6 +307,12 @@ function isolatedApiRoutes(): array
             $foreignEventId($foreign);
 
             return withHeaders($headers($key))->getJson(apiUrl('v1/events'));
+        },
+        'api.v1.payments.show' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/payments/'.$foreignPaymentId($foreign))),
+        'api.v1.payments.index' => static function (string $key, PaymentLink $foreign) use ($foreignPaymentId, $headers): TestResponse {
+            $foreignPaymentId($foreign);
+
+            return withHeaders($headers($key))->getJson(apiUrl('v1/payments?payment_link='.$foreign->prefixedId()));
         },
         // Creating never takes another tenant's ID; the new link belongs to the key's tenant.
         'api.v1.payment_links.store' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links'), ApiTestHelpers::body(['client_reference_id' => $foreign->client_reference_id])),
@@ -322,7 +334,7 @@ it('isolates every API route between tenants', function (string $name, Closure $
     assert($response instanceof TestResponse);
 
     match ($name) {
-        'api.v1.payment_links.index', 'api.v1.events.index' => $response->assertOk()->assertJsonCount(0, 'data'),
+        'api.v1.payment_links.index', 'api.v1.events.index', 'api.v1.payments.index' => $response->assertOk()->assertJsonCount(0, 'data'),
         'api.v1.payment_links.store' => $response->assertCreated()->assertJsonMissingPath('error'),
         default => $response->assertNotFound()->assertJsonPath('error.code', 'resource_not_found'),
     };
