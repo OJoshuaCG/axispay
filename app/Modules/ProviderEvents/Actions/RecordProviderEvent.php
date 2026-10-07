@@ -8,6 +8,7 @@ use App\Modules\Gateways\Data\ProviderWebhookEvent;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Models\GatewayConnection;
+use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\ProviderEvents\Enums\ProviderEventStatus;
 use App\Modules\ProviderEvents\Jobs\ProcessProviderEventJob;
 use App\Modules\ProviderEvents\Models\ProviderEvent;
@@ -35,7 +36,10 @@ use Illuminate\Support\Facades\Log;
  * create (no attempt ID in its metadata, frequent on api_key and oauth
  * accounts, which also carry the merchant's other sales) is stored as
  * `ignored` with reason `foreign_object` and the reduced payload, before any
- * call to the gateway.
+ * call to the gateway. A refund or dispute event (ADR-0066) carries no
+ * metadata of ours: its payment is found by the gateway's ID among the
+ * tenant's attempts, and a payment the platform holds no attempt for is a
+ * foreign object too.
  */
 final readonly class RecordProviderEvent
 {
@@ -49,6 +53,7 @@ final readonly class RecordProviderEvent
      */
     public function handle(GatewayProvider $provider, ProviderWebhookEvent $event, ?GatewayConnection $connection): bool
     {
+        $ownAttemptId = $this->ownAttemptOf($provider, $event, $connection);
         $attributes = [
             'provider' => $provider,
             'provider_event_id' => $event->providerEventId,
@@ -56,12 +61,12 @@ final readonly class RecordProviderEvent
             'livemode' => $event->livemode,
             'type' => $event->type,
             'object_id' => $event->objectId,
-            'payment_attempt_id' => $event->attemptReference !== null && Ulid::isValid($event->attemptReference) ? $event->attemptReference : null,
+            'payment_attempt_id' => $event->attemptReference !== null && Ulid::isValid($event->attemptReference) ? $event->attemptReference : $ownAttemptId,
             'payload' => $event->storedPayload(routed: $connection !== null),
             'payload_reduced' => ! $event->keepsFullPayload(routed: $connection !== null),
             'received_at' => now(),
         ];
-        $foreign = $event->isForeignPayment();
+        $foreign = $event->isForeignPayment() || ($event->isAboutPaymentById() && $connection !== null && $ownAttemptId === null);
         $handled = $event->kind !== ProviderEventKind::Unhandled && ! $foreign;
 
         try {
@@ -92,6 +97,25 @@ final readonly class RecordProviderEvent
         }
 
         return true;
+    }
+
+    /**
+     * Our attempt for the payment a refund or dispute event is about, read in
+     * the connection's tenant and mode; null when the platform has none.
+     */
+    private function ownAttemptOf(GatewayProvider $provider, ProviderWebhookEvent $event, ?GatewayConnection $connection): ?string
+    {
+        if ($connection === null || ! $event->isAboutPaymentById() || $event->providerPaymentId === null) {
+            return null;
+        }
+
+        $paymentId = $event->providerPaymentId;
+        $attemptId = $this->context->runAsTenant($connection->tenant_id, $event->livemode, static fn (): mixed => PaymentAttempt::query()
+            ->where('provider', $provider->value)
+            ->where('provider_payment_id', $paymentId)
+            ->value('id'));
+
+        return is_string($attemptId) ? $attemptId : null;
     }
 
     /**

@@ -20,6 +20,11 @@ use App\Modules\Gateways\Enums\ProviderEventKind;
  * payment's metadata in the payload. NULL means the payment was not created
  * by the platform (a "foreign object", plan 14.4): the filter runs on the
  * payload, before any call to the gateway.
+ *
+ * `providerPaymentId`: for refund and dispute events, the gateway's ID of the
+ * payment they are about, read from the payload. Those objects do not carry
+ * our metadata, so the platform finds its own attempt by this ID instead; a
+ * payment it holds no attempt for is a foreign object too.
  */
 final readonly class ProviderWebhookEvent
 {
@@ -33,12 +38,22 @@ final readonly class ProviderWebhookEvent
         public string $rawPayload,
         public string $reducedPayload,
         public ?string $attemptReference = null,
+        public ?string $providerPaymentId = null,
     ) {}
 
     /** A payment event about a payment the platform did not create. */
     public function isForeignPayment(): bool
     {
         return $this->kind === ProviderEventKind::PaymentUpdated && $this->attemptReference === null;
+    }
+
+    /**
+     * A refund or dispute event: about a payment found by its gateway ID, not
+     * by metadata of ours (see `providerPaymentId`).
+     */
+    public function isAboutPaymentById(): bool
+    {
+        return in_array($this->kind, [ProviderEventKind::RefundUpdated, ProviderEventKind::PaymentRefundsChanged, ProviderEventKind::DisputeUpdated], true);
     }
 
     /**

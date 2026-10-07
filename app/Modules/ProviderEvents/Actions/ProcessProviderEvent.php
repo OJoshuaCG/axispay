@@ -14,6 +14,8 @@ use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Actions\SyncProviderDispute;
+use App\Modules\Payments\Actions\SyncProviderRefunds;
 use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -41,7 +43,11 @@ use Throwable;
  *    metadata is re-read from the gateway and applied (SyncPaymentAttempt);
  *    an authorized payment is completed (a payer who closed the tab after 3D
  *    Secure, ADR-0050). No attempt → `ignored`, `foreign_object` (14.4);
- *  - anything else: `ignored` (refunds and disputes arrive in Phase 7).
+ *  - refund and dispute events (Phase 7, ADR-0066): the refund, the refunds
+ *    of the payment or the dispute is re-read from the gateway and applied
+ *    (SyncProviderRefunds, SyncProviderDispute); a payment the platform holds
+ *    no attempt for → `ignored`, `foreign_object`;
+ *  - anything else: `ignored`.
  */
 final readonly class ProcessProviderEvent
 {
@@ -51,6 +57,8 @@ final readonly class ProcessProviderEvent
         private DisconnectGatewayConnection $disconnect,
         private TenantContext $context,
         private SyncPaymentAttempt $syncPayment,
+        private SyncProviderRefunds $syncRefunds,
+        private SyncProviderDispute $syncDispute,
         private AuditLogger $audit,
     ) {}
 
@@ -113,6 +121,9 @@ final readonly class ProcessProviderEvent
             ProviderEventKind::AccountUpdated => [$this->accountUpdated($connection), null],
             ProviderEventKind::AccountDeauthorized => [$this->accountDeauthorized($connection), null],
             ProviderEventKind::PaymentUpdated => $this->paymentUpdated($event, $budget),
+            ProviderEventKind::RefundUpdated => $this->refundUpdated($event, one: true),
+            ProviderEventKind::PaymentRefundsChanged => $this->refundUpdated($event, one: false),
+            ProviderEventKind::DisputeUpdated => $this->disputeUpdated($event),
             ProviderEventKind::Unhandled => [ProviderEventStatus::Ignored, null],
         };
     }
@@ -129,6 +140,34 @@ final readonly class ProcessProviderEvent
         }
 
         $this->syncPayment->handle($attempt->id, SyncReason::Webhook, providerPaymentId: $event->object_id, budget: $budget);
+
+        return [ProviderEventStatus::Processed, null];
+    }
+
+    /**
+     * @return array{0: ProviderEventStatus, 1: string|null}
+     */
+    private function refundUpdated(ProviderEvent $event, bool $one): array
+    {
+        if ($event->payment_attempt_id === null || $event->object_id === null) {
+            return [ProviderEventStatus::Ignored, ProviderEventStatus::FOREIGN_OBJECT];
+        }
+
+        $this->syncRefunds->handle($event->payment_attempt_id, $one ? $event->object_id : null);
+
+        return [ProviderEventStatus::Processed, null];
+    }
+
+    /**
+     * @return array{0: ProviderEventStatus, 1: string|null}
+     */
+    private function disputeUpdated(ProviderEvent $event): array
+    {
+        if ($event->payment_attempt_id === null || $event->object_id === null) {
+            return [ProviderEventStatus::Ignored, ProviderEventStatus::FOREIGN_OBJECT];
+        }
+
+        $this->syncDispute->handle($event->payment_attempt_id, $event->object_id);
 
         return [ProviderEventStatus::Processed, null];
     }

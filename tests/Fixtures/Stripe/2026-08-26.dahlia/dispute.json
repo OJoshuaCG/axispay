@@ -1,0 +1,15 @@
+{
+  "id": "{{id}}",
+  "object": "dispute",
+  "amount": 150000,
+  "balance_transactions": [],
+  "charge": "ch_FakeCharge0001",
+  "created": 1790002000,
+  "currency": "usd",
+  "evidence_details": { "due_by": 1790600000, "has_evidence": false, "past_due": false, "submission_count": 0 },
+  "livemode": false,
+  "metadata": {},
+  "payment_intent": "{{payment_intent}}",
+  "reason": "fraudulent",
+  "status": "{{status}}"
+}

@@ -7,12 +7,16 @@ namespace App\Modules\Payments\Jobs;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\PaymentLinkStateMachine;
+use App\Modules\Payments\Actions\ApplyProviderRefund;
 use App\Modules\Payments\Actions\SyncPaymentAttempt;
+use App\Modules\Payments\Actions\SyncProviderRefunds;
 use App\Modules\Payments\Data\CallBudget;
 use App\Modules\Payments\Data\ValidationTimeouts;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
+use App\Modules\Payments\Enums\RefundState;
 use App\Modules\Payments\Enums\SyncReason;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Models\Refund;
 use App\Modules\Tenancy\Contracts\TenantAware;
 use App\Modules\Tenancy\Jobs\CapturesTenantContext;
 use Carbon\CarbonImmutable;
@@ -38,7 +42,10 @@ use Throwable;
  *    `reconcile_batch_size` rows and `reconcile_time_budget_seconds` per
  *    run, so no group of rows can starve the others;
  *  - a link stuck in `processing` without any attempt under way (an
- *    interrupted flow) is made payable again, or expired.
+ *    interrupted flow) is made payable again, or expired;
+ *  - a refund still `pending` for that long is re-read from the gateway and
+ *    applied (a lost event, ADR-0066); one that never reached the gateway and
+ *    is a day old is failed, which frees the money it reserved.
  *
  * One attempt failing is logged and skipped; the next run tries it again.
  * Unique per tenant and mode while queued or running.
@@ -74,7 +81,7 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
         return $this->capturedTenantId.':'.($this->capturedLivemode ? 'live' : 'test');
     }
 
-    public function handle(SyncPaymentAttempt $sync, PaymentLinkStateMachine $links): void
+    public function handle(SyncPaymentAttempt $sync, PaymentLinkStateMachine $links, SyncProviderRefunds $syncRefunds, ApplyProviderRefund $applyRefund): void
     {
         $staleBefore = CarbonImmutable::now()->subMinutes(config()->integer('axispay.payments.reconcile_after_minutes'));
         // Time box: no new sync starts after the budget (each one is bounded
@@ -118,6 +125,40 @@ final class ReconcilePaymentAttemptsJob implements ShouldBeUnique, ShouldQueue, 
             });
 
         $this->releaseStuckLinks($links, $staleBefore);
+        $this->reconcileRefunds($syncRefunds, $applyRefund, $staleBefore);
+    }
+
+    private function reconcileRefunds(SyncProviderRefunds $sync, ApplyProviderRefund $apply, CarbonImmutable $staleBefore): void
+    {
+        $neverSentBefore = CarbonImmutable::now()->subDay();
+
+        Refund::query()
+            ->where('status', RefundState::Pending->value)
+            ->where('updated_at', '<=', $staleBefore->utc()->format('Y-m-d H:i:s.u'))
+            ->orderBy('id')
+            ->limit(self::BATCH)
+            ->get()
+            ->each(static function (Refund $refund) use ($sync, $apply, $neverSentBefore): void {
+                try {
+                    // Without the gateway's ID the refund may still exist there (the
+                    // answer was lost): every refund of the payment is read, and ours
+                    // is found by the reference it carries.
+                    $sync->handle($refund->payment_attempt_id, $refund->provider_refund_id);
+                } catch (Throwable $e) {
+                    Log::warning('A refund could not be reconciled.', ['refund_id' => $refund->id, 'exception' => $e::class]);
+                    report($e);
+
+                    return;
+                }
+
+                $current = Refund::query()->find($refund->id);
+
+                if ($current !== null && $current->status === RefundState::Pending && $current->provider_refund_id === null && $current->created_at !== null && $current->created_at->lessThanOrEqualTo($neverSentBefore)) {
+                    // The gateway's idempotency keys last 24 hours: past that, a refund it
+                    // does not hold was never made, and nobody is going to retry it.
+                    $apply->markFailed($current->id, ApplyProviderRefund::NOT_SENT);
+                }
+            });
     }
 
     private function releaseStuckLinks(PaymentLinkStateMachine $links, CarbonImmutable $staleBefore): void

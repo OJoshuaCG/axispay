@@ -479,6 +479,15 @@ return [
                 'payment_intent.processing',
                 'payment_intent.requires_action',
                 'payment_intent.succeeded',
+                // Phase 7 (ADR-0066). Run `axispay:stripe-sync-webhook-endpoints`
+                // after deploying so existing endpoints receive them.
+                'charge.refunded',
+                'refund.created',
+                'refund.updated',
+                'refund.failed',
+                'charge.dispute.created',
+                'charge.dispute.updated',
+                'charge.dispute.closed',
             ],
 
             // Events the platform's Connect webhook destination of each mode
@@ -497,6 +506,14 @@ return [
                 'payment_intent.processing',
                 'payment_intent.requires_action',
                 'payment_intent.succeeded',
+                // Phase 7 (ADR-0066): add these to both Connect destinations.
+                'charge.refunded',
+                'refund.created',
+                'refund.updated',
+                'refund.failed',
+                'charge.dispute.created',
+                'charge.dispute.updated',
+                'charge.dispute.closed',
             ],
 
             // Incoming events (plan 14.4): rows that were ignored (events we do
