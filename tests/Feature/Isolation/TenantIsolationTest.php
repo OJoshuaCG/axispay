@@ -15,8 +15,10 @@ use App\Modules\Identity\Filament\Resources\Users\Pages\ListUsers;
 use App\Modules\Identity\Models\User;
 use App\Modules\PaymentLinks\Filament\Resources\PaymentLinks\Pages\ListPaymentLinks;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Filament\Resources\Payments\Pages\ListPayments;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Payments\Models\Refund;
 use App\Modules\Shared\Ids\PrefixedId;
 use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Tenancy\Models\Tenant;
@@ -296,6 +298,16 @@ function isolatedApiRoutes(): array
         'gateway_connection_id' => CheckoutTestHelpers::connectionOf($foreign)->id,
     ])->prefixedId());
 
+    // Tenant B's payment (captured) gets one refund, whose ID the show case asks for.
+    $foreignRefundId = static fn (PaymentLink $foreign): string => CheckoutTestHelpers::inTenant($foreign, static function () use ($foreign): string {
+        $attempt = PaymentAttempt::factory()->inStatus(PaymentAttemptStatus::Succeeded)->createOne([
+            'payment_link_id' => $foreign->id,
+            'gateway_connection_id' => CheckoutTestHelpers::connectionOf($foreign)->id,
+        ]);
+
+        return Refund::factory()->createOne(['payment_attempt_id' => $attempt->id])->prefixedId();
+    });
+
     $headers = static fn (string $key): array => ApiTestHelpers::headers($key, 'isolation-'.bin2hex(random_bytes(4)));
 
     return [
@@ -313,6 +325,22 @@ function isolatedApiRoutes(): array
             $foreignPaymentId($foreign);
 
             return withHeaders($headers($key))->getJson(apiUrl('v1/payments?payment_link='.$foreign->prefixedId()));
+        },
+        'api.v1.payments.void' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payments/'.$foreignPaymentId($foreign).'/void')),
+        'api.v1.refunds.show' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->getJson(apiUrl('v1/refunds/'.$foreignRefundId($foreign))),
+        'api.v1.refunds.index' => static function (string $key, PaymentLink $foreign) use ($foreignRefundId, $headers): TestResponse {
+            $foreignRefundId($foreign);
+
+            return withHeaders($headers($key))->getJson(apiUrl('v1/refunds'));
+        },
+        // A refund of another tenant's payment: the payment does not exist for this key.
+        'api.v1.refunds.store' => static function (string $key, PaymentLink $foreign) use ($headers): TestResponse {
+            $payment = CheckoutTestHelpers::inTenant($foreign, static fn (): string => PaymentAttempt::factory()->inStatus(PaymentAttemptStatus::Succeeded)->createOne([
+                'payment_link_id' => $foreign->id,
+                'gateway_connection_id' => CheckoutTestHelpers::connectionOf($foreign)->id,
+            ])->prefixedId());
+
+            return withHeaders($headers($key))->postJson(apiUrl('v1/refunds'), ['payment' => $payment]);
         },
         // Creating never takes another tenant's ID; the new link belongs to the key's tenant.
         'api.v1.payment_links.store' => static fn (string $key, PaymentLink $foreign): TestResponse => withHeaders($headers($key))->postJson(apiUrl('v1/payment_links'), ApiTestHelpers::body(['client_reference_id' => $foreign->client_reference_id])),
@@ -334,7 +362,7 @@ it('isolates every API route between tenants', function (string $name, Closure $
     assert($response instanceof TestResponse);
 
     match ($name) {
-        'api.v1.payment_links.index', 'api.v1.events.index', 'api.v1.payments.index' => $response->assertOk()->assertJsonCount(0, 'data'),
+        'api.v1.payment_links.index', 'api.v1.events.index', 'api.v1.payments.index', 'api.v1.refunds.index' => $response->assertOk()->assertJsonCount(0, 'data'),
         'api.v1.payment_links.store' => $response->assertCreated()->assertJsonMissingPath('error'),
         default => $response->assertNotFound()->assertJsonPath('error.code', 'resource_not_found'),
     };

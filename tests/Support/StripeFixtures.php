@@ -61,6 +61,29 @@ final class StripeFixtures
     }
 
     /**
+     * A refund as GET /v1/refunds/{id} returns it. An empty `$reference` is a
+     * refund without our metadata (made in Stripe's Dashboard).
+     *
+     * @param  array<mixed>  $changes
+     * @return array<mixed>
+     */
+    public static function refund(string $id, string $status, string $paymentIntent = 'pi_Ref0001', string $reference = '', array $changes = []): array
+    {
+        return array_replace_recursive(self::load('refund', ['id' => $id, 'status' => $status, 'payment_intent' => $paymentIntent, 'reference' => $reference]), $changes);
+    }
+
+    /**
+     * A dispute as GET /v1/disputes/{id} returns it.
+     *
+     * @param  array<mixed>  $changes
+     * @return array<mixed>
+     */
+    public static function dispute(string $id, string $status, string $paymentIntent = 'pi_Ref0001', array $changes = []): array
+    {
+        return array_replace_recursive(self::load('dispute', ['id' => $id, 'status' => $status, 'payment_intent' => $paymentIntent]), $changes);
+    }
+
+    /**
      * A signed webhook delivery: [raw body, Stripe-Signature header].
      *
      * @param  array<mixed>  $event

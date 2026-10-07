@@ -9,6 +9,7 @@ use App\Modules\Gateways\Data\CheckoutClientConfig;
 use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderDispute;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
 use App\Modules\Gateways\Data\ProviderRefund;
@@ -18,7 +19,7 @@ use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
-use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
+use App\Modules\Gateways\Enums\ProviderRefundStatus;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Stripe\StripeFailureKinds;
@@ -49,8 +50,9 @@ use LogicException;
  * is charged in USD as it is.
  *
  * Live-mode connections are refused: the sandbox only fakes test mode.
- * Capturing succeeds, canceling voids. Idempotency keys are honored like
- * Stripe does (same key, same answer). Account and webhook methods are
+ * Capturing succeeds, canceling voids, refunding a captured payment succeeds
+ * at once (up to what is left of it). The sandbox has no disputes. Idempotency
+ * keys are honored like Stripe does (same key, same answer). Account and webhook methods are
  * delegated to the real adapter (webhooks are not simulated: the sandbox
  * relies on the checkout's own synchronous sync).
  */
@@ -237,14 +239,63 @@ final class SandboxPaymentGateway implements PaymentGateway
         $this->store($state);
     }
 
+    /**
+     * Like Stripe: only a captured payment, never above what is left, the same
+     * key answers the same refund. The refund succeeds at once.
+     */
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        self::assertTestMode($connection);
+
+        $cacheKey = self::PREFIX.'idem-refund:'.hash('sha256', $request->idempotencyKey);
+        $replayed = $this->cache->get($cacheKey);
+
+        if (is_string($replayed)) {
+            return $this->toRefund($this->loadRefund($replayed));
+        }
+
+        $payment = $this->load($request->providerPaymentId);
+        $refunded = array_sum(array_map(static fn (array $refund): int => is_int($refund['amount'] ?? null) ? $refund['amount'] : 0, $this->refundsOf($request->providerPaymentId)));
+        $amount = is_int($payment['amount'] ?? null) ? $payment['amount'] : 0;
+
+        if ($payment['status'] !== ProviderPaymentStatus::Succeeded->value) {
+            throw new GatewayRequestException('The sandbox payment was not captured.', 'charge_not_refundable', null, 400);
+        }
+
+        if ($request->amountMinor < 1 || $request->amountMinor > $amount - $refunded) {
+            throw new GatewayRequestException('The refund is above what is left of the sandbox payment.', 'amount_too_large', null, 400);
+        }
+
+        $state = [
+            'id' => 're_sandbox_'.SecureToken::base62(12),
+            'payment' => $request->providerPaymentId,
+            'amount' => $request->amountMinor,
+            'currency' => self::str($payment['currency'] ?? null) ?? 'MXN',
+            'status' => ProviderRefundStatus::Succeeded->value,
+            'reference' => $request->reference,
+            'created' => CarbonImmutable::now()->getTimestamp(),
+        ];
+
+        $this->cache->put(self::PREFIX.'re:'.$state['id'], $state, 86_400);
+        $this->cache->put(self::PREFIX.'refunds:'.$request->providerPaymentId, [...array_keys($this->refundsOf($request->providerPaymentId)), $state['id']], 86_400);
+        $this->cache->put($cacheKey, $state['id'], 86_400);
+
+        return $this->toRefund($state);
     }
 
     public function retrieveRefund(GatewayConnection $connection, string $providerRefundId): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        return $this->toRefund($this->loadRefund($providerRefundId));
+    }
+
+    public function listRefunds(GatewayConnection $connection, string $providerPaymentId): array
+    {
+        return array_values(array_map($this->toRefund(...), $this->refundsOf($providerPaymentId)));
+    }
+
+    public function retrieveDispute(GatewayConnection $connection, string $providerDisputeId): ProviderDispute
+    {
+        throw new GatewayRequestException('The checkout sandbox has no disputes.', 'resource_missing', null, 404);
     }
 
     public function eventKind(string $providerEventType, bool $direct): ProviderEventKind
@@ -360,6 +411,59 @@ final class SandboxPaymentGateway implements PaymentGateway
                 : null,
             attemptReference: self::str($metadata['axispay_attempt_id'] ?? null),
             captureBefore: $status === ProviderPaymentStatus::RequiresCapture ? CarbonImmutable::now()->addDays(7)->toIso8601String() : null,
+            createdAt: is_int($state['created'] ?? null) ? $state['created'] : null,
+        );
+    }
+
+    /**
+     * @return array<string, array<string, mixed>> refund ID => state, oldest first
+     */
+    private function refundsOf(string $providerPaymentId): array
+    {
+        $ids = $this->cache->get(self::PREFIX.'refunds:'.$providerPaymentId);
+        $refunds = [];
+
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            if (is_string($id)) {
+                $refunds[$id] = $this->loadRefund($id);
+            }
+        }
+
+        return $refunds;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function loadRefund(string $id): array
+    {
+        $state = $this->cache->get(self::PREFIX.'re:'.$id);
+
+        if (! is_array($state) || ! is_string($state['id'] ?? null)) {
+            throw new GatewayRequestException('No such sandbox refund.', 'resource_missing', null, 404);
+        }
+
+        $typed = [];
+
+        foreach ($state as $key => $value) {
+            $typed[(string) $key] = $value;
+        }
+
+        return $typed;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private function toRefund(array $state): ProviderRefund
+    {
+        return new ProviderRefund(
+            providerRefundId: self::str($state['id'] ?? null) ?? '',
+            status: ProviderRefundStatus::from(self::str($state['status'] ?? null) ?? ProviderRefundStatus::Succeeded->value),
+            amountMinor: is_int($state['amount'] ?? null) ? $state['amount'] : 0,
+            currency: self::str($state['currency'] ?? null) ?? 'MXN',
+            providerPaymentId: self::str($state['payment'] ?? null),
+            reference: self::str($state['reference'] ?? null),
             createdAt: is_int($state['created'] ?? null) ? $state['created'] : null,
         );
     }

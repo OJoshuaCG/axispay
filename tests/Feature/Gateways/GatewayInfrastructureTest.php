@@ -6,10 +6,8 @@ use App\Modules\Gateways\Data\ApiKeyCredentials;
 use App\Modules\Gateways\Enums\ConnectionMethod;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
 use App\Modules\Gateways\Exceptions\GatewayCredentialsKeyException;
-use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayCredentialsEncrypter;
-use App\Modules\Gateways\Services\GatewayFactory;
 use App\Modules\Gateways\Stripe\StripeClientFactory;
 use App\Modules\Gateways\Stripe\StripeGateway;
 use App\Modules\Tenancy\TenantContext;
@@ -79,12 +77,6 @@ it('maps revoked keys to an authentication error without Stripe details', functi
         ->and((string) $e)->not->toContain($secret)
         ->and($e->getMessage())->not->toContain('rk_');
 });
-
-it('keeps the payment methods of later phases honest', function (): void {
-    $connection = GatewayTestHelpers::connection(activeTenant());
-
-    app(GatewayFactory::class)->for($connection->provider)->retrieveRefund($connection, 're_123');
-})->throws(GatewayOperationNotImplementedException::class, 'Phase 7');
 
 it('encrypts credentials with the dedicated versioned key, never APP_KEY', function (): void {
     $encrypter = app(GatewayCredentialsEncrypter::class);

@@ -38,6 +38,8 @@ enum ApiErrorCode: string
     case LinkPaymentInProgress = 'link_payment_in_progress';
     case RefundExceedsAvailable = 'refund_exceeds_available';
     case PaymentNotRefundable = 'payment_not_refundable';
+    case PaymentNotVoidable = 'payment_not_voidable';
+    case PaymentBusy = 'payment_busy';
     case RateLimited = 'rate_limited';
     case GatewayError = 'gateway_error';
     case InternalError = 'internal_error';
@@ -57,7 +59,9 @@ enum ApiErrorCode: string
             self::IdempotencyRequestInProgress,
             self::LinkNotCancelable,
             self::LinkPaymentInProgress,
-            self::PaymentNotRefundable => 409,
+            self::PaymentNotRefundable,
+            self::PaymentNotVoidable,
+            self::PaymentBusy => 409,
             self::IdempotencyKeyReused, self::RefundExceedsAvailable => 422,
             self::RateLimited => 429,
             self::InternalError => 500,
@@ -110,6 +114,8 @@ enum ApiErrorCode: string
             self::LinkPaymentInProgress => 'A payment is in progress for this payment link.',
             self::RefundExceedsAvailable => 'The refund amount exceeds the refundable balance.',
             self::PaymentNotRefundable => 'The payment cannot be refunded in its current state.',
+            self::PaymentNotVoidable => 'The payment is not an authorization waiting for capture, so it cannot be voided.',
+            self::PaymentBusy => 'The payment is being processed right now. Retry in a few seconds.',
             self::RateLimited => 'Too many requests. Retry later.',
             self::GatewayError => 'The payment gateway returned an error.',
             self::InternalError => 'An unexpected error occurred.',

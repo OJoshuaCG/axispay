@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Modules\Payments\Services;
 
 use App\Modules\Gateways\Enums\ProviderFailureKind;
+use App\Modules\PaymentLinks\Enums\DisputeStatus;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Models\PaymentAttempt;
+use App\Modules\Shared\Money\Money;
 use App\Modules\Shared\Time\IsoDateTime;
 
 /**
@@ -54,6 +57,13 @@ final class PaymentSnapshot
             'pre_validation' => $attempt->validation_outcome?->publicBlock(),
             // When the payment was captured (it moved to `succeeded`); null until then.
             'captured_at' => $attempt->succeeded_at !== null ? IsoDateTime::format($attempt->succeeded_at) : null,
+            // What went back to the payer (plan 10.6, 16): the succeeded refunds, in
+            // the currency charged, and the summaries of refunds and disputes.
+            // Only a captured payment can be refunded or disputed.
+            'amount_refunded' => Money::ofMinor($attempt->amount_refunded_minor, $attempt->currency)->toDecimalString(),
+            'amount_refunded_minor' => $attempt->amount_refunded_minor,
+            'refund_status' => RefundSummary::of($attempt)->value,
+            'dispute_status' => $attempt->status === PaymentAttemptStatus::Succeeded ? $link->dispute_status->value : DisputeStatus::None->value,
             'created_at' => $attempt->created_at !== null ? IsoDateTime::format($attempt->created_at) : null,
         ];
     }

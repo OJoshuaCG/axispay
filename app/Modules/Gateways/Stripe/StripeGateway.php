@@ -9,6 +9,7 @@ use App\Modules\Gateways\Data\CheckoutClientConfig;
 use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderDispute;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderRefund;
 use App\Modules\Gateways\Data\ProviderWebhookEvent;
@@ -17,13 +18,14 @@ use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Exceptions\GatewayConfigurationException;
-use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
 use App\Modules\Gateways\Models\GatewayConnection;
 use App\Modules\Gateways\Services\GatewayCredentialsEncrypter;
 use Closure;
 use LogicException;
 use Stripe\Account;
+use Stripe\Charge;
+use Stripe\Dispute;
 use Stripe\Event;
 use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\CardException;
@@ -31,6 +33,7 @@ use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Exception\UnexpectedValueException;
 use Stripe\PaymentIntent;
+use Stripe\Refund;
 use Stripe\StripeObject;
 use Stripe\Webhook;
 
@@ -49,6 +52,9 @@ final readonly class StripeGateway implements PaymentGateway
 
     /** Card brand, country and last four; authorization expiry (capture_before). */
     private const array EXPAND = ['payment_method', 'latest_charge'];
+
+    /** Refunds read per payment: Stripe's page limit, far above what one card payment can have. */
+    private const int REFUNDS_PAGE = 100;
 
     public function __construct(
         private StripeClientFactory $clients,
@@ -230,14 +236,78 @@ final readonly class StripeGateway implements PaymentGateway
         return StripePaymentMapper::toProviderPayment($intent ?? throw new LogicException('A PaymentIntent call answered nothing.'));
     }
 
+    /**
+     * POST /v1/refunds on the PaymentIntent (plan 16.1): Stripe finds the
+     * charge, so nothing outside this adapter knows about charges. Direct
+     * charge on the tenant's account like the payment (`Stripe-Account` for
+     * Connect, the merchant key for api_key), no `refund_application_fee`:
+     * platform fees are not reversed (ADR-0012, and none is taken, ADR-011).
+     * Our refund ID travels in the metadata, so a refund whose answer was
+     * lost is found again by listRefunds() and never made twice.
+     */
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        $context = $this->clients->for($connection);
+        $params = array_filter([
+            'payment_intent' => $request->providerPaymentId,
+            'amount' => $request->amountMinor,
+            'reason' => $request->reason,
+            'metadata' => $request->reference !== null ? [StripeRefundMapper::REFERENCE_KEY => $request->reference] : null,
+        ], static fn (mixed $value): bool => $value !== null);
+
+        try {
+            $refund = $context->client->refunds->create($params, $context->options($request->idempotencyKey));
+        } catch (ApiErrorException $e) {
+            throw StripeErrorMapper::map($e, 'refund');
+        }
+
+        return StripeRefundMapper::toProviderRefund($refund);
     }
 
     public function retrieveRefund(GatewayConnection $connection, string $providerRefundId): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        $context = $this->clients->for($connection);
+
+        try {
+            $refund = $context->client->refunds->retrieve($providerRefundId, [], $context->options());
+        } catch (ApiErrorException $e) {
+            throw StripeErrorMapper::map($e, 'retrieveRefund');
+        }
+
+        return StripeRefundMapper::toProviderRefund($refund);
+    }
+
+    /** One page: a payment has few refunds (a card can be refunded a limited number of times). */
+    public function listRefunds(GatewayConnection $connection, string $providerPaymentId): array
+    {
+        $context = $this->clients->for($connection);
+
+        try {
+            $page = $context->client->refunds->all(['payment_intent' => $providerPaymentId, 'limit' => self::REFUNDS_PAGE], $context->options());
+        } catch (ApiErrorException $e) {
+            throw StripeErrorMapper::map($e, 'listRefunds');
+        }
+
+        $refunds = [];
+
+        foreach ($page->data as $refund) {
+            $refunds[] = StripeRefundMapper::toProviderRefund($refund);
+        }
+
+        return $refunds;
+    }
+
+    public function retrieveDispute(GatewayConnection $connection, string $providerDisputeId): ProviderDispute
+    {
+        $context = $this->clients->for($connection);
+
+        try {
+            $dispute = $context->client->disputes->retrieve($providerDisputeId, [], $context->options());
+        } catch (ApiErrorException $e) {
+            throw StripeErrorMapper::map($e, 'retrieveDispute');
+        }
+
+        return StripeRefundMapper::toProviderDispute($dispute);
     }
 
     public function reduceWebhookPayload(string $payload): string
@@ -278,6 +348,13 @@ final readonly class StripeGateway implements PaymentGateway
             'payment_intent.processing',
             'payment_intent.requires_action',
             'payment_intent.succeeded' => ProviderEventKind::PaymentUpdated,
+            'refund.created',
+            'refund.updated',
+            'refund.failed' => ProviderEventKind::RefundUpdated,
+            'charge.refunded' => ProviderEventKind::PaymentRefundsChanged,
+            'charge.dispute.created',
+            'charge.dispute.updated',
+            'charge.dispute.closed' => ProviderEventKind::DisputeUpdated,
             default => ProviderEventKind::Unhandled,
         };
     }
@@ -346,7 +423,22 @@ final readonly class StripeGateway implements PaymentGateway
             rawPayload: $rawBody,
             reducedPayload: $this->reduceWebhookPayload($rawBody),
             attemptReference: $object instanceof PaymentIntent ? StripePaymentMapper::attemptReference($object->metadata ?? null) : null,
+            providerPaymentId: $this->paymentOfRefundOrDispute($object),
         );
+    }
+
+    /**
+     * The PaymentIntent a refund, a dispute or a refunded charge is about.
+     * Those objects carry no metadata of ours, so the platform finds its own
+     * attempt by this ID (plan 14.4: a payment it does not hold is foreign).
+     */
+    private function paymentOfRefundOrDispute(mixed $object): ?string
+    {
+        if (! $object instanceof Refund && ! $object instanceof Charge && ! $object instanceof Dispute) {
+            return null;
+        }
+
+        return StripeRefundMapper::objectId($object->payment_intent ?? null);
     }
 
     /**

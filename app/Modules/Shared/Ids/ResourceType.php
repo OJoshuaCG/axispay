@@ -14,6 +14,7 @@ enum ResourceType: string
     case PaymentLink = 'plink';
     case Payment = 'pay';
     case Refund = 're';
+    case Dispute = 'dsp';
     case Event = 'evt';
     case ValidationCall = 'val';
 

@@ -1,0 +1,14 @@
+{
+  "id": "{{id}}",
+  "object": "refund",
+  "amount": 50000,
+  "balance_transaction": null,
+  "charge": "ch_FakeCharge0001",
+  "created": 1790001000,
+  "currency": "usd",
+  "failure_reason": null,
+  "metadata": { "axispay_refund_id": "{{reference}}" },
+  "payment_intent": "{{payment_intent}}",
+  "reason": "requested_by_customer",
+  "status": "{{status}}"
+}

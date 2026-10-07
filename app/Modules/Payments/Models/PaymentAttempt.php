@@ -160,6 +160,26 @@ final class PaymentAttempt extends Model
     }
 
     /**
+     * The refunds of this payment, oldest first (plan 16.1).
+     *
+     * @return HasMany<Refund, $this>
+     */
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Refund::class, 'payment_attempt_id')->orderBy('id');
+    }
+
+    /**
+     * The disputes the gateway opened against this payment, oldest first (plan 16.2).
+     *
+     * @return HasMany<Dispute, $this>
+     */
+    public function disputes(): HasMany
+    {
+        return $this->hasMany(Dispute::class, 'payment_attempt_id')->orderBy('id');
+    }
+
+    /**
      * @return HasMany<PaymentAttemptFailure, $this>
      */
     public function failures(): HasMany

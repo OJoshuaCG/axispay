@@ -47,4 +47,10 @@ final class IdempotencyKeys
     {
         return "axispay:cancel:{$attemptId}";
     }
+
+    /** One key per refund (plan 16.1): a retry of the same refund repeats it. */
+    public static function refund(string $refundId): string
+    {
+        return "axispay:refund:{$refundId}";
+    }
 }

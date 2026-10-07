@@ -9,6 +9,7 @@ use App\Modules\Gateways\Data\CheckoutClientConfig;
 use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderDispute;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
 use App\Modules\Gateways\Data\ProviderRefund;
@@ -16,9 +17,10 @@ use App\Modules\Gateways\Data\ProviderWebhookEvent;
 use App\Modules\Gateways\Data\RefundRequest;
 use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
+use App\Modules\Gateways\Enums\ProviderDisputeStatus;
 use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Enums\ProviderPaymentStatus;
-use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
+use App\Modules\Gateways\Enums\ProviderRefundStatus;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
@@ -82,6 +84,17 @@ final class FakePaymentGateway implements PaymentGateway
     private array $loseResponse = [];
 
     private ProviderPaymentStatus $captureResult = ProviderPaymentStatus::Succeeded;
+
+    /** @var array<string, array<string, mixed>> refund ID => refund */
+    private array $refunds = [];
+
+    /** @var array<string, array<string, mixed>> dispute ID => dispute */
+    private array $disputes = [];
+
+    private ProviderRefundStatus $refundResult = ProviderRefundStatus::Succeeded;
+
+    /** @var list<string> idempotency keys of the refunds, in order */
+    public array $refundKeys = [];
 
     public static function install(): self
     {
@@ -469,14 +482,150 @@ final class FakePaymentGateway implements PaymentGateway
         );
     }
 
+    /**
+     * Like Stripe: only a captured payment, never above what is left, and the
+     * same key answers the same refund. The refund comes back in the status
+     * set by refundsAs() (succeeded by default).
+     */
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        $this->calls[] = 'refund:'.$request->providerPaymentId;
+        $this->refundKeys[] = $request->idempotencyKey;
+        $this->throwIfFailing('refund');
+        $this->throwIfServerError('refund', $request->idempotencyKey);
+
+        if (isset($this->idempotent[$request->idempotencyKey])) {
+            return $this->toRefund($this->refunds[$this->idempotent[$request->idempotencyKey]]);
+        }
+
+        $payment = $this->payments[$request->providerPaymentId] ?? throw new GatewayRequestException('Fake: no such payment.', 'resource_missing', null, 404);
+
+        if ($payment['status'] !== ProviderPaymentStatus::Succeeded) {
+            throw new GatewayRequestException('Fake: the payment was not captured.', 'charge_not_refundable', null, 400);
+        }
+
+        $paymentAmount = is_int($payment['amount'] ?? null) ? $payment['amount'] : 0;
+
+        if ($request->amountMinor > $paymentAmount - $this->refundedAmount($request->providerPaymentId)) {
+            throw new GatewayRequestException('Fake: the refund is above what is left.', 'amount_too_large', null, 400);
+        }
+
+        $id = 're_fake_'.(count($this->refunds) + 1).'_'.bin2hex(random_bytes(4));
+        $this->refunds[$id] = [
+            'id' => $id,
+            'payment' => $request->providerPaymentId,
+            'amount' => $request->amountMinor,
+            'currency' => is_string($payment['currency'] ?? null) ? $payment['currency'] : 'USD',
+            'status' => $this->refundResult,
+            'reference' => $request->reference,
+        ];
+        $this->idempotent[$request->idempotencyKey] = $id;
+        $this->throwIfLost('refund');
+
+        return $this->toRefund($this->refunds[$id]);
     }
 
     public function retrieveRefund(GatewayConnection $connection, string $providerRefundId): ProviderRefund
     {
-        throw GatewayOperationNotImplementedException::for(__FUNCTION__, 'Phase 7');
+        $this->calls[] = 'retrieveRefund:'.$providerRefundId;
+        $this->throwIfFailing('retrieveRefund');
+
+        return $this->toRefund($this->refunds[$providerRefundId] ?? throw new GatewayRequestException('Fake: no such refund.', 'resource_missing', null, 404));
+    }
+
+    public function listRefunds(GatewayConnection $connection, string $providerPaymentId): array
+    {
+        $this->calls[] = 'listRefunds:'.$providerPaymentId;
+        $this->throwIfFailing('listRefunds');
+
+        return array_values(array_map(
+            fn (array $refund): ProviderRefund => $this->toRefund($refund),
+            array_filter($this->refunds, static fn (array $refund): bool => $refund['payment'] === $providerPaymentId),
+        ));
+    }
+
+    public function retrieveDispute(GatewayConnection $connection, string $providerDisputeId): ProviderDispute
+    {
+        $this->calls[] = 'retrieveDispute:'.$providerDisputeId;
+        $this->throwIfFailing('retrieveDispute');
+
+        $dispute = $this->disputes[$providerDisputeId] ?? throw new GatewayRequestException('Fake: no such dispute.', 'resource_missing', null, 404);
+        $status = $dispute['status'];
+        assert($status instanceof ProviderDisputeStatus);
+
+        return new ProviderDispute($providerDisputeId, $status, is_int($dispute['amount']) ? $dispute['amount'] : 0, 'USD', is_string($dispute['payment']) ? $dispute['payment'] : null, 'fraudulent', now()->addDays(7)->getTimestamp(), now()->getTimestamp());
+    }
+
+    /** Test seam: the status new refunds come back with (succeeded by default). */
+    public function refundsAs(ProviderRefundStatus $status): self
+    {
+        $this->refundResult = $status;
+
+        return $this;
+    }
+
+    /** Test seam: the gateway's refund changes behind our back (webhook tests). */
+    public function setRefundStatus(string $providerRefundId, ProviderRefundStatus $status): self
+    {
+        $this->refunds[$providerRefundId]['status'] = $status;
+
+        return $this;
+    }
+
+    /** Test seam: a refund made outside the platform (the gateway's dashboard); returns its ID. */
+    public function seedRefund(string $providerPaymentId, int $amount, ProviderRefundStatus $status = ProviderRefundStatus::Succeeded, ?string $reference = null): string
+    {
+        $id = 're_fake_seed_'.bin2hex(random_bytes(4));
+        $this->refunds[$id] = ['id' => $id, 'payment' => $providerPaymentId, 'amount' => $amount, 'currency' => 'USD', 'status' => $status, 'reference' => $reference];
+
+        return $id;
+    }
+
+    /** Test seam: a dispute the gateway holds for a payment; returns its ID. */
+    public function seedDispute(string $providerPaymentId, int $amount, ProviderDisputeStatus $status = ProviderDisputeStatus::NeedsResponse): string
+    {
+        $id = 'dp_fake_'.bin2hex(random_bytes(4));
+        $this->disputes[$id] = ['payment' => $providerPaymentId, 'amount' => $amount, 'status' => $status];
+
+        return $id;
+    }
+
+    /** How many refunds the gateway holds for a payment (a refund made twice would show here). */
+    public function refundCount(string $providerPaymentId): int
+    {
+        return count(array_filter($this->refunds, static fn (array $refund): bool => $refund['payment'] === $providerPaymentId));
+    }
+
+    private function refundedAmount(string $providerPaymentId): int
+    {
+        $total = 0;
+
+        foreach ($this->refunds as $refund) {
+            if ($refund['payment'] === $providerPaymentId && $refund['status'] !== ProviderRefundStatus::Failed && $refund['status'] !== ProviderRefundStatus::Canceled) {
+                $total += is_int($refund['amount']) ? $refund['amount'] : 0;
+            }
+        }
+
+        return $total;
+    }
+
+    /**
+     * @param  array<string, mixed>  $refund
+     */
+    private function toRefund(array $refund): ProviderRefund
+    {
+        $status = $refund['status'];
+        assert($status instanceof ProviderRefundStatus);
+
+        return new ProviderRefund(
+            providerRefundId: is_string($refund['id']) ? $refund['id'] : '',
+            status: $status,
+            amountMinor: is_int($refund['amount']) ? $refund['amount'] : 0,
+            currency: is_string($refund['currency']) ? $refund['currency'] : 'USD',
+            providerPaymentId: is_string($refund['payment']) ? $refund['payment'] : null,
+            failureReason: $status === ProviderRefundStatus::Failed ? 'fake_failure' : null,
+            reference: is_string($refund['reference'] ?? null) ? $refund['reference'] : null,
+        );
     }
 
     public function eventKind(string $providerEventType, bool $direct): ProviderEventKind
@@ -486,6 +635,9 @@ final class FakePaymentGateway implements PaymentGateway
             'account.application.deauthorized' => $direct ? ProviderEventKind::Unhandled : ProviderEventKind::AccountDeauthorized,
             'payment_intent.amount_capturable_updated', 'payment_intent.canceled', 'payment_intent.payment_failed',
             'payment_intent.processing', 'payment_intent.requires_action', 'payment_intent.succeeded' => ProviderEventKind::PaymentUpdated,
+            'refund.created', 'refund.updated', 'refund.failed' => ProviderEventKind::RefundUpdated,
+            'charge.refunded' => ProviderEventKind::PaymentRefundsChanged,
+            'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed' => ProviderEventKind::DisputeUpdated,
             default => ProviderEventKind::Unhandled,
         };
     }
@@ -531,6 +683,7 @@ final class FakePaymentGateway implements PaymentGateway
             $rawBody,
             $this->reduceWebhookPayload($rawBody),
             is_string($reference) ? $reference : null,
+            is_string($object['payment_intent'] ?? null) ? $object['payment_intent'] : null,
         );
     }
 }

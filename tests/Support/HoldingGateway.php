@@ -9,6 +9,7 @@ use App\Modules\Gateways\Data\CheckoutClientConfig;
 use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderDispute;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderRefund;
 use App\Modules\Gateways\Data\ProviderWebhookEvent;
@@ -90,6 +91,16 @@ final readonly class HoldingGateway implements PaymentGateway
     public function retrieveRefund(GatewayConnection $connection, string $providerRefundId): ProviderRefund
     {
         return $this->inner->retrieveRefund($connection, $providerRefundId);
+    }
+
+    public function listRefunds(GatewayConnection $connection, string $providerPaymentId): array
+    {
+        return $this->inner->listRefunds($connection, $providerPaymentId);
+    }
+
+    public function retrieveDispute(GatewayConnection $connection, string $providerDisputeId): ProviderDispute
+    {
+        return $this->inner->retrieveDispute($connection, $providerDisputeId);
     }
 
     public function eventKind(string $providerEventType, bool $direct): ProviderEventKind

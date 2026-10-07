@@ -27,6 +27,7 @@ it('maps every resource type to its documented prefix', function (ResourceType $
     [ResourceType::PaymentLink, 'plink_'],
     [ResourceType::Payment, 'pay_'],
     [ResourceType::Refund, 're_'],
+    [ResourceType::Dispute, 'dsp_'],
     [ResourceType::Event, 'evt_'],
     [ResourceType::ValidationCall, 'val_'],
 ]);

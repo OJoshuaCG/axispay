@@ -54,6 +54,9 @@ return [
         'fx_quotes',
         // ADR-0064: the secret that signs the return to the merchant.
         'return_signing_secrets',
+        // Phase 7 (plan 7.5, 16; ADR-0066): refunds and disputes of a payment.
+        'refunds',
+        'disputes',
     ],
 
     /*

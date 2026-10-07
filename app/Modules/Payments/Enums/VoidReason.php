@@ -22,6 +22,9 @@ enum VoidReason: string
     /** The link expired, was canceled or its tenant closed. */
     case LinkClosed = 'link_closed';
 
+    /** The integrator asked for it: `POST /v1/payments/{id}/void` (ADR-0066). */
+    case MerchantRequested = 'merchant_requested';
+
     /** A 3D Secure step left unanswered by the payer. */
     case AbandonedAction = 'abandoned_action';
 

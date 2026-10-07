@@ -8,6 +8,7 @@ use App\Modules\ApiKeys\Http\Middleware\RequireApiScope;
 use App\Modules\ApiKeys\Http\Middleware\ThrottleApiKey;
 use App\Modules\PaymentLinks\Http\Controllers\PaymentLinkController;
 use App\Modules\Payments\Http\Controllers\PaymentController;
+use App\Modules\Payments\Http\Controllers\RefundController;
 use App\Modules\Webhooks\Http\Controllers\EventController;
 use Illuminate\Support\Facades\Route;
 
@@ -50,6 +51,24 @@ Route::middleware([AuthenticateApiKey::class, ThrottleApiKey::class])->group(fun
     Route::get('/payments/{id}', [PaymentController::class, 'show'])
         ->middleware(RequireApiScope::class.':payments:read')
         ->name('payments.show');
+
+    // Releases an authorization that was not captured: the scope of undoing a
+    // charge, `refunds:create` (ADR-0066).
+    Route::post('/payments/{id}/void', [PaymentController::class, 'void'])
+        ->middleware([RequireApiScope::class.':refunds:create', IdempotencyRequirement::Optional->middleware()])
+        ->name('payments.void');
+
+    Route::post('/refunds', [RefundController::class, 'store'])
+        ->middleware([RequireApiScope::class.':refunds:create', IdempotencyRequirement::Required->middleware()])
+        ->name('refunds.store');
+
+    Route::get('/refunds', [RefundController::class, 'index'])
+        ->middleware(RequireApiScope::class.':refunds:read')
+        ->name('refunds.index');
+
+    Route::get('/refunds/{id}', [RefundController::class, 'show'])
+        ->middleware(RequireApiScope::class.':refunds:read')
+        ->name('refunds.show');
 
     Route::get('/events', [EventController::class, 'index'])
         ->middleware(RequireApiScope::class.':events:read')

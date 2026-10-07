@@ -6,6 +6,7 @@ namespace App\Modules\Payments\Http\Controllers;
 
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\Payments\Actions\ListPayments;
+use App\Modules\Payments\Actions\VoidPayment;
 use App\Modules\Payments\Http\Presenters\PaymentPresenter;
 use App\Modules\Payments\Http\Requests\ListPaymentsQuery;
 use App\Modules\Payments\Models\PaymentAttempt;
@@ -20,7 +21,8 @@ use Illuminate\Http\Request;
  * `payment` endpoints of the public API (plan 10.6). HTTP only: parse, hand
  * to an action, present. Tenant and mode come from the API key
  * (AuthenticateApiKey); the `payments:read` scope and the rate limit are
- * route middleware (routes/api.php). Read only: nothing changes.
+ * route middleware (routes/api.php). Reading changes nothing; `void` releases
+ * an authorization that was not captured (spec B10, ADR-0066).
  */
 final class PaymentController
 {
@@ -42,6 +44,15 @@ final class PaymentController
             'data' => array_map(static fn (PaymentAttempt $attempt): array => PaymentPresenter::toApi($attempt, self::linkOf($attempt)), $page->payments),
             'has_more' => $page->hasMore,
         ]);
+    }
+
+    public function void(string $id, VoidPayment $void): JsonResponse
+    {
+        // Wrong prefix, unknown ID, another tenant or another mode: all 404.
+        $voided = $void->handle(PrefixedId::decode($id, ResourceType::Payment));
+        $voided->load(['link', 'fxQuote']);
+
+        return self::json(PaymentPresenter::toApi($voided, self::linkOf($voided)));
     }
 
     private static function linkOf(PaymentAttempt $attempt): PaymentLink

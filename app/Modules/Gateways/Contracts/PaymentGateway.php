@@ -8,6 +8,7 @@ use App\Modules\Gateways\Data\CheckoutClientConfig;
 use App\Modules\Gateways\Data\ConnectedAccountData;
 use App\Modules\Gateways\Data\PaymentMethodPreview;
 use App\Modules\Gateways\Data\PaymentRequest;
+use App\Modules\Gateways\Data\ProviderDispute;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderRefund;
 use App\Modules\Gateways\Data\ProviderWebhookEvent;
@@ -16,7 +17,6 @@ use App\Modules\Gateways\Data\WebhookSource;
 use App\Modules\Gateways\Enums\GatewayProvider;
 use App\Modules\Gateways\Enums\ProviderEventKind;
 use App\Modules\Gateways\Exceptions\GatewayAuthenticationException;
-use App\Modules\Gateways\Exceptions\GatewayOperationNotImplementedException;
 use App\Modules\Gateways\Exceptions\GatewayRequestException;
 use App\Modules\Gateways\Exceptions\GatewayUnavailableException;
 use App\Modules\Gateways\Exceptions\InvalidWebhookSignatureException;
@@ -29,9 +29,9 @@ use App\Modules\Gateways\Models\GatewayConnection;
  * API keys) are provider-specific and live next to the adapter.
  *
  * Phase 2 implemented the account, client-config and webhook methods;
- * Phase 4 the payment methods (ADR-0051). Refunds keep the plan's
- * signatures and throw GatewayOperationNotImplementedException until
- * Phase 7.
+ * Phase 4 the payment methods (ADR-0051); Phase 7 the refunds and the
+ * reading of disputes (ADR-0066). A gateway refunds the payment it holds and
+ * knows its charges: the domain only names the payment.
  *
  * Payments are card-only (ADR-018) and authorized with a separate capture
  * (ADR-0050): confirming authorizes, capturePayment() takes the money and
@@ -113,11 +113,43 @@ interface PaymentGateway
      */
     public function cancelPayment(GatewayConnection $connection, string $providerPaymentId, string $idempotencyKey): ProviderPayment;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 7 */
+    /**
+     * Refunds part or all of a captured payment, on the connection it was
+     * made with (plan 16.1). The refund can come back `pending`; its final
+     * state arrives by event or by re-reading it. The gateway refuses (a
+     * request error) a refund above what is left or of a payment that was
+     * not captured. Platform fees are not reversed (ADR-0012).
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
     public function refund(GatewayConnection $connection, RefundRequest $request): ProviderRefund;
 
-    /** @throws GatewayOperationNotImplementedException until Phase 7 */
+    /**
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
     public function retrieveRefund(GatewayConnection $connection, string $providerRefundId): ProviderRefund;
+
+    /**
+     * Every refund of a payment, including those made in the gateway's own
+     * dashboard (plan 16.1). Never more than the gateway holds for one
+     * payment, so one page is enough.
+     *
+     * @return list<ProviderRefund>
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
+    public function listRefunds(GatewayConnection $connection, string $providerPaymentId): array;
+
+    /**
+     * A dispute as the gateway reports it now (plan 16.2).
+     *
+     * @throws GatewayUnavailableException
+     * @throws GatewayRequestException
+     */
+    public function retrieveDispute(GatewayConnection $connection, string $providerDisputeId): ProviderDispute;
 
     /**
      * Provider-neutral kind of a stored provider event type. `$direct` is true
