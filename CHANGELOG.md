@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Line items on payment links** (ADR-0064, proposed): `POST /v1/payment_links`
+  accepts `line_items` `[{label, amount, absorbs_rounding}]`, a display-only
+  breakdown that must add up to the link amount (at most 20 lines, labels up
+  to 100 characters, at most one `absorbs_rounding` line, and exactly one when
+  the link can be converted to MXN). The hosted page lists them in the order
+  summary, and the currency confirmation shows them converted so that they add
+  up to the MXN amount charged (the flagged line takes the rounding residual).
+  Returned as `line_items` in the link object. New column
+  `payment_links.line_items`.
+- **Return to the merchant** (ADR-0064, proposed): `auto_redirect` (with
+  `return_url`) sends the payer back by themselves, after a 5-second countdown
+  they can stop, in the session that just paid. Every return after a payment
+  (button, redirect and the polled status) appends a signed proof to the
+  `return_url`: `ref`, `plink`, `payment`, `status=paid`, `ts` and `sig`
+  (HMAC-SHA256 with the new per-tenant, per-mode **return secret**, rotated
+  from the Payment settings page with 24 hours of overlap; shown once). The
+  checkout token and gateway data never go in the URL. The expired and
+  canceled pages offer a "Return" button with the plain `return_url`. New
+  table `return_signing_secrets`, audit action `return_secret.rotated`, column
+  `payment_links.auto_redirect`. Existing integrations now receive these query
+  parameters on the return (their own parameters are kept); verify the proof as
+  described in the integration guide and never use it instead of the API or a
+  webhook.
+- Links whose payer fields are all `hidden` complete with no payer data
+  collected or sent to the validation URL (confirmed and covered by tests; no
+  code change).
+- ADR-0065 (proposed): the pbx tenant is on a courtesy all-zero plan. No
+  pricing-plan engine exists in code, so nothing was seeded; limits unchanged.
+
 - **Currency conversion for Mexican cards** (ADR-0063, proposed; Phase 6
   subset): a USD link of a Mexican account paid with a card issued in Mexico is
   charged in MXN, after the payer confirms the exact amount. Two modes:

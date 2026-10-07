@@ -119,7 +119,17 @@ paths:
                   expires_in_hours: 72
                   payer_fields: { email: required, phone: optional }
                   return_url: https://tienda.ejemplo.com/gracias?order=A-1029
+                  auto_redirect: true
                   locale: es
+              with_line_items:
+                value:
+                  amount: '12.30'
+                  currency: USD
+                  description: Recarga de saldo
+                  line_items:
+                    - { label: Recarga de saldo, amount: '10.00' }
+                    - { label: Cargo por procesamiento, amount: '1.50', absorbs_rounding: true }
+                    - { label: IVA, amount: '0.80' }
       responses:
         '201':
           description: The link was created (or replayed, with `Idempotent-Replayed`).
@@ -744,6 +754,29 @@ components:
             - 15050
         currency:
           $ref: '#/components/schemas/Currency'
+    LineItem:
+      type: object
+      additionalProperties: false
+      required: [label, amount]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Plain text, 1 to 100 characters after trimming.
+        amount:
+          type: string
+          description: |
+            Decimal string greater than zero in the link's currency. The minimum and maximum
+            charge of a whole payment do not apply to a single line.
+          example: '10.00'
+        absorbs_rounding:
+          type: boolean
+          default: false
+          description: |
+            The line that takes the rounding residual when the link is converted to MXN, so the
+            converted lines add up to the amount charged. At most one; exactly one when the link
+            can be converted.
     ExchangeRate:
       type: string
       description: Decimal string with up to 6 decimals, greater than zero.
@@ -907,13 +940,36 @@ components:
               $ref: '#/components/schemas/ExchangeRate'
         payer_fields:
           $ref: '#/components/schemas/PayerFields'
+        line_items:
+          type: array
+          minItems: 1
+          maxItems: 20
+          description: |
+            The merchant's breakdown of the amount, shown on the payment page (ADR-0064). Display
+            only: the link is charged its `amount`. The amounts must add up exactly to `amount`
+            (else `parameter_invalid` on `line_items`), at most one item has `absorbs_rounding:
+            true`, and exactly one when the link can be converted to MXN. On the currency
+            confirmation the lines are shown converted and add up to the MXN amount charged.
+          items:
+            $ref: '#/components/schemas/LineItem'
         return_url:
           type: string
           format: uri
           maxLength: 2048
           description: |
             Where the payer returns after paying. HTTPS in live mode; the host must be one of
-            the account's allowed return domains, else `return_url_not_allowed`.
+            the account's allowed return domains, else `return_url_not_allowed`. After a payment
+            the URL gets a signed proof appended: `ref` (the `client_reference_id`, when there is
+            one), `plink`, `payment`, `status=paid`, `ts` and `sig` (hex HMAC-SHA256 of
+            `plink\npayment\nstatus\nts\nref` with the account's return secret; one signature
+            per active secret, comma separated, during a rotation). The expired and canceled
+            pages offer a plain "Return" button to it. See the integration guide to verify it.
+        auto_redirect:
+          type: boolean
+          default: false
+          description: |
+            Send the payer back to `return_url` by themselves, after a short countdown they can
+            stop, once the payment succeeded. Needs `return_url` (else `parameter_invalid`).
         locale:
           type: string
           enum: [es, en]
@@ -951,7 +1007,9 @@ components:
         - client_reference_id
         - fx
         - payer_fields
+        - line_items
         - return_url
+        - auto_redirect
         - locale
         - pre_payment_validation
         - expires_at
@@ -1006,8 +1064,16 @@ components:
               description: Only with `fixed`. Null when the link uses the account's own fixed rate.
         payer_fields:
           $ref: '#/components/schemas/PayerFields'
+        line_items:
+          type: [array, 'null']
+          description: The merchant's breakdown of the amount, or null.
+          items:
+            $ref: '#/components/schemas/LineItem'
         return_url:
           type: [string, 'null']
+        auto_redirect:
+          type: boolean
+          description: Whether the payer is sent back to `return_url` by themselves after paying.
         locale:
           type: string
           enum: [es, en]

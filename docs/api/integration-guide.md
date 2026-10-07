@@ -288,7 +288,9 @@ Unknown fields are refused (`parameter_invalid`), which catches typos such as `e
 | `expires_in_hours` | integer | No | Whole hours, at least 1. Not together with `expires_at`. |
 | `expires_at` | string | No | ISO-8601 date-time **with a time zone**, for example `2026-10-10T18:30:00Z`. Impossible dates (February 31) are refused. Not together with `expires_in_hours`. |
 | `payer_fields` | object | No | What to ask the payer. Fields: `email`, `full_name`, `phone`, `company_name`, `billing_address`, `tax_id`, `notes`. Each is `hidden`, `optional` or `required`. Fields you omit use the account's setting, otherwise the platform default (e-mail optional, everything else hidden). Error: `payer_field_invalid`. |
-| `return_url` | string (URL) | No | Where the payer can return after paying. Absolute `http(s)` URL of at most 2048 characters, without user or password. **HTTPS is required in live mode** and the **host must exactly match** one of the account's allowed return domains (subdomains are not implied). Error: `return_url_not_allowed`. |
+| `line_items` | array of objects | No | Your breakdown of the amount, shown on the payment page (display only: the link is charged its `amount`). See [Line items](#line-items). Errors: `parameter_invalid`, `amount_must_be_string`, `amount_invalid`, `parameter_missing`, with `param` such as `line_items.1.amount`. |
+| `return_url` | string (URL) | No | Where the payer can return after paying. Absolute `http(s)` URL of at most 2048 characters, without user or password. **HTTPS is required in live mode** and the **host must exactly match** one of the account's allowed return domains (subdomains are not implied). After a payment the URL gets a signed proof appended, see [Returning the payer to your site](#returning-the-payer-to-your-site). Error: `return_url_not_allowed`. |
+| `auto_redirect` | boolean | No | `true` sends the payer back to `return_url` by themselves, after a short countdown they can stop, once the payment succeeded. Needs `return_url` (`parameter_invalid` otherwise). Default `false`. Fixed when the link is created. |
 | `locale` | string | No | `es` or `en`: language of the payment page. Default: the account's checkout language. |
 | `pre_payment_validation` | boolean | No | `true` asks your server to approve each payment of this link (see [section 8](#8-pre-payment-validation-callback)); needs a validation URL for this mode (`validation_endpoint_not_configured` otherwise). `false` turns it off for this link. Omitted: the account's "use for new links" setting decides. Fixed when the link is created. |
 | `fx` | object | No | Currency conversion of a USD link paid with a Mexican card, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards): `{ "mode": "none" \| "fixed" \| "banxico_fix", "rate": "20.000000" }` (`rate` only with `fixed`). Omit it to use the account's default. |
@@ -338,7 +340,9 @@ Unknown fields are refused (`parameter_invalid`), which catches typos such as `e
   "client_reference_id": "A-1029",
   "fx": { "mode": "none", "rate": null },
   "payer_fields": { "email": "required", "phone": "optional" },
+  "line_items": null,
   "return_url": "https://shop.example.com/thanks?order=A-1029",
+  "auto_redirect": false,
   "locale": "en",
   "pre_payment_validation": false,
   "expires_at": "2026-10-06T14:00:00Z",
@@ -365,6 +369,8 @@ Fields to know:
 | `url` | The public payment page. **Anyone who has it can pay**: share it only with the payer. |
 | `status` | See the lifecycle below. |
 | `expires_at` | When the link stops accepting payments. |
+| `line_items` | `null`, or the breakdown you sent: `[{ "label", "amount", "absorbs_rounding" }]`. |
+| `auto_redirect` | Whether the payer is sent back to `return_url` by themselves after paying. |
 | `paid_at`, `canceled_at`, `expired_at`, `cancel_reason` | Set when the link reaches that state, otherwise `null`. |
 | `open_count`, `first_opened_at` | How many times, and when first, the payer opened the page. |
 | `refund_status`, `dispute_status` | `none` for now (refunds and disputes are not implemented yet). |
@@ -633,6 +639,92 @@ A Stripe account in Mexico can only charge a card issued in Mexico in Mexican pe
 
 `mode` is `fixed` or `banxico_fix`; `source` is `merchant` (a fixed rate) or `banxico_fix`; `rate` and `rate_date` are the fixed or published rate and, for Banxico, its publication date; `markup_bps` and `effective_rate` are the markup and the rate that produced the charge; `original_amount` and `original_currency` are the link's. **Reconcile with both amounts**: the link says USD, the payment charged MXN. In the pre-payment validation body `charge.amount` is already the MXN amount while `payment_link.amount` stays the link's.
 
+### Line items
+
+`line_items` lets the payment page show **why** the total is what it is, for example a top-up of 10.00 USD plus a processing charge and VAT, instead of one description and one amount. They are for display only: the link is charged its `amount`, whatever the lines say.
+
+```json
+{
+  "amount": "12.30",
+  "currency": "USD",
+  "description": "Balance top-up",
+  "line_items": [
+    { "label": "Balance top-up", "amount": "10.00" },
+    { "label": "Processing charge", "amount": "1.50", "absorbs_rounding": true },
+    { "label": "VAT", "amount": "0.80" }
+  ]
+}
+```
+
+Rules (all errors name the line, for example `param: "line_items.1.amount"`):
+
+- A non-empty list of **at most 20** lines. `label`: 1 to 100 characters after trimming, shown as plain text. `amount`: a decimal string greater than zero, in the link's currency (the minimum and maximum charge of a whole payment do not apply to a single line). `absorbs_rounding`: optional boolean. Other keys are refused.
+- **The amounts must add up exactly to the link `amount`**, otherwise `parameter_invalid` on `line_items`.
+- **At most one** line has `absorbs_rounding: true`, and **exactly one** when the link can be converted to MXN (a USD link whose conversion is on, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)). It is the line that takes the cents left over by the conversion.
+- On the payment page the lines appear above the total, in the link's currency, while the amount is shown. When a Mexican card is converted, the confirmation step shows every line converted on its own (rounded once, half up) and the flagged line takes the residual, so **the converted lines add up to exactly the MXN amount that is charged**. Example at a rate of 17.4225: 10.00 becomes 174.23, the flagged 2.30 becomes 40.07, and the total is 214.30. If that cannot be done (for example, many tiny lines that all rounded up leave nothing for the flagged one) the confirmation shows the total alone.
+
+### Returning the payer to your site
+
+Set `return_url` (an allowed domain, HTTPS in live mode) and, optionally, `auto_redirect: true`.
+
+- After a payment succeeded, the "Payment complete" page shows a **"Return to <merchant>"** button. With `auto_redirect: true` it also says "We will take you back to <merchant> in 5 s" and goes there by itself, unless the payer presses "Stay here". Only the payer's session that just paid is redirected; someone who opens a paid link later sees "already paid" with the button.
+- The expired and canceled pages show the same button with your plain `return_url` (nothing was paid, so there is nothing to prove).
+- **The return carries a signed proof.** Your own query string is kept and these parameters are appended (before any `#fragment`):
+
+| Parameter | Value |
+|---|---|
+| `ref` | The link's `client_reference_id`. Left out when the link has none. |
+| `plink` | The link id, `plink_...`. |
+| `payment` | The id of the payment that paid it, `pay_...`. |
+| `status` | Always `paid`. |
+| `ts` | Unix time, in seconds, when the page was built. |
+| `sig` | Lowercase hex HMAC-SHA256 of the message below, keyed with your **return secret**. During a rotation it holds one signature per active secret, separated by a comma. |
+
+The signed message is five values joined by a line feed (`\n`): `plink`, `payment`, `status`, `ts` and `ref` (an empty string when there is no `ref`).
+
+The checkout token and any gateway identifier or secret never appear in the URL.
+
+**Your return secret.** One per account and mode, `rsec_` followed by 64 hex characters, in the panel's *Payment settings* page, action **Return secret**: it generates a new secret and shows it **once** (store it like an API key). The first time you press it, it is also how you read the secret the links were already using. The previous secret keeps signing for **24 hours** after a rotation, so you can deploy the new one without downtime; `sig` then carries two signatures and your check passes if either matches a secret you hold.
+
+**Verify it on your return page (PHP):**
+
+```php
+<?php
+declare(strict_types=1);
+
+/** @param list<string> $secrets the return secret(s) you currently hold */
+function returnProofIsValid(array $query, array $secrets, int $maxAgeSeconds = 86400): bool
+{
+    foreach (['plink', 'payment', 'status', 'ts', 'sig'] as $required) {
+        if (! isset($query[$required]) || ! is_string($query[$required])) {
+            return false;
+        }
+    }
+
+    if ($query['status'] !== 'paid' || abs(time() - (int) $query['ts']) > $maxAgeSeconds) {
+        return false;
+    }
+
+    $reference = is_string($query['ref'] ?? null) ? $query['ref'] : '';
+    $message = implode("\n", [$query['plink'], $query['payment'], $query['status'], $query['ts'], $reference]);
+    $given = explode(',', $query['sig']);
+
+    foreach ($secrets as $secret) {
+        $expected = hash_hmac('sha256', $message, $secret);
+
+        foreach ($given as $signature) {
+            if (hash_equals($expected, $signature)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+```
+
+The proof tells your page that the query string was written by AxisPay and not typed by the payer. It is **not the authority on the payment**: the proof is rebuilt every time the paid page is shown, so confirm the payment with `GET /v1/payments/{payment}` or the `payment.succeeded` webhook before delivering anything, and make the return page idempotent.
+
 ### Status lifecycle
 
 | Status | Meaning |
@@ -664,8 +756,10 @@ Possible transitions:
 
 - The payer opens the link `url` and sees a payment page in the link's `locale` with the merchant's branding, the description, the amount and currency, the fields requested by `payer_fields`, and the card form.
 - A card issued in Mexico paying a USD link: a currency confirmation step with the exact MXN amount before anything is charged (see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards)).
-- After paying: a "Payment complete" page. If you set `return_url`, it shows a **"Return to <merchant>"** button pointing to it (the payer is not redirected automatically, and no data is appended to the URL: do not rely on the return as proof of payment, see [section 9](#9-integration-checklist-and-recommended-patterns)).
-- Opening a `paid` link shows "This payment has already been made"; an `expired` link shows "This payment link has expired"; a `canceled` link shows "This payment link is no longer available".
+- If you sent `line_items`, the breakdown is listed above the total (and converted, adding up to the MXN amount, on the currency confirmation).
+- After paying: a "Payment complete" page. If you set `return_url`, it shows a **"Return to <merchant>"** button pointing to it, with a signed proof appended; with `auto_redirect` the payer is also sent there by themselves after a short countdown (see [Returning the payer to your site](#returning-the-payer-to-your-site)). Do not rely on the return as the authority on the payment, see [section 9](#9-integration-checklist-and-recommended-patterns).
+- A link whose `payer_fields` are all `hidden` shows only the card form: no e-mail, name or any other payer data is asked, stored or sent to your validation URL (`data.payer` is `null`).
+- Opening a `paid` link shows "This payment has already been made"; an `expired` link shows "This payment link has expired"; a `canceled` link shows "This payment link is no longer available" (the last two with the "Return" button when you set `return_url`).
 - If the card is declined, the payer sees the error and can try again on the same link. Repeated declines are limited (card-testing protection): after too many attempts the page asks to wait or blocks the link for a while.
 - If your pre-payment validation rejects a payment, the payer sees your `payer_message`, or a generic message asking to contact the merchant. The card is not charged.
 
@@ -881,7 +975,7 @@ Full details, code examples for answering the call and the stock reservation pat
    - only then fulfill the order.
 4. **Reconcile periodically.** A scheduled job should list events since the last one processed (`GET /v1/events`) and, for orders still waiting, read their links. This covers webhooks you missed (your downtime, an endpoint disabled after 5 days of failures).
 5. **Handle edge cases:** `late_payment: true` (a payment that succeeded after the link expired or was canceled; the money was charged); a `payment.failed` followed later by a success (the payer retried); the same event delivered twice; events out of order.
-6. **Do not trust the payer's return.** The "Return" button is only a convenience; it carries no proof. Fulfill from events or a fetch-back.
+6. **Do not trust the payer's return.** The "Return" button and the redirect are only a convenience: their signed proof (`sig`) tells your page the query string came from AxisPay, not that the payment is final. Fulfill from events or a fetch-back.
 7. **Expired or canceled links:** create a new link (with a new idempotency key) instead of trying to reuse them.
 
 ### Do not
@@ -891,13 +985,14 @@ Full details, code examples for answering the call and the stock reservation pat
 - Never reuse an `Idempotency-Key` for a different request.
 - Never parse the `message` of an error; use `code`.
 - Never act on a webhook without verifying its signature.
+- Never deliver goods because a payer reached your `return_url`: verify the `sig`, then confirm the payment with the API or a webhook.
 
 ### Go-live checklist (test to live)
 
 - [ ] The integration works end to end in **test mode** with a test key: create, pay with Stripe test cards, receive and verify the webhook, fetch back, cancel, expiry.
 - [ ] Error paths tested: `gateway_not_ready`, `insufficient_scope`, `429` (honoring `Retry-After`), a replayed idempotent request (`Idempotent-Replayed: true`), and a declined card.
 - [ ] A webhook endpoint (HTTPS, public domain, ports 443/8443) is configured **in live mode** and its live `whsec_` secret is stored (test and live secrets differ).
-- [ ] The merchant's **live** Stripe connection is active and able to charge (live mode needs an activated Stripe account), and live return domains are allowed if you use `return_url` (HTTPS only).
+- [ ] The merchant's **live** Stripe connection is active and able to charge (live mode needs an activated Stripe account), and live return domains are allowed if you use `return_url` (HTTPS only), and you hold the live **return secret** if you verify the return proof.
 - [ ] A **live key** (`axp_live_...`) with minimum scopes is created, stored in your secret manager, and your configuration switches key, base URL and webhook secret together.
 - [ ] Reconciliation job and duplicate/out-of-order handling are in place.
 - [ ] Logs record `Request-Id` and the `plink_`/`evt_` IDs, and never record keys or secrets.
