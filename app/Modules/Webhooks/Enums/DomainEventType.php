@@ -16,4 +16,5 @@ enum DomainEventType: string
     case PaymentProcessing = 'payment.processing';
     case PaymentSucceeded = 'payment.succeeded';
     case PaymentFailed = 'payment.failed';
+    case PaymentCanceled = 'payment.canceled';
 }

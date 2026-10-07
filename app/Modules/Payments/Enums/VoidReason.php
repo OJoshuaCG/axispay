@@ -6,7 +6,7 @@ namespace App\Modules\Payments\Enums;
 
 /**
  * Why an attempt's gateway payment is voided or closed (ADR-0050, ADR-0051),
- * as recorded in the audit log.
+ * as recorded in the audit log and sent in `payment.canceled` (ADR-0062).
  */
 enum VoidReason: string
 {
@@ -24,4 +24,12 @@ enum VoidReason: string
 
     /** A 3D Secure step left unanswered by the payer. */
     case AbandonedAction = 'abandoned_action';
+
+    /**
+     * The gateway released the payment on its own, outside any void of ours
+     * (an authorization that expired there, a capture it refused, a
+     * cancellation reported by its webhook). Only ever sent in
+     * `payment.canceled`: nothing in this system asked for it.
+     */
+    case GatewayCanceled = 'gateway_canceled';
 }

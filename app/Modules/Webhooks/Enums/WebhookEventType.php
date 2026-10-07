@@ -20,6 +20,7 @@ enum WebhookEventType: string
     case PaymentProcessing = 'payment.processing';
     case PaymentSucceeded = 'payment.succeeded';
     case PaymentFailed = 'payment.failed';
+    case PaymentCanceled = 'payment.canceled';
     case RefundCreated = 'refund.created';
     case RefundSucceeded = 'refund.succeeded';
     case RefundFailed = 'refund.failed';
@@ -44,7 +45,7 @@ enum WebhookEventType: string
         return match ($this) {
             self::PaymentLinkCreated, self::PaymentLinkOpened, self::PaymentLinkPaid,
             self::PaymentLinkExpired, self::PaymentLinkCanceled => 'payment_link',
-            self::PaymentProcessing, self::PaymentSucceeded, self::PaymentFailed => 'payment',
+            self::PaymentProcessing, self::PaymentSucceeded, self::PaymentFailed, self::PaymentCanceled => 'payment',
             self::RefundCreated, self::RefundSucceeded, self::RefundFailed => 'refund',
             self::DisputeCreated, self::DisputeClosed => 'dispute',
             self::Ping => 'ping',

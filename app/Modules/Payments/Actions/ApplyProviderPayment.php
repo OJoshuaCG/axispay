@@ -9,6 +9,7 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Gateways\Data\ProviderPayment;
 use App\Modules\Gateways\Data\ProviderPaymentFailure;
+use App\Modules\Gateways\Enums\ProviderPaymentStatus;
 use App\Modules\PaymentLinks\Actions\CancelPaymentLink;
 use App\Modules\PaymentLinks\Data\CancelPaymentLinkData;
 use App\Modules\PaymentLinks\Enums\CancelReason;
@@ -21,6 +22,7 @@ use App\Modules\Payments\Data\AppliedPayment;
 use App\Modules\Payments\Enums\PaymentAttemptStatus;
 use App\Modules\Payments\Enums\ReviewReason;
 use App\Modules\Payments\Enums\ValidationOutcome;
+use App\Modules\Payments\Enums\VoidReason;
 use App\Modules\Payments\Events\PaymentDeclined;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Models\PaymentAttemptFailure;
@@ -50,7 +52,10 @@ use LogicException;
  *     `failure_count` grows (plan 9.2);
  *  2. the attempt moves to the status of the gateway payment; a new decline
  *     records `payment.failed`, entering `processing` records
- *     `payment.processing` (frozen snapshots, ADR-0051);
+ *     `payment.processing`, and a payment under way (3D Secure step,
+ *     authorization) that the gateway reports canceled records
+ *     `payment.canceled` with the reason (frozen snapshots, ADR-0051,
+ *     ADR-0062);
  *  3. the link follows (plan 9.1): a payment under way → `processing`; the
  *     attempt back to waiting or closed → `active` (or `expired` past its
  *     expiry); succeeded → `paid`. A success on an expired or canceled link
@@ -80,12 +85,15 @@ final readonly class ApplyProviderPayment
      * @param  string|null  $leaseToken  given by the holder of the attempt's lease, answering its
      *                                   own call to the gateway: only then may the payment move
      *                                   backwards (PaymentAttemptStateMachine::isBackward())
+     * @param  VoidReason|null  $voidReason  why we released the payment, when this application is the
+     *                                       answer to our own void; null when the gateway reports a
+     *                                       cancellation we did not ask for (`gateway_canceled`)
      */
-    public function handle(string $attemptId, ProviderPayment $payment, ?string $clientIp = null, ?string $leaseToken = null): AppliedPayment
+    public function handle(string $attemptId, ProviderPayment $payment, ?string $clientIp = null, ?string $leaseToken = null, ?VoidReason $voidReason = null): AppliedPayment
     {
         $linkId = AttemptLocks::linkIdOf($attemptId);
 
-        $result = DB::transaction(function () use ($linkId, $attemptId, $payment, $clientIp, $leaseToken): AppliedPayment {
+        $result = DB::transaction(function () use ($linkId, $attemptId, $payment, $clientIp, $leaseToken, $voidReason): AppliedPayment {
             [$link, $attempt] = AttemptLocks::lockLinkThenAttemptOrFail($linkId, $attemptId);
 
             if ($attempt->provider_payment_id !== null && $attempt->provider_payment_id !== $payment->providerPaymentId) {
@@ -137,7 +145,7 @@ final readonly class ApplyProviderPayment
             // payment as it is now (ADR-0051).
             if ($newDecline) {
                 $this->events->record(DomainEventType::PaymentFailed, 'payment', $attempt->id, [
-                    'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+                    'payment' => PaymentSnapshot::of($attempt, $link),
                     'failure_count' => $attempt->failure_count,
                     'failure_code' => PaymentSnapshot::genericFailureCode($attempt),
                 ]);
@@ -145,7 +153,17 @@ final readonly class ApplyProviderPayment
 
             if ($target === PaymentAttemptStatus::Processing && $previous !== PaymentAttemptStatus::Processing) {
                 $this->events->record(DomainEventType::PaymentProcessing, 'payment', $attempt->id, [
-                    'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+                    'payment' => PaymentSnapshot::of($attempt, $link),
+                ]);
+            }
+
+            // The integrator may have approved (or credited) this payment in its
+            // pre-payment validation: it must learn that the money will not be
+            // taken, whoever released it (our void, a refused capture, a webhook).
+            if ($payment->status === ProviderPaymentStatus::Canceled && $previous->isInFlight() && $attempt->status->isTerminal()) {
+                $this->events->record(DomainEventType::PaymentCanceled, 'payment', $attempt->id, [
+                    'payment' => PaymentSnapshot::of($attempt, $link),
+                    'reason' => ($voidReason ?? VoidReason::GatewayCanceled)->value,
                 ]);
             }
 
@@ -297,7 +315,7 @@ final readonly class ApplyProviderPayment
 
         // Frozen snapshots of both objects (ADR-0051, plan 15.3).
         $facts = [
-            'payment' => PaymentSnapshot::of($attempt, $link->prefixedId()),
+            'payment' => PaymentSnapshot::of($attempt, $link),
             'payment_link' => PaymentLinkPresenter::toApi($link),
             'late_payment' => $late,
         ];

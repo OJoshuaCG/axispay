@@ -76,6 +76,7 @@ return [
         'payment.processing' => 'Un pago está en procesamiento.',
         'payment.succeeded' => 'Un pago fue exitoso.',
         'payment.failed' => 'Se rechazó una tarjeta.',
+        'payment.canceled' => 'Se anuló un pago autorizado y no se cobrará.',
         'refund.created' => 'Se solicitó un reembolso.',
         'refund.succeeded' => 'Se completó un reembolso.',
         'refund.failed' => 'Falló un reembolso.',

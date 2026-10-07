@@ -188,7 +188,7 @@ it('captures on a failure under fail_open and says so in the payment', function 
         ->and($call->response_status)->toBe(500)
         ->and($attempt->validation_outcome)->toBe(ValidationOutcome::FailedOpen)
         ->and($fake->callsTo('capturePayment'))->toHaveCount(1)
-        ->and(PaymentSnapshot::of($attempt, $link->prefixedId())['pre_validation'])->toBe(['outcome' => 'failed', 'policy_applied' => 'fail_open']);
+        ->and(PaymentSnapshot::of($attempt, $link)['pre_validation'])->toBe(['outcome' => 'failed', 'policy_applied' => 'fail_open']);
 });
 
 it('retries once, immediately, when the connection could not be opened', function (): void {

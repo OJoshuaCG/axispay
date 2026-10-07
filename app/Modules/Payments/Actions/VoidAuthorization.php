@@ -39,6 +39,9 @@ use LogicException;
  * the reconciliation (authorizations left uncaptured) and the closing of a
  * link that expired or was canceled (plan 9.1). The result is applied like
  * any gateway state: if the payment had already succeeded, the payment wins.
+ * The release is told to the integrator as `payment.canceled` with the
+ * reason, recorded by ApplyProviderPayment in the transaction that applies it
+ * (ADR-0062).
  *
  * Gateway errors propagate (the caller or its job retries with the same key).
  */
@@ -141,7 +144,7 @@ final readonly class VoidAuthorization
             return $this->closeLocally($attempt->id, needsReview: true);
         }
 
-        $applied = $this->apply->handle($attempt->id, $payment, leaseToken: $token);
+        $applied = $this->apply->handle($attempt->id, $payment, leaseToken: $token, voidReason: $reason);
 
         if ($wasAuthorized && $applied->attempt->status->isTerminal() && $applied->attempt->status !== PaymentAttemptStatus::Succeeded) {
             DB::transaction(fn () => $this->audit->record(AuditAction::PaymentAuthorizationVoided, $applied->attempt, [

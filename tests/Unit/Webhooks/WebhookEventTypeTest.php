@@ -16,7 +16,7 @@ it('maps every domain event type to a public event type', function (DomainEventT
 it('lists the catalog of plan 15.2, ping included but not subscribable', function (): void {
     expect(array_map(static fn (WebhookEventType $type): string => $type->value, WebhookEventType::cases()))->toBe([
         'payment_link.created', 'payment_link.opened', 'payment_link.paid', 'payment_link.expired', 'payment_link.canceled',
-        'payment.processing', 'payment.succeeded', 'payment.failed',
+        'payment.processing', 'payment.succeeded', 'payment.failed', 'payment.canceled',
         'refund.created', 'refund.succeeded', 'refund.failed',
         'dispute.created', 'dispute.closed', 'ping',
     ])->and(WebhookEventType::Ping->isSubscribable())->toBeFalse()

@@ -25,7 +25,7 @@ Test mode and live mode are fully separate. Endpoints, the validation URL, secre
 2. The card is **authorized**: the bank reserves the amount, including any bank verification (3D Secure). Nothing is charged yet.
 3. If the link uses pre-payment validation, we **ask your server**. The payer sees "Verifying your order…" meanwhile.
 4. If you approve (or you do not use validation), the payment is **charged** (captured). If you reject, the reservation on the card is released and the payer sees your message.
-5. Events are sent to your endpoints: `payment.succeeded` and `payment_link.paid` after a charge, `payment.failed` after each declined card.
+5. Events are sent to your endpoints: `payment.succeeded` and `payment_link.paid` after a charge, `payment.failed` after each declined card, and `payment.canceled` when an authorized payment is released instead of charged (you rejected it, the capture window elapsed, the link was closed, or the bank released it).
 
 A payer who retries after a declined card goes through steps 2 and 3 again, so you can receive more than one validation for the same link; each one carries its sequence number.
 
@@ -52,12 +52,15 @@ Adding, changing, deleting an endpoint or rotating its secret sends an e-mail to
 | `payment.processing` | A payment is being processed (rare with cards) | Yes |
 | `payment.succeeded` | A payment was charged; includes whether it was a late payment and the result of the pre-payment validation | Yes |
 | `payment.failed` | A card was declined; includes how many declines so far and a generic code | Yes |
+| `payment.canceled` | An authorized payment was voided and will not be charged; includes the `reason` (`merchant_rejected`, `validation_failed`, `capture_window_elapsed`, `link_closed`, `abandoned_action`, `gateway_canceled`) | Yes |
 | `payment_link.created`, `payment_link.expired`, `payment_link.canceled` | A link was created, expired or was canceled | Later phases |
 | `refund.created`, `refund.succeeded`, `refund.failed` | Refunds | Phase 7 |
 | `dispute.created`, `dispute.closed` | Disputes | Phase 7 |
 | `ping` | The test event sent from the panel | Only from the test button |
 
 You can subscribe to the events of later phases now; they start arriving when those features ship.
+
+The payment inside every `payment.*` event (and inside `payment_link.paid`) carries your link's `client_reference_id` (so you can match it to your order without a lookup; `null` when the link has none), `captured_at` (when the payment was captured; `null` until it succeeds) and `fx` (`null` until a currency conversion applies). `payment.canceled` can arrive for a payment you approved in the pre-payment validation: if you reserved stock or credited a balance on approval, undo it then.
 
 Each event has an ID (`evt_…`), a type, the mode, the time it happened and the object it is about, in the same shape as the public API. The body of an event never changes: every retry sends exactly the same bytes.
 
@@ -67,7 +70,7 @@ Each event has an ID (`evt_…`), a type, the mode, the time it happened and the
 - Answer **within 10 seconds** (5 seconds to open the connection).
 - **Deduplicate by the event ID** (the `webhook-id` header). Delivery is "at least once": the same event can arrive more than once.
 - **Do not rely on the order** of events. Use the time in the event and the state of the object.
-- Before releasing goods, you can confirm an event by reading it from the API (fetch-back): `GET /v1/events/{id}` with the event ID returns exactly the body you received. See [Event history](#event-history-in-the-api).
+- Before releasing goods, you can confirm an event by reading it from the API (fetch-back): `GET /v1/events/{id}` with the event ID returns exactly the body you received. See [Event history](#event-history-in-the-api). To check the payment itself (including whether it is still authorized, was captured or was voided), read `GET /v1/payments/{id}` with the `payments:read` scope.
 
 ### Event history in the API
 

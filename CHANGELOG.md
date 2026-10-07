@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`payment.canceled` event** (ADR-0062, proposed): sent every time an
+  authorized payment (or a 3D Secure step) is released and will not be
+  charged, with `data.reason` (`merchant_rejected`, `validation_failed`,
+  `capture_window_elapsed`, `link_closed`, `abandoned_action`, or
+  `gateway_canceled` when the gateway released it on its own) and the same
+  `pay_` ID the validation call carried. Before, a void sent nothing, so an
+  integrator that credited or reserved something when it approved could not
+  know it had to undo it. Endpoints subscribed to an explicit list of events
+  must add it.
+- **Payment events carry `client_reference_id`, `captured_at` and `fx`**: the
+  payment of every `payment.*` event and of `payment_link.paid` now has the
+  link's reference, the capture time (null until it succeeds) and an `fx`
+  block (null until currency conversion ships).
+- **`GET /v1/payments/{id}` and `GET /v1/payments`** with the new use of the
+  `payments:read` scope: status (including `processing`, `requires_capture`
+  and `canceled`), link, `client_reference_id`, amount, currency, `fx`, card
+  brand and country, capture time. The list is newest first with the usual
+  cursors, filters `status`, `payment_link` (the payments of one link) and
+  `created[gte|lte]`. No gateway identifiers, last digits or payer data.
+  Documented in the integration guide, the webhooks guide and the OpenAPI
+  file.
+
 - **One setting for the pre-payment validation timeout** (ADR-0061, proposed):
   `AXISPAY_VALIDATION_TIMEOUT_SECONDS` (30 s by default, 5 to 60) replaces the
   hardcoded 5 s. The checkout request budget and lease, the job timeouts, the

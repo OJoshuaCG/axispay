@@ -75,6 +75,7 @@ return [
         'payment.processing' => 'A payment is being processed.',
         'payment.succeeded' => 'A payment succeeded.',
         'payment.failed' => 'A card was declined.',
+        'payment.canceled' => 'An authorized payment was voided and will not be charged.',
         'refund.created' => 'A refund was requested.',
         'refund.succeeded' => 'A refund was completed.',
         'refund.failed' => 'A refund failed.',
