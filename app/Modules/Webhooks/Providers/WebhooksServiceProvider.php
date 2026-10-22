@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Webhooks\Providers;
 
 use App\Modules\Webhooks\Console\PurgeValidationCallsCommand;
+use App\Modules\Webhooks\Console\PurgeWebhookDeliveriesCommand;
 use App\Modules\Webhooks\Console\SweepWebhookOutboxCommand;
 use App\Modules\Webhooks\Contracts\HostResolver;
 use App\Modules\Webhooks\Models\ValidationEndpoint;
@@ -37,7 +38,7 @@ final class WebhooksServiceProvider extends ServiceProvider
         Gate::policy(ValidationEndpoint::class, ValidationEndpointPolicy::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SweepWebhookOutboxCommand::class, PurgeValidationCallsCommand::class]);
+            $this->commands([SweepWebhookOutboxCommand::class, PurgeValidationCallsCommand::class, PurgeWebhookDeliveriesCommand::class]);
         }
     }
 }

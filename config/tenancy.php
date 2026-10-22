@@ -107,6 +107,9 @@ return [
         // Phase 5 (ADR-0058): deletes pre-payment validation calls of every
         // tenant past their 30-day retention (by age only, never reads them).
         'App\\Modules\\Webhooks\\Services\\ValidationCallRetention',
+        // Phase 5 (ADR-0067): deletes final webhook delivery attempts of every
+        // tenant past their 30-day retention (by age and status only).
+        'App\\Modules\\Webhooks\\Services\\WebhookDeliveryRetention',
     ],
 
 ];

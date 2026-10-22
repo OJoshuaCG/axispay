@@ -287,6 +287,10 @@ return [
         // Retries due within this many seconds are queued with a delay; later
         // ones are queued by the sweeper (every minute) when they are due.
         'delayed_dispatch_max_seconds' => 60,
+        // Plan 15.6: days the delivery log is kept (ADR-0067). Pending
+        // attempts are never deleted.
+        'delivery_retention_days' => 30,
+
         // Plan 15.6: an endpoint failing continuously this long is disabled.
         'disable_after_failing_days' => 5,
 

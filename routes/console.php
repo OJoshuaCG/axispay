@@ -73,6 +73,12 @@ Schedule::command('axispay:validation-calls:purge')
     ->withoutOverlapping()
     ->onOneServer();
 
+// Plan 15.6: the webhook delivery log is kept 30 days (ADR-0067).
+Schedule::command('axispay:webhook-deliveries:purge')
+    ->dailyAt('04:00')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // Expired rows of the database cache store (per-IP failed-authentication
 // counters, locks) are otherwise only removed when read again.
 Schedule::command('axispay:cache:purge-expired')
