@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Phase 5 gap closure** (ADR-0067, proposed): the webhook events
+  `payment_link.created`, `payment_link.expired` and `payment_link.canceled`
+  are now sent (`data.object` is the link; `cancel_reason` says why it was
+  canceled). The webhook delivery log is purged daily after 30 days
+  (`axispay:webhook-deliveries:purge`, config
+  `axispay.webhooks.delivery_retention_days`; pending attempts are kept). The
+  pre-payment validation page shows the rejection rate, the failure rate and
+  the p95 latency of the last 30 days. A concurrency test covers critical case
+  24 (no lock held during the validation call, state re-verified after it).
 - **Refunds, voiding by API and refund and dispute events** (ADR-0066, proposed;
   Phase 7 subset): `POST /v1/refunds` (scope `refunds:create`, `Idempotency-Key`
   required) refunds a captured payment fully or in part, in the currency
