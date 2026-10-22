@@ -14,6 +14,7 @@ use App\Modules\Webhooks\Enums\ValidationResponseProblem;
 use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
 use App\Modules\Webhooks\Models\ValidationCall;
 use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Services\ValidationCallMetrics;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -235,6 +236,58 @@ it('lists the recent calls of the current mode only', function (): void {
         ->assertCanNotSeeTableRecords([$live])
         ->assertSee('Order A-1029')
         ->assertSee(__('webhooks.validation.calls.reason', ['reason' => 'out_of_stock']));
+});
+
+it('computes the rejection rate, the failure rate and the p95 latency of the real calls of the tenant and mode (plan 15.8.7)', function (): void {
+    $tenant = activeTenant();
+    // 20 ended real calls with latencies 10, 20... 200 ms: 3 rejected, 2 failed.
+    foreach (range(1, 20) as $position) {
+        $outcome = match (true) {
+            $position <= 3 => ValidationCallOutcome::Rejected,
+            $position <= 5 => ValidationCallOutcome::Failed,
+            default => ValidationCallOutcome::Approved,
+        };
+        panelValidationCall($tenant, null, ['outcome' => $outcome, 'duration_ms' => $position * 10]);
+    }
+    // Not counted: a test call, a call still waiting, a call past the window,
+    // a call of live mode and a call of another tenant.
+    panelValidationCall($tenant, null, ['is_test' => true, 'outcome' => ValidationCallOutcome::Failed, 'duration_ms' => 9000]);
+    panelValidationCall($tenant, null, ['outcome' => null, 'final_decision' => null, 'duration_ms' => null]);
+    panelValidationCall($tenant, null, ['outcome' => ValidationCallOutcome::Rejected, 'duration_ms' => 9000, 'created_at' => now()->subDays(31)]);
+    Validation::in($tenant, true, static function (): void {
+        $call = new ValidationCall;
+        $call->forceFill(['livemode' => true, 'is_test' => false, 'request_payload' => [], 'outcome' => ValidationCallOutcome::Rejected, 'duration_ms' => 9000])->save();
+    });
+    panelValidationCall(activeTenant(), null, ['outcome' => ValidationCallOutcome::Rejected, 'duration_ms' => 9000]);
+
+    $metrics = Validation::in($tenant, false, static fn () => app(ValidationCallMetrics::class)->current());
+
+    expect($metrics->windowDays)->toBe(30)
+        ->and($metrics->calls)->toBe(20)
+        ->and($metrics->rejected)->toBe(3)
+        ->and($metrics->failed)->toBe(2)
+        ->and($metrics->rejectionRate())->toBe('15.0')
+        ->and($metrics->failureRate())->toBe('10.0')
+        // Nearest rank: ceil(0.95 * 20) = 19th value.
+        ->and($metrics->p95LatencyMs)->toBe(190);
+});
+
+it('shows the metrics on the page, and no rate before the first call', function (): void {
+    $tenant = activeTenant();
+    Validation::endpoint($tenant);
+    actingAsTenantUser(tenantUser($tenant));
+
+    Livewire::test(PrePaymentValidationSettings::class)
+        ->assertSee(__('webhooks.validation.metrics.title'))
+        ->assertSee(__('webhooks.validation.metrics.no_calls'));
+
+    panelValidationCall($tenant, null, ['outcome' => ValidationCallOutcome::Rejected, 'duration_ms' => 250]);
+    panelValidationCall($tenant, null, ['duration_ms' => 120]);
+
+    Livewire::test(PrePaymentValidationSettings::class)
+        ->assertSee(__('webhooks.validation.metrics.percent', ['value' => '50.0', 'count' => 1]))
+        ->assertSee(__('webhooks.validation.metrics.percent', ['value' => '0.0', 'count' => 0]))
+        ->assertSee(__('webhooks.validation.metrics.milliseconds', ['value' => 250]));
 });
 
 it('rotates the secret and removes the URL after re-authentication, warning about links created with validation', function (): void {

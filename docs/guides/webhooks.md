@@ -175,6 +175,7 @@ Never ship goods on the approval alone, and never on the payer returning to your
 ### What you see in the panel
 
 - The settings page lists the **recent calls** of the last 30 days: time, link, result, reason or failure, HTTP code and time taken. Test calls are marked as tests.
+- Above the list, **metrics** of the last 30 days: the share of calls you rejected, the share that failed (timeout, connection, invalid answer) and the p95 latency. Test calls and calls still waiting for your answer are not counted.
 - Each **link's detail** lists its validations: result, reason, failure and policy applied, whether it was charged and the time taken.
 - **Payments** (in the Payments menu) shows each payment's validation result and, in its timeline, every validation call.
 

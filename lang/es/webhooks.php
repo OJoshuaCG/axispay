@@ -359,6 +359,16 @@ return [
             'charge' => 'Cobrado',
             'block' => 'No cobrado',
         ],
+        'metrics' => [
+            'title' => 'Métricas',
+            'description' => 'Últimos :days días, :calls llamada(s) reales; no se cuentan las de prueba ni las que siguen esperando respuesta.',
+            'rejection_rate' => 'Rechazadas por usted',
+            'failure_rate' => 'Fallidas (timeout, conexión, respuesta inválida)',
+            'p95_latency' => 'Latencia (p95)',
+            'percent' => ':value % (:count)',
+            'milliseconds' => ':value ms',
+            'no_calls' => 'Aún no hay llamadas',
+        ],
         'calls' => [
             'title' => 'Llamadas recientes',
             'description' => 'Todas las llamadas de validación de los últimos 30 días, de la más reciente a la más antigua.',

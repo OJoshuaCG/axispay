@@ -358,6 +358,16 @@ return [
             'charge' => 'Charged',
             'block' => 'Not charged',
         ],
+        'metrics' => [
+            'title' => 'Metrics',
+            'description' => 'Last :days days, :calls real call(s); test calls and calls still waiting for an answer are not counted.',
+            'rejection_rate' => 'Rejected by you',
+            'failure_rate' => 'Failed (timeout, connection, invalid answer)',
+            'p95_latency' => 'Latency (p95)',
+            'percent' => ':value% (:count)',
+            'milliseconds' => ':value ms',
+            'no_calls' => 'No calls yet',
+        ],
         'calls' => [
             'title' => 'Recent calls',
             'description' => 'Every validation call of the last 30 days, newest first.',

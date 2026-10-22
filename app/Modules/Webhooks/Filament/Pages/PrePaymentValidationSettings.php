@@ -25,6 +25,7 @@ use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\ValidationCall;
 use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Services\ValidationCallMetrics;
 use App\Support\Filament\PanelDefaults;
 use BackedEnum;
 use Carbon\CarbonImmutable;
@@ -57,7 +58,8 @@ use SensitiveParameter;
  * ADR-0058), for the current mode: the URL, the failure policy explained in
  * plain words, whether new links use it by default, the secret (shown once,
  * rotated with 24 hours of overlap), removing it, "Test validation", the
- * alert after repeated failures and the recent calls. `webhooks:manage`;
+ * alert after repeated failures, the metrics (plan 15.8.7) and the recent
+ * calls. `webhooks:manage`;
  * every change goes through a Webhooks action, which re-checks the
  * permission, the re-authentication window and the SSRF protection.
  * "How it works" (IntegrationHelp) explains the call to the developer.
@@ -125,6 +127,7 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
                 ->visible($endpoint !== null && $endpoint->isFailing())
                 ->columnSpanFull(),
             $endpoint === null ? $this->notConfiguredSection() : $this->settingsSection($endpoint),
+            $this->metricsSection($endpoint !== null),
             Section::make(__('webhooks.validation.calls.title'))
                 ->description(__('webhooks.validation.calls.description'))
                 ->columnSpanFull()
@@ -219,6 +222,35 @@ final class PrePaymentValidationSettings extends Page implements HasTable, Prese
                     ->hiddenLabel()
                     ->state(__('webhooks.validation.page.how_it_works', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')])),
                 Actions::make([IntegrationHelp::hintAction('validationHelpFromSection', IntegrationHelp::VALIDATION_ACTION)]),
+            ]);
+    }
+
+    /** Plan 15.8.7: rejection rate, failure rate and p95 latency. */
+    private function metricsSection(bool $configured): Section
+    {
+        $hasCalls = ValidationCall::query()->exists();
+        $metrics = $configured || $hasCalls ? app(ValidationCallMetrics::class)->current() : null;
+        $none = __('webhooks.validation.metrics.no_calls');
+
+        return Section::make(__('webhooks.validation.metrics.title'))
+            ->description(fn (): string => $metrics !== null ? __('webhooks.validation.metrics.description', ['days' => $metrics->windowDays, 'calls' => $metrics->calls]) : '')
+            ->columnSpanFull()
+            ->visible($metrics !== null)
+            ->schema($metrics === null ? [] : [
+                Grid::make(['default' => 1, 'sm' => 3])->schema([
+                    TextEntry::make('metrics_rejection_rate')
+                        ->label(__('webhooks.validation.metrics.rejection_rate'))
+                        ->state($metrics->rejectionRate() !== null ? __('webhooks.validation.metrics.percent', ['value' => $metrics->rejectionRate(), 'count' => $metrics->rejected]) : null)
+                        ->placeholder($none),
+                    TextEntry::make('metrics_failure_rate')
+                        ->label(__('webhooks.validation.metrics.failure_rate'))
+                        ->state($metrics->failureRate() !== null ? __('webhooks.validation.metrics.percent', ['value' => $metrics->failureRate(), 'count' => $metrics->failed]) : null)
+                        ->placeholder($none),
+                    TextEntry::make('metrics_p95_latency')
+                        ->label(__('webhooks.validation.metrics.p95_latency'))
+                        ->state($metrics->p95LatencyMs !== null ? __('webhooks.validation.metrics.milliseconds', ['value' => $metrics->p95LatencyMs]) : null)
+                        ->placeholder($none),
+                ]),
             ]);
     }
 
