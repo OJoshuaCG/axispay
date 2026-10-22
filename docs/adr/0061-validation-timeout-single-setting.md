@@ -1,6 +1,6 @@
 # ADR-0061: One setting for the merchant validation timeout, every dependent limit derived from it
 
-- **Status:** Proposed. Requested by the integration with pbx-payments (2026-10-06), whose callback has to credit a balance and call external systems before it answers; it needs the owner's acceptance. Amends the 5-second total of plan 15.8.5, [ADR-0024](0024-pre-payment-validation.md), [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) and [ADR-0058](0058-pre-payment-validation-phase-5.md), and the time limits of [ADR-0051](0051-checkout-and-card-payments-phase-4.md).
+- **Status:** Accepted (owner, 2026-10-21). Requested by the integration with pbx-payments (2026-10-06), whose callback has to credit a balance and call external systems before it answers. Amends the 5-second total of plan 15.8.5, [ADR-0024](0024-pre-payment-validation.md), [ADR-0050](0050-linear-payment-flow-authorize-validate-capture.md) and [ADR-0058](0058-pre-payment-validation-phase-5.md), and the time limits of [ADR-0051](0051-checkout-and-card-payments-phase-4.md).
 - **Date:** 2026-10-06
 - **Source:** plan 15.8.5; ADR-0035, ADR-0036, ADR-0039 (container and deployment limits); the `cirox-payment-links` change (pbx-payments side: spec B1, design CX-1).
 
@@ -52,4 +52,4 @@ Where the validation really runs (verified in the code): only inside `CaptureAut
 - The merchant-facing texts (panel help, failure messages, guides, OpenAPI) say "30 seconds by default"; the panel reads the value in force from the configuration.
 - Tests that count seconds of the old budget, lease or job timeout pin T = 5 (`ValidationTestHelpers::pinValidationTimeout()`); `ValidationTimeoutsTest` proves the table above for every T from 5 to 60.
 - A larger T needs a longer stop grace period, more FPM workers in the worst case (a payer request lasts longer) and `retry_after` longer than before; the first two are operator decisions, the last is derived.
-- `docs/plans/master.md` still says "5 s" in section 15.8; this ADR supersedes it there until the plan is revised.
+- `docs/plans/master.md` (the pre-payment validation summary, 15.8.5, the checkout diagram, the risk table, the Phase 5 acceptance and decision 1d) was revised on acceptance to say 30 s by default.

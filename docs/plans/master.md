@@ -383,7 +383,7 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
   - **Opcional por tenant** y activable/desactivable **por link** (`pre_payment_validation: true|false` al crear, con default del tenant).
   - URL configurada en el panel (una por modo), firmada con el mismo esquema HMAC de Standard Webhooks y protegida con las mismas reglas SSRF.
   - Contrato de respuesta explícito: `approve` o `reject` (con código y mensaje opcional para el pagador).
-  - **Timeout total de 5 segundos.** Sin reintentos (salvo un reintento inmediato ante un fallo de conexión antes de enviar datos).
+  - **Timeout total configurable con `AXISPAY_VALIDATION_TIMEOUT_SECONDS`: 30 segundos por defecto, de 5 a 60 (ADR-0061).** Sin reintentos (salvo un reintento inmediato ante un fallo de conexión antes de enviar datos).
   - **Política ante fallo** (timeout, error, respuesta inválida) configurable por el tenant: `fail_closed` (**default**: no se cobra) o `fail_open` (se cobra de todas formas y se registra).
   - Detalle completo en la sección 15.8.
 - **Consecuencias:**
@@ -1238,12 +1238,12 @@ Pagador                   Checkout (nuestro backend)                    Stripe
    │                                 │    pre_payment_validation:          │
    │                                 │    (fuera del bloqueo de fila)      │
    │                                 │    POST firmado a la URL del tenant ──▶ Sistema del tenant
-   │                                 │    (timeout 5 s)  ◀── approve/reject ── │
+   │                                 │    (timeout 30 s) ◀── approve/reject ── │
    │     ┌── reject o fallo con fail_closed:                               │
    │◀────┤  {status: "rejected_by_merchant", message}  (NO se cobra)       │
    │     └──                         │                                     │
    │                                 │ re-bloquear link y re-verificar     │
-   │                                 │ estado (pudo cambiar en 5 s)        │
+   │                                 │ estado (pudo cambiar en 30 s)       │
    │                                 │                                     │
    │                                 │ crear o actualizar PaymentIntent ──▶│
    │                                 │ (monto/moneda final, metadata,      │
@@ -1818,7 +1818,7 @@ HTTP `200` con `Content-Type: application/json` y un cuerpo como:
 
 #### 15.8.5 Tiempos y fallos
 
-- Timeout de conexión de 2 segundos y **timeout total de 5 segundos**. El pagador ve un indicador de "Verificando tu pedido…".
+- Timeout de conexión de 2 segundos y **timeout total de `AXISPAY_VALIDATION_TIMEOUT_SECONDS` (30 segundos por defecto, de 5 a 60; ADR-0061)**; los demás límites del checkout, los jobs, la cola y el servidor web se derivan de ese valor. El pagador ve un indicador de "Verificando tu pedido…".
 - Un solo reintento inmediato **solo** ante un fallo de conexión (antes de enviar el cuerpo); nunca tras un timeout de lectura (el tenant pudo haber procesado la solicitud).
 - Son **fallos**: timeout, error de conexión o TLS, HTTP distinto de `200` (incluidos `3xx`, porque no se siguen redirecciones), JSON inválido, `decision` ausente o inválida, y destino bloqueado por SSRF.
 - Ante un fallo se aplica `failure_policy`:
@@ -2068,7 +2068,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | Toma de cuenta de un usuario | Panel | 2FA, rate limit de login, contraseñas no comprometidas, re-autenticación en acciones sensibles, notificaciones. |
 | **Robo de restricted keys de comercios** (método `api_key`) | BD, servidor, backups | Solo `rk_` (nunca `sk_`), validación de permisos, cifrado con `GATEWAY_CREDENTIALS_KEY` separada de `APP_KEY` y de los backups, sin revelado en el panel, nunca en logs ni jobs serializados, fingerprint único, health check y aceptación de riesgo registrada. |
 | CSRF o reutilización del código en el callback OAuth | Panel | `state` aleatorio de un solo uso ligado a la sesión, intercambio del código una sola vez con bloqueo. |
-| Servidor del tenant lento o caído en la validación previa | Checkout | Timeout de 5 s, política de fallo explícita, sin reintentos largos, llamada fuera de bloqueos de BD. |
+| Servidor del tenant lento o caído en la validación previa | Checkout | Timeout configurable (30 s por defecto, de 5 a 60; ADR-0061), política de fallo explícita, sin reintentos largos, llamada fuera de bloqueos de BD. |
 | Uso de la validación previa como vector SSRF o de saturación | Worker/checkout | Mismas reglas SSRF que los webhooks; la validación ocurre después de los rate limits y Turnstile. |
 | Redirección del dinero (cambiar la cuenta de Stripe) | Panel | `gateway:manage` muy restringido, re-autenticación, notificación a todos los owners y audit log. |
 | XSS | Checkout, panel | Escapado por defecto de Blade, CSP estricta, sin SVG, descripción como texto plano. |
@@ -2326,7 +2326,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 - `GET /v1/events`.
 - **Validación previa al cobro (15.8):** `validation_endpoints`, configuración en el panel, botón de prueba, integración en el flujo del checkout (fuera de bloqueos), políticas `fail_closed`/`fail_open`, `cancel_link`, `validation_calls`, visibilidad en el panel, campo `pre_payment_validation` en la API y bloque `pre_validation` en los pagos y webhooks.
 - Documentación para integradores (verificación de firma con ejemplos; contrato de la validación previa con ejemplos de servidor en PHP, Node y Python; recomendación de reserva de stock).
-- **Aceptación:** firmas verificables con una librería de Standard Webhooks; reintentos según el calendario; casos críticos 13, 23 y 24; entregas at-least-once probadas con fallos simulados; la validación previa agrega como máximo 5 segundos al checkout en el peor caso.
+- **Aceptación:** firmas verificables con una librería de Standard Webhooks; reintentos según el calendario; casos críticos 13, 23 y 24; entregas at-least-once probadas con fallos simulados; la validación previa agrega como máximo `AXISPAY_VALIDATION_TIMEOUT_SECONDS` (30 s por defecto) al checkout en el peor caso (ADR-0061).
 
 ### Fase 6 — Conversión de moneda
 
@@ -2393,7 +2393,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | 1a | Disponibilidad de OAuth para nuestra plataforma (Stripe no lo recomienda para plataformas nuevas) | `PENDIENTE` | Verificar en el dashboard de Connect o con el soporte de Stripe; si no está disponible, `oauth` queda deshabilitado | Fase 4B |
 | 1b | Mecanismo para validar que `pk_` y `rk_` pertenecen a la misma cuenta, y lista exacta de permisos de la restricted key | `PENDIENTE` | Spike de la fase 4B | Fase 4B |
 | 1c | Texto legal del aviso de riesgo del método `api_key` y cláusula de responsabilidad en el contrato | `PENDIENTE` | Redactar con asesoría legal | Fase 4B |
-| 1d | Política por defecto de la validación previa (`fail_closed` propuesto) y timeout (5 s propuesto) | `PROPUESTO` | Confirmar | Fase 5 |
+| 1d | Política por defecto de la validación previa (`fail_closed` propuesto) y timeout (30 s por defecto, de 5 a 60: decidido en ADR-0061, 2026-10-21) | `PROPUESTO` | Confirmar | Fase 5 |
 | 2 | País de la cuenta de plataforma en Stripe y países permitidos para cuentas conectadas (cross-border) | `PENDIENTE` | Verificar con la documentación y el soporte de Stripe antes de la fase 2 | Fase 2 |
 | 3 | Controller properties exactas y costos de Connect para la plataforma | `PENDIENTE` | Configuración equivalente a Standard (el comercio paga comisiones y pérdidas) | Fase 2 |
 | 4 | Destinatarios de correos: se interpretó "admin de la plataforma" como superadmins (alertas de plataforma) + usuarios del tenant (operativas) | `SUPUESTO` | Confirmar | Fase 9 |
