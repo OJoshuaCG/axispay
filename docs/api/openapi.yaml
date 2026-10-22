@@ -1343,11 +1343,11 @@ components:
     EventType:
       type: string
       description: |
-        Event types (plan 15.2). Sent today: `payment_link.opened`, `payment_link.paid`,
+        Event types (plan 15.2). All of them are sent: `payment_link.created`, `payment_link.opened`,
+        `payment_link.paid`, `payment_link.expired`, `payment_link.canceled` (ADR-0067),
         `payment.processing`, `payment.succeeded`, `payment.failed`, `payment.canceled`,
         `refund.created`, `refund.succeeded`, `refund.failed`, `dispute.created`, `dispute.closed`
-        (ADR-0066). Defined and subscribable but not sent until their phase: `payment_link.created`,
-        `payment_link.expired`, `payment_link.canceled`. `ping` (the panel's test event) is not subscribable
+        (ADR-0066). `ping` (the panel's test event) is not subscribable
         and is not in the event history. New types may be added: ignore the ones you do not know.
       enum:
         - payment_link.created
@@ -1706,8 +1706,11 @@ components:
 
         | Type | `object` | Other keys |
         |---|---|---|
+        | `payment_link.created` | `PaymentLink` | none |
         | `payment_link.opened` | `PaymentLink` | `open_count` (integer), `first_open` (boolean) |
         | `payment_link.paid` | `PaymentLink` | `payment` (`Payment`), `late_payment` (boolean) |
+        | `payment_link.expired` | `PaymentLink` (`status: expired`) | none |
+        | `payment_link.canceled` | `PaymentLink` (`status: canceled`, with `cancel_reason`) | none |
         | `payment.processing` | `Payment` | none |
         | `payment.succeeded` | `Payment` | `payment_link` (`PaymentLink`), `late_payment` (boolean) |
         | `payment.failed` | `Payment` | `failure_count` (integer), `failure_code` (string) |

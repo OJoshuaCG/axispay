@@ -463,7 +463,7 @@ return [
                 'live' => 'Cuando funcione, repita estos pasos en modo real con la URL de su servidor de producción.',
             ],
             'events_title' => 'Eventos que se envían hoy',
-            'events_note' => 'Los demás eventos de la lista (links creados, vencidos o cancelados, reembolsos y disputas) ya se pueden elegir, pero todavía no se envían. El evento de prueba es "ping".',
+            'events_note' => 'El evento de prueba es "ping": solo se envía con el botón "Enviar evento de prueba".',
             'request_title' => 'La petición',
             'request_intro' => 'Un POST con cuerpo JSON (Content-Type: application/json) y estos encabezados:',
             'headers' => [

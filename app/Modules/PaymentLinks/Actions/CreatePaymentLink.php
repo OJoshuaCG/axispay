@@ -17,6 +17,7 @@ use App\Modules\PaymentLinks\Data\LineItem;
 use App\Modules\PaymentLinks\Enums\CreatedVia;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Exceptions\PaymentLinkRejectedException;
+use App\Modules\PaymentLinks\Http\Presenters\PaymentLinkPresenter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
 use App\Modules\PaymentLinks\Services\LinkConversionCheck;
 use App\Modules\Shared\Http\Errors\ApiErrorCode;
@@ -29,6 +30,8 @@ use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantAccess;
 use App\Modules\Tenancy\TenantContext;
+use App\Modules\Webhooks\Enums\DomainEventType;
+use App\Modules\Webhooks\Services\DomainEventRecorder;
 use App\Modules\Webhooks\Services\ValidationEndpoints;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -61,6 +64,10 @@ use Illuminate\Support\Facades\Gate;
  * as is when the request body is the same, and `422 idempotency_key_reused`
  * when it differs, even after the idempotency record expired (defense in
  * depth under the idempotency records, plan 7.5, ADR-0048).
+ *
+ * A new link records `payment_link.created` in the insert's transaction
+ * (ADR-0067); an idempotent replay returns the existing link and records
+ * nothing, so the event is sent once per link.
  */
 final readonly class CreatePaymentLink
 {
@@ -73,6 +80,7 @@ final readonly class CreatePaymentLink
         private TenantAccess $access,
         private ValidationEndpoints $validationEndpoints,
         private LinkConversionCheck $conversionCheck,
+        private DomainEventRecorder $events,
     ) {}
 
     /**
@@ -157,6 +165,10 @@ final readonly class CreatePaymentLink
                     'livemode' => $livemode,
                     'expires_at' => IsoDateTime::format($expiresAt),
                 ], actor: $creation->actor);
+
+                $this->events->record(DomainEventType::PaymentLinkCreated, 'payment_link', $link->id, [
+                    'payment_link' => PaymentLinkPresenter::toApi($link),
+                ]);
 
                 // Every column has its value in memory (model defaults, the
                 // timestamps set by save()), so no re-read is needed.

@@ -7,7 +7,10 @@ namespace App\Modules\PaymentLinks\Services;
 use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
 use App\Modules\PaymentLinks\Events\PaymentLinkClosed;
 use App\Modules\PaymentLinks\Exceptions\InvalidStateTransition;
+use App\Modules\PaymentLinks\Http\Presenters\PaymentLinkPresenter;
 use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Webhooks\Enums\DomainEventType;
+use App\Modules\Webhooks\Services\DomainEventRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -25,9 +28,18 @@ use Illuminate\Support\Facades\Log;
  * Callers pass a row they locked with lockForUpdate() inside a transaction;
  * apply() refuses to run outside one. An invalid transition is logged and
  * throws InvalidStateTransition.
+ *
+ * Expiring and canceling record `payment_link.expired` / `payment_link.canceled`
+ * here, in the caller's transaction (outbox rule, rules.md rule 7): every path
+ * that closes a link (the expiry job, the API, the panel, a disconnected
+ * gateway, a closed tenant, a merchant rejection, an attempt that ends after
+ * the expiry) goes through these two methods, so none can skip the event
+ * (ADR-0067).
  */
 final class PaymentLinkStateMachine
 {
+    public function __construct(private readonly DomainEventRecorder $events) {}
+
     /** @var array<string, list<PaymentLinkStatus>> */
     private const array TRANSITIONS = [
         'active' => [PaymentLinkStatus::Processing, PaymentLinkStatus::Paid, PaymentLinkStatus::Expired, PaymentLinkStatus::Canceled],
@@ -45,15 +57,21 @@ final class PaymentLinkStateMachine
 
     public function expire(PaymentLink $locked): PaymentLink
     {
-        return $this->apply($locked, PaymentLinkStatus::Expired, ['expired_at' => CarbonImmutable::now()]);
+        $expired = $this->apply($locked, PaymentLinkStatus::Expired, ['expired_at' => CarbonImmutable::now()]);
+        $this->recordClosed(DomainEventType::PaymentLinkExpired, $expired);
+
+        return $expired;
     }
 
     public function cancel(PaymentLink $locked, ?string $reason): PaymentLink
     {
-        return $this->apply($locked, PaymentLinkStatus::Canceled, [
+        $canceled = $this->apply($locked, PaymentLinkStatus::Canceled, [
             'canceled_at' => CarbonImmutable::now(),
             'cancel_reason' => $reason,
         ]);
+        $this->recordClosed(DomainEventType::PaymentLinkCanceled, $canceled);
+
+        return $canceled;
     }
 
     /** An attempt started a payment (bank verification, authorized, processing). */
@@ -110,5 +128,16 @@ final class PaymentLinkStateMachine
         }
 
         return $locked;
+    }
+
+    /**
+     * The link object as the API shows it right after the transition; the
+     * cancellation reason travels in it (`cancel_reason`).
+     */
+    private function recordClosed(DomainEventType $type, PaymentLink $closed): void
+    {
+        $this->events->record($type, 'payment_link', $closed->id, [
+            'payment_link' => PaymentLinkPresenter::toApi($closed),
+        ]);
     }
 }

@@ -462,7 +462,7 @@ return [
                 'live' => 'When it works, repeat these steps in live mode with the URL of your production server.',
             ],
             'events_title' => 'Events sent today',
-            'events_note' => 'The other events of the list (links created, expired or canceled, refunds and disputes) can already be chosen but are not sent yet. The test event is "ping".',
+            'events_note' => 'The test event is "ping": it is sent only from the "Send test event" button.',
             'request_title' => 'The request',
             'request_intro' => 'A POST with a JSON body (Content-Type: application/json) and these headers:',
             'headers' => [
