@@ -161,12 +161,18 @@ html.fi {
     input.fi-input,
     .fi-select-input,
     .fi-fo-textarea textarea,
-    .fi-otp-input-ctn input {
+    .fi-one-time-code-input-digit {
         font-size: var(--text-base);
     }
 
     input.fi-input {
         min-height: var(--spacing-touch);
+    }
+
+    /* Filament sizes the 2FA code group to its digits (w-fit) and leaves it
+       at the start of the card; centre it under the centred card heading. */
+    .fi-one-time-code-input-ctn {
+        margin-inline: auto;
     }
 }
 
