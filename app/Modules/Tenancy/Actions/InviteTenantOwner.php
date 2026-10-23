@@ -7,9 +7,9 @@ namespace App\Modules\Tenancy\Actions;
 use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Identity\Actions\InviteUser;
 use App\Modules\Identity\Data\InviteUserData;
+use App\Modules\Identity\Data\IssuedInvitation;
 use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
-use App\Modules\Identity\Models\UserInvitation;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
@@ -37,11 +37,11 @@ final readonly class InviteTenantOwner
      * @throws EmailNotAvailableException
      * @throws InvitationNotAllowedException when the tenant is over the invitation limit
      */
-    public function handle(PlatformAdmin $actor, Tenant $tenant, string $email): UserInvitation
+    public function handle(PlatformAdmin $actor, Tenant $tenant, string $email): IssuedInvitation
     {
         Gate::forUser($actor)->authorize('sendInvitations', $tenant);
 
-        return $this->context->runAsTenant($tenant->id, false, fn (): UserInvitation => $this->inviteUser->handle(
+        return $this->context->runAsTenant($tenant->id, false, fn (): IssuedInvitation => $this->inviteUser->handle(
             new InviteUserData(email: $email, role: SystemRole::Owner),
             invitedBy: null,
             platformAdmin: $actor,

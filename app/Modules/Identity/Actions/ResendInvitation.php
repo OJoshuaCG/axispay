@@ -8,6 +8,7 @@ use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
+use App\Modules\Identity\Data\IssuedInvitation;
 use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
 use App\Modules\Identity\Exceptions\InvitationNotPendingException;
@@ -29,7 +30,8 @@ use Illuminate\Support\Facades\Gate;
  * row. Only the SHA-256 of the token is stored, so replacing it invalidates
  * the previous link at once (the lookup by hash no longer finds it, 410).
  * Accepted and revoked invitations are final. Platform only (superadmin),
- * throttled with the tenant's invitation limit, audited.
+ * throttled with the tenant's invitation limit, audited. Returns the e-mailed
+ * link too, which the platform panel shows once (ADR-0068).
  */
 final readonly class ResendInvitation
 {
@@ -47,13 +49,13 @@ final readonly class ResendInvitation
      * @throws EmailNotAvailableException when the address has an account by now
      * @throws InvitationNotAllowedException when the tenant is over the invitation limit
      */
-    public function handle(PlatformAdmin $actor, UserInvitation $invitation): UserInvitation
+    public function handle(PlatformAdmin $actor, UserInvitation $invitation): IssuedInvitation
     {
         $tenant = Tenant::query()->findOrFail($invitation->tenant_id);
 
         Gate::forUser($actor)->authorize('sendInvitations', $tenant);
 
-        return $this->context->runAsTenant($tenant->id, false, function () use ($actor, $invitation, $tenant): UserInvitation {
+        return $this->context->runAsTenant($tenant->id, false, function () use ($actor, $invitation, $tenant): IssuedInvitation {
             $this->throttle->hit($tenant->id);
 
             $token = $this->tokens->generate();
@@ -85,9 +87,10 @@ final readonly class ResendInvitation
                 return $locked;
             });
 
-            $this->mailer->send($resent->email, $token, SystemRole::from($resent->role_name), $expiresAt, $tenant->id);
+            $acceptUrl = $this->mailer->acceptUrl($token, $expiresAt);
+            $this->mailer->send($resent->email, $acceptUrl, SystemRole::from($resent->role_name), $expiresAt, $tenant->id);
 
-            return $resent;
+            return new IssuedInvitation($resent, $acceptUrl);
         });
     }
 }

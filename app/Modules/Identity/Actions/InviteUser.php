@@ -9,6 +9,7 @@ use App\Modules\Audit\Data\Actor;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Data\InviteUserData;
+use App\Modules\Identity\Data\IssuedInvitation;
 use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
 use App\Modules\Identity\Models\User;
@@ -27,7 +28,8 @@ use Illuminate\Support\Facades\Gate;
 /**
  * Invites someone to the current tenant with a predefined role (plan 17.3):
  * single-use token, 72-hour expiry, signed link. A new invitation for the same
- * e-mail revokes the previous pending one.
+ * e-mail revokes the previous pending one. Returns the e-mailed link too,
+ * which the platform panel shows once (ADR-0068).
  *
  * `invitedBy` is null when the platform invites the owner of a tenant
  * (CreateTenant, InviteTenantOwner). Those callers authorize the platform
@@ -48,7 +50,7 @@ final readonly class InviteUser
         private InvitationMailer $mailer,
     ) {}
 
-    public function handle(InviteUserData $data, ?User $invitedBy, ?PlatformAdmin $platformAdmin = null): UserInvitation
+    public function handle(InviteUserData $data, ?User $invitedBy, ?PlatformAdmin $platformAdmin = null): IssuedInvitation
     {
         $tenantId = $this->context->idOrFail(UserInvitation::class);
 
@@ -121,8 +123,9 @@ final readonly class InviteUser
             return $invitation;
         });
 
-        $this->mailer->send($email, $token, $data->role, $expiresAt, $tenantId);
+        $acceptUrl = $this->mailer->acceptUrl($token, $expiresAt);
+        $this->mailer->send($email, $acceptUrl, $data->role, $expiresAt, $tenantId);
 
-        return $invitation;
+        return new IssuedInvitation($invitation, $acceptUrl);
     }
 }

@@ -11,6 +11,7 @@ use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Exceptions\InvitationNotAllowedException;
 use App\Modules\Identity\Exceptions\InvitationNotPendingException;
 use App\Modules\Identity\Models\UserInvitation;
+use App\Modules\PlatformAdmin\Filament\Concerns\ShowsInvitationLink;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformPii;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
@@ -33,6 +34,7 @@ use Livewire\Attributes\On;
  * Invitations of the viewed tenant (ADR-0043): list, invite an owner,
  * resend (pending or expired) and revoke (pending). Presentation only; every
  * change goes through an Action, which authorizes the platform admin itself.
+ * Inviting and resending show the new link once (ADR-0068).
  *
  * The admin panel has no tenant context, so the query drops the fail-closed
  * tenant scope and keeps the relation's `tenant_id = owner` constraint. The
@@ -41,6 +43,8 @@ use Livewire\Attributes\On;
  */
 final class InvitationsRelationManager extends RelationManager
 {
+    use ShowsInvitationLink;
+
     protected static string $relationship = 'invitations';
 
     public static function getTitle(Model $ownerRecord, string $pageClass): string
@@ -118,14 +122,15 @@ final class InvitationsRelationManager extends RelationManager
                 $email = is_string($data['email'] ?? null) ? $data['email'] : '';
 
                 try {
-                    app(InviteTenantOwner::class)->handle(PlatformActor::current(), $this->tenant(), $email);
+                    $issued = app(InviteTenantOwner::class)->handle(PlatformActor::current(), $this->tenant(), $email);
                 } catch (EmailNotAvailableException|InvitationNotAllowedException $e) {
                     self::failure($e);
                     $action->halt();
+
+                    return;
                 }
 
-                $this->dispatch('tenant-ownership-changed');
-                Notification::make()->success()->title(__('platform.tenants.invitations.notifications.invited'))->send();
+                $this->showInvitationLink($issued, __('platform.tenants.invitations.notifications.invited'));
             });
     }
 
@@ -140,15 +145,25 @@ final class InvitationsRelationManager extends RelationManager
             ->modalDescription(__('platform.tenants.invitations.actions.resend_confirm'))
             ->action(function (UserInvitation $record, Action $action): void {
                 try {
-                    app(ResendInvitation::class)->handle(PlatformActor::current(), $record);
+                    $issued = app(ResendInvitation::class)->handle(PlatformActor::current(), $record);
                 } catch (InvitationNotPendingException|EmailNotAvailableException|InvitationNotAllowedException $e) {
                     self::failure($e);
                     $action->halt();
+
+                    return;
                 }
 
-                $this->dispatch('tenant-ownership-changed');
-                Notification::make()->success()->title(__('platform.tenants.invitations.notifications.resent'))->send();
+                $this->showInvitationLink($issued, __('platform.tenants.invitations.notifications.resent'));
             });
+    }
+
+    /**
+     * Refreshes the view page's warning and this list once the link dialog
+     * is closed (the event re-renders this component too).
+     */
+    protected function afterInvitationLinkClosed(): void
+    {
+        $this->dispatch('tenant-ownership-changed');
     }
 
     private function revokeAction(): Action

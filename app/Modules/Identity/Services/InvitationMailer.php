@@ -13,18 +13,24 @@ use Illuminate\Support\Facades\URL;
 use SensitiveParameter;
 
 /**
- * Sends the invitation e-mail (plan 22): a temporary signed link that expires
- * with the invitation. Used by InviteUser and ResendInvitation. Must be called
- * inside the invitation's tenant context.
+ * Builds the invitation link and sends the invitation e-mail (plan 22): a
+ * temporary signed link that expires with the invitation. Used by InviteUser
+ * and ResendInvitation, which also hand the same link to the platform panel
+ * (ADR-0068). `send` must be called inside the invitation's tenant context.
  */
 final class InvitationMailer
 {
-    public function send(string $email, #[SensitiveParameter] string $token, SystemRole $role, CarbonImmutable $expiresAt, string $tenantId): void
+    public function acceptUrl(#[SensitiveParameter] string $token, CarbonImmutable $expiresAt): string
+    {
+        return URL::temporarySignedRoute('invitations.show', $expiresAt, ['token' => $token]);
+    }
+
+    public function send(string $email, #[SensitiveParameter] string $acceptUrl, SystemRole $role, CarbonImmutable $expiresAt, string $tenantId): void
     {
         $tenant = Tenant::query()->findOrFail($tenantId);
 
         Notification::route('mail', $email)->notify(new UserInvitationNotification(
-            acceptUrl: URL::temporarySignedRoute('invitations.show', $expiresAt, ['token' => $token]),
+            acceptUrl: $acceptUrl,
             tenantName: $tenant->display_name,
             roleLabel: $role->label(),
             expiresAt: $expiresAt,

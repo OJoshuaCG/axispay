@@ -56,7 +56,7 @@ it('creates a tenant from the panel through the CreateTenant action', function (
     Notification::fake();
     actingAsPlatformAdmin(platformAdmin());
 
-    Livewire::test(CreateTenant::class)
+    $component = Livewire::test(CreateTenant::class)
         ->fillForm([
             'legal_name' => 'Panel Co S.A.',
             'display_name' => 'Panel Co',
@@ -67,8 +67,15 @@ it('creates a tenant from the panel through the CreateTenant action', function (
         ->call('create')
         ->assertHasNoFormErrors();
 
-    expect(Tenant::query()->where('display_name', 'Panel Co')->sole()->status)->toBe(TenantStatus::PendingOnboarding)
+    $tenant = Tenant::query()->where('display_name', 'Panel Co')->sole();
+    expect($tenant->status)->toBe(TenantStatus::PendingOnboarding)
         ->and(AuditLog::query()->withoutGlobalScopes()->where('action', AuditAction::TenantCreated->value)->count())->toBe(1);
+
+    // The owner's link is shown once before going to the view page (ADR-0068).
+    $component->assertActionMounted('showInvitationLink');
+    $component->assertNoRedirect();
+    $component->callMountedAction();
+    $component->assertRedirectContains('/tenants/'.$tenant->id);
 });
 
 it('changes the tenant status from the view page', function (): void {

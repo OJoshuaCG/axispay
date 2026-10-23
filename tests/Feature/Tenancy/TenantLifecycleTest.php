@@ -28,7 +28,7 @@ it('creates a tenant in pending_onboarding, audited, and invites its owner', fun
         legalName: 'Acme S.A. de C.V.',
         displayName: 'Acme',
         ownerEmail: 'Owner@Acme.test',
-    ));
+    ))->tenant;
 
     expect($tenant->status)->toBe(TenantStatus::PendingOnboarding);
 

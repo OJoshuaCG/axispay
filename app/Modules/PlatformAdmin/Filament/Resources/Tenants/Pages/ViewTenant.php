@@ -16,6 +16,7 @@ use App\Modules\Identity\Exceptions\InvitationNotPendingException;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserInvitation;
 use App\Modules\PlatformAdmin\Enums\TenantOwnershipState;
+use App\Modules\PlatformAdmin\Filament\Concerns\ShowsInvitationLink;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\TenantResource;
 use App\Modules\PlatformAdmin\Filament\Support\ImpersonationUi;
 use App\Modules\PlatformAdmin\Filament\Support\PlatformActor;
@@ -52,6 +53,8 @@ use Livewire\Attributes\On;
 
 final class ViewTenant extends ViewRecord
 {
+    use ShowsInvitationLink;
+
     protected static string $resource = TenantResource::class;
 
     /** Per-request memo of the ownership state (several closures read it). */
@@ -258,14 +261,16 @@ final class ViewTenant extends ViewRecord
             ])
             ->action(function (array $data, Action $action): void {
                 try {
-                    app(InviteTenantOwner::class)->handle(PlatformActor::current(), $this->tenant(), is_string($data['email'] ?? null) ? $data['email'] : '');
+                    $issued = app(InviteTenantOwner::class)->handle(PlatformActor::current(), $this->tenant(), is_string($data['email'] ?? null) ? $data['email'] : '');
                 } catch (EmailNotAvailableException|InvitationNotAllowedException $e) {
                     self::invitationFailure($e);
                     $action->halt();
+
+                    return;
                 }
 
-                $this->ownershipChanged();
-                Notification::make()->success()->title(__('platform.tenants.invitations.notifications.invited'))->send();
+                $this->refreshOwnership();
+                $this->showInvitationLink($issued, __('platform.tenants.invitations.notifications.invited'));
             });
     }
 
@@ -289,19 +294,24 @@ final class ViewTenant extends ViewRecord
                 }
 
                 try {
-                    app(ResendInvitation::class)->handle(PlatformActor::current(), $invitation);
+                    $issued = app(ResendInvitation::class)->handle(PlatformActor::current(), $invitation);
                 } catch (InvitationNotPendingException|EmailNotAvailableException|InvitationNotAllowedException $e) {
                     self::invitationFailure($e);
                     $action->halt();
+
+                    return;
                 }
 
-                $this->ownershipChanged();
-                Notification::make()->success()->title(__('platform.tenants.invitations.notifications.resent'))->send();
+                $this->refreshOwnership();
+                $this->showInvitationLink($issued, __('platform.tenants.invitations.notifications.resent'));
             });
     }
 
-    /** Refreshes the warning here and the lists in the relation managers. */
-    private function ownershipChanged(): void
+    /**
+     * Refreshes the warning here and the lists in the relation managers once
+     * the link dialog is closed (the event re-renders this page too).
+     */
+    protected function afterInvitationLinkClosed(): void
     {
         $this->refreshOwnership();
         $this->dispatch('tenant-ownership-changed');

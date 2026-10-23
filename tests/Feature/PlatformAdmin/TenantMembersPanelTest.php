@@ -6,6 +6,7 @@ use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Audit\Models\AuditLog;
 use App\Modules\Identity\Enums\InvitationStatus;
 use App\Modules\Identity\Models\UserInvitation;
+use App\Modules\Identity\Notifications\UserInvitationNotification;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\EditTenant;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\Pages\ViewTenant;
 use App\Modules\PlatformAdmin\Filament\Resources\Tenants\RelationManagers\InvitationsRelationManager;
@@ -46,7 +47,41 @@ function usersManager(Tenant $tenant): Testable
 
 function platformInvitation(Tenant $tenant, string $email): UserInvitation
 {
-    return app(InviteTenantOwner::class)->handle(platformAdmin(), $tenant, $email);
+    return app(InviteTenantOwner::class)->handle(platformAdmin(), $tenant, $email)->invitation;
+}
+
+/** The accept link of the last invitation e-mail sent (Notification::fake()). */
+function lastEmailedInvitationUrl(): string
+{
+    $url = '';
+
+    Notification::assertSentOnDemand(UserInvitationNotification::class, function (UserInvitationNotification $notification) use (&$url): bool {
+        $url = $notification->acceptUrl;
+
+        return true;
+    });
+
+    return $url;
+}
+
+/**
+ * The link dialog (ADR-0068) shows the e-mailed link, which never reaches the
+ * Livewire snapshot, and closing it removes the link from the page.
+ *
+ * @param  Testable<InvitationsRelationManager>  $component
+ */
+function assertShowsInvitationLinkOnce(Testable $component): void
+{
+    $url = lastEmailedInvitationUrl();
+    $token = basename((string) parse_url($url, PHP_URL_PATH));
+
+    $component->assertActionMounted('showInvitationLink');
+    $component->assertMountedActionModalSee($url);
+    expect((string) json_encode($component->__get('snapshot')))->not->toContain($token);
+
+    $component->callMountedAction();
+    $component->assertActionNotMounted('showInvitationLink');
+    expect($component->html())->not->toContain($token);
 }
 
 it('edits the tenant profile from the edit page, without the owner or status fields', function (): void {
@@ -102,10 +137,13 @@ it('invites an owner from the invitations list', function (): void {
     actingAsPlatformAdmin(platformAdmin());
     $tenant = activeTenant(TenantStatus::PendingOnboarding);
 
-    invitationsManager($tenant)
+    $component = invitationsManager($tenant)
         ->callAction(TestAction::make('inviteOwner')->table(), ['email' => 'panel@owner.test'])
-        ->assertHasNoActionErrors()
-        ->assertSee('panel@owner.test');
+        ->assertHasNoActionErrors();
+
+    assertShowsInvitationLinkOnce($component);
+    $component->assertNotified(__('platform.tenants.invitations.notifications.invited'));
+    $component->assertSee('panel@owner.test');
 });
 
 it('resends and revokes from the list', function (): void {
@@ -116,10 +154,15 @@ it('resends and revokes from the list', function (): void {
     $toRevoke = platformInvitation($tenant, 'revoke@panel.test');
     $hash = $toResend->token_hash;
 
-    invitationsManager($tenant)
+    $component = invitationsManager($tenant)
         ->callAction(TestAction::make('resend')->table($toResend))
-        ->assertHasNoActionErrors()
-        ->callAction(TestAction::make('revoke')->table($toRevoke))
+        ->assertHasNoActionErrors();
+
+    // The dialog shows the new link, the one whose hash is now stored.
+    assertShowsInvitationLinkOnce($component);
+    expect($toResend->refresh()->token_hash)->toBe(hash('sha256', basename((string) parse_url(lastEmailedInvitationUrl(), PHP_URL_PATH))));
+
+    $component->callAction(TestAction::make('revoke')->table($toRevoke))
         ->assertHasNoActionErrors();
 
     expect($toResend->refresh()->token_hash)->not->toBe($hash)

@@ -206,11 +206,18 @@ it('invites an owner from the warning on the tenant view', function (): void {
     actingAsPlatformAdmin(platformAdmin());
     $tenant = activeTenant();
 
-    Livewire::test(ViewTenant::class, ['record' => $tenant->id])
+    $component = Livewire::test(ViewTenant::class, ['record' => $tenant->id])
         ->callAction(TestAction::make('inviteOwner')->schemaComponent('ownership', 'infolist'), ['email' => 'quick@owner.test'])
         ->assertHasNoActionErrors();
 
     expect(app(TenantOwnership::class)->stateOf($tenant))->toBe(TenantOwnershipState::PendingInvitation);
+
+    // The link is shown once; closing the dialog refreshes the lists.
+    $component->assertActionMounted('showInvitationLink');
+    $component->callMountedAction();
+    $component->assertActionNotMounted('showInvitationLink');
+    $component->assertDispatched('tenant-ownership-changed');
+    $component->assertNotified(__('platform.tenants.invitations.notifications.invited'));
 });
 
 // --- Promote to owner: the action -------------------------------------------

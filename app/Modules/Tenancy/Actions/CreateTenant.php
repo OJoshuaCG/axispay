@@ -10,9 +10,11 @@ use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Actions\InviteUser;
 use App\Modules\Identity\Data\InviteUserData;
+use App\Modules\Identity\Data\IssuedInvitation;
 use App\Modules\Identity\Exceptions\EmailNotAvailableException;
 use App\Modules\Identity\Services\UserDirectory;
 use App\Modules\PlatformAdmin\Models\PlatformAdmin;
+use App\Modules\Tenancy\Data\CreatedTenant;
 use App\Modules\Tenancy\Data\CreateTenantData;
 use App\Modules\Tenancy\Enums\TenantStatus;
 use App\Modules\Tenancy\Models\Tenant;
@@ -31,6 +33,8 @@ use Illuminate\Validation\ValidationException;
  * payment gateway. It must not belong to an existing user, because e-mails
  * are unique across the platform (plan 7.2); that is checked before anything
  * is written, so a refused e-mail never leaves a half-created tenant.
+ * Returns the owner invitation with its link, which the panel shows once
+ * (ADR-0068).
  */
 final readonly class CreateTenant
 {
@@ -45,7 +49,7 @@ final readonly class CreateTenant
      * @throws ValidationException when the owner e-mail is missing, invalid or already registered
      * @throws EmailNotAvailableException when the e-mail was registered concurrently
      */
-    public function handle(PlatformAdmin $actor, CreateTenantData $data): Tenant
+    public function handle(PlatformAdmin $actor, CreateTenantData $data): CreatedTenant
     {
         Gate::forUser($actor)->authorize('create', Tenant::class);
 
@@ -56,7 +60,7 @@ final readonly class CreateTenant
             throw ValidationException::withMessages(['owner_email' => __('platform.tenants.errors.owner_email_taken')]);
         }
 
-        return DB::transaction(function () use ($actor, $data, $ownerEmail): Tenant {
+        return DB::transaction(function () use ($actor, $data, $ownerEmail): CreatedTenant {
             $tenant = new Tenant([
                 'legal_name' => $data->legalName,
                 'display_name' => $data->displayName,
@@ -74,13 +78,13 @@ final readonly class CreateTenant
                 'status' => $tenant->status->value,
             ], tenantId: $tenant->id, actor: Actor::platformAdmin($actor->id));
 
-            $this->context->runAsTenant($tenant->id, false, fn () => $this->inviteUser->handle(
+            $ownerInvitation = $this->context->runAsTenant($tenant->id, false, fn (): IssuedInvitation => $this->inviteUser->handle(
                 new InviteUserData(email: $ownerEmail, role: SystemRole::Owner),
                 invitedBy: null,
                 platformAdmin: $actor,
             ));
 
-            return $tenant;
+            return new CreatedTenant($tenant, $ownerInvitation);
         });
     }
 

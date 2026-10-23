@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Owner invitation link shown once** (ADR-0068, proposed): after creating a
+  tenant, inviting an owner or resending an invitation, the platform panel
+  shows the accept link once with a Copy button, so a superadmin can share it
+  by hand when the e-mail does not arrive. The e-mail is still sent, and a
+  resend or a new invitation still invalidates the previous link.
 - **Phase 5 gap closure** (ADR-0067, proposed): the webhook events
   `payment_link.created`, `payment_link.expired` and `payment_link.canceled`
   are now sent (`data.object` is the link; `cancel_reason` says why it was

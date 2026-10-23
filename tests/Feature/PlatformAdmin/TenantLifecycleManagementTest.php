@@ -142,7 +142,8 @@ it('invites an owner to an existing tenant through InviteUser, attributed to the
     $admin = platformAdmin();
     $tenant = activeTenant(TenantStatus::PendingOnboarding);
 
-    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'Owner@Late.test');
+    $issued = app(InviteTenantOwner::class)->handle($admin, $tenant, 'Owner@Late.test');
+    $invitation = $issued->invitation;
 
     expect($invitation->tenant_id)->toBe($tenant->id)
         ->and($invitation->email)->toBe('owner@late.test')
@@ -156,7 +157,8 @@ it('invites an owner to an existing tenant through InviteUser, attributed to the
         ->and($audit->actor_id)->toBe($admin->id)
         ->and($audit->changes)->toMatchArray(['role' => 'owner', 'source' => 'platform']);
 
-    expect(sentInvitationUrls())->toHaveCount(1);
+    // The panel shows the same link that was e-mailed (ADR-0068).
+    expect(sentInvitationUrls())->toBe([$issued->acceptUrl]);
 });
 
 it('refuses an owner invitation to an address registered on the platform', function (): void {
@@ -193,11 +195,14 @@ it('resends with a new token and expiry, so the old link stops working and the n
     Notification::fake();
     $admin = platformAdmin();
     $tenant = activeTenant();
-    $original = app(InviteTenantOwner::class)->handle($admin, $tenant, 'owner@resend.test');
+    $original = app(InviteTenantOwner::class)->handle($admin, $tenant, 'owner@resend.test')->invitation;
     travel(2)->hours();
 
-    $resent = app(ResendInvitation::class)->handle($admin, $original);
+    $issued = app(ResendInvitation::class)->handle($admin, $original);
+    $resent = $issued->invitation;
     [$oldUrl, $newUrl] = sentInvitationUrls();
+
+    expect($issued->acceptUrl)->toBe($newUrl);
 
     expect($resent->id)->toBe($original->id)
         ->and($resent->token_hash)->not->toBe($original->token_hash)
@@ -217,12 +222,12 @@ it('resends with a new token and expiry, so the old link stops working and the n
 it('resends an expired invitation with a fresh 72-hour window', function (): void {
     Notification::fake();
     $admin = platformAdmin();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'late@resend.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'late@resend.test')->invitation;
     travel(73)->hours();
 
     expect($invitation->refresh()->status())->toBe(InvitationStatus::Expired);
 
-    $resent = app(ResendInvitation::class)->handle($admin, $invitation);
+    $resent = app(ResendInvitation::class)->handle($admin, $invitation)->invitation;
 
     expect($resent->status())->toBe(InvitationStatus::Pending)
         ->and($resent->expires_at->diffInHours(now(), true))->toBeGreaterThan(71.9);
@@ -232,7 +237,7 @@ it('does not resend accepted or revoked invitations', function (string $final): 
     Notification::fake();
     $admin = platformAdmin();
     $tenant = activeTenant();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'final@resend.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'final@resend.test')->invitation;
 
     if ($final === 'revoked') {
         app(RevokeInvitation::class)->handle($admin, $invitation);
@@ -251,7 +256,7 @@ it('throttles resends with the tenant invitation limit', function (): void {
     Notification::fake();
     config(['axispay.invitations.max_per_hour' => 2]);
     $admin = platformAdmin();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'loop@resend.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'loop@resend.test')->invitation;
 
     app(ResendInvitation::class)->handle($admin, $invitation);
 
@@ -260,7 +265,7 @@ it('throttles resends with the tenant invitation limit', function (): void {
 
 it('lets only superadmins resend', function (): void {
     Notification::fake();
-    $invitation = app(InviteTenantOwner::class)->handle(platformAdmin(), activeTenant(), 'x@resend.test');
+    $invitation = app(InviteTenantOwner::class)->handle(platformAdmin(), activeTenant(), 'x@resend.test')->invitation;
 
     app(ResendInvitation::class)->handle(platformAdmin(superadmin: false), $invitation);
 })->throws(AuthorizationException::class);
@@ -271,7 +276,7 @@ it('revokes a pending invitation, audited, and its link stops working', function
     Notification::fake();
     $admin = platformAdmin();
     $tenant = activeTenant();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'gone@revoke.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'gone@revoke.test')->invitation;
 
     $revoked = app(RevokeInvitation::class)->handle($admin, $invitation);
 
@@ -287,7 +292,7 @@ it('revokes a pending invitation, audited, and its link stops working', function
 it('revokes pending invitations only', function (): void {
     Notification::fake();
     $admin = platformAdmin();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'old@revoke.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, activeTenant(), 'old@revoke.test')->invitation;
     travel(73)->hours();
 
     app(RevokeInvitation::class)->handle($admin, $invitation);
@@ -297,7 +302,7 @@ it('still lets a superadmin revoke a pending invitation after closing the tenant
     Notification::fake();
     $admin = platformAdmin();
     $tenant = activeTenant();
-    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'closing@revoke.test');
+    $invitation = app(InviteTenantOwner::class)->handle($admin, $tenant, 'closing@revoke.test')->invitation;
     $tenant->forceFill(['status' => TenantStatus::Closed])->save();
 
     expect(app(RevokeInvitation::class)->handle($admin, $invitation)->status())->toBe(InvitationStatus::Revoked);
@@ -305,7 +310,7 @@ it('still lets a superadmin revoke a pending invitation after closing the tenant
 
 it('lets only superadmins revoke', function (): void {
     Notification::fake();
-    $invitation = app(InviteTenantOwner::class)->handle(platformAdmin(), activeTenant(), 'x@revoke.test');
+    $invitation = app(InviteTenantOwner::class)->handle(platformAdmin(), activeTenant(), 'x@revoke.test')->invitation;
 
     app(RevokeInvitation::class)->handle(platformAdmin(superadmin: false), $invitation);
 })->throws(AuthorizationException::class);
