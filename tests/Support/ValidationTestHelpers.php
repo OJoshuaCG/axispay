@@ -11,8 +11,10 @@ use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\TenantContext;
 use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
+use App\Modules\Webhooks\Enums\WebhookEndpointStatus;
+use App\Modules\Webhooks\Enums\WebhookEventType;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Services\WebhookSigner;
 use Closure;
 use GuzzleHttp\Promise\PromiseInterface;
@@ -27,20 +29,24 @@ final class ValidationTestHelpers
     public const string URL = 'https://validate.merchant.example/axispay/validate';
 
     /**
-     * An endpoint written directly (the actions are tested on their own).
+     * A webhook endpoint subscribed to the pre-payment validation, written
+     * directly (the actions are tested on their own).
      *
      * @param  array<string, mixed>  $attributes
      */
-    public static function endpoint(Tenant|string $tenant, bool $livemode = false, array $attributes = []): ValidationEndpoint
+    public static function endpoint(Tenant|string $tenant, bool $livemode = false, array $attributes = []): WebhookEndpoint
     {
-        return self::in($tenant, $livemode, static function () use ($livemode, $attributes): ValidationEndpoint {
-            $endpoint = new ValidationEndpoint;
+        return self::in($tenant, $livemode, static function () use ($livemode, $attributes): WebhookEndpoint {
+            $endpoint = new WebhookEndpoint;
             $endpoint->forceFill([
                 'livemode' => $livemode,
                 'url' => self::URL,
+                'description' => null,
+                'enabled_events' => [WebhookEventType::PaymentPreValidation->value],
                 'secret' => app(WebhookSigner::class)->generateSecret(),
-                'enabled_by_default' => false,
-                'failure_policy' => ValidationFailurePolicy::FailClosed,
+                'status' => WebhookEndpointStatus::Enabled,
+                'validation_enabled_by_default' => false,
+                'validation_failure_policy' => ValidationFailurePolicy::FailClosed,
                 ...$attributes,
             ])->save();
 
@@ -53,7 +59,7 @@ final class ValidationTestHelpers
      * validation URL configured in the same mode.
      *
      * @param  array<string, mixed>  $endpoint
-     * @return array{Tenant, PaymentLink, FakePaymentGateway, ValidationEndpoint}
+     * @return array{Tenant, PaymentLink, FakePaymentGateway, WebhookEndpoint}
      */
     public static function scenario(array $endpoint = []): array
     {
@@ -105,9 +111,9 @@ final class ValidationTestHelpers
         return self::in($tenant, $livemode, static fn (): array => array_values(ValidationCall::query()->orderBy('id')->get()->all()));
     }
 
-    public static function freshEndpoint(ValidationEndpoint $endpoint): ValidationEndpoint
+    public static function freshEndpoint(WebhookEndpoint $endpoint): WebhookEndpoint
     {
-        return self::in($endpoint->tenant_id, $endpoint->livemode, static fn (): ValidationEndpoint => ValidationEndpoint::query()->findOrFail($endpoint->id));
+        return self::in($endpoint->tenant_id, $endpoint->livemode, static fn (): WebhookEndpoint => WebhookEndpoint::query()->findOrFail($endpoint->id));
     }
 
     /**

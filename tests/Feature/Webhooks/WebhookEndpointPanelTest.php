@@ -75,7 +75,7 @@ it('lists the endpoints of the current mode with their events, status and failin
         ->assertSee('payment.succeeded')
         ->assertSee(WebhookEndpointStatus::DisabledByFailures->label())
         ->assertSee(WebhookEndpointResource::failingLine($some) ?? '')
-        ->assertSee(__('webhooks.page.subheading.test', ['max' => 5]));
+        ->assertSee(__('webhooks.page.subheading.test', ['max' => 1]));
 })->with(['en', 'es']);
 
 it('says a new endpoint has no deliveries yet instead of claiming it is healthy', function (): void {

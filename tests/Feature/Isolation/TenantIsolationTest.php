@@ -27,9 +27,9 @@ use App\Modules\Webhooks\Actions\ResendWebhookDelivery;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Enums\WebhookDeliveryStatus;
 use App\Modules\Webhooks\Enums\WebhookDeliveryTrigger;
-use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ListWebhookEndpoints;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ViewWebhookEndpoint;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\RelationManagers\ValidationCallsRelationManager;
 use App\Modules\Webhooks\Models\ValidationCall;
 use App\Modules\Webhooks\Models\WebhookDelivery;
 use App\Modules\Webhooks\Models\WebhookEvent;
@@ -227,22 +227,22 @@ it('never shows or resends another tenant\'s webhook deliveries (plan 6.6)', fun
 
 it('never lists another tenant\'s pre-payment validation calls (plan 6.6)', function (): void {
     [$a, $b] = [activeTenant(), activeTenant()];
-    ValidationTestHelpers::endpoint($a);
+    $endpoint = ValidationTestHelpers::endpoint($a);
     $foreign = ValidationTestHelpers::in($b, false, static function (): ValidationCall {
         $call = new ValidationCall;
         $call->forceFill(['livemode' => false, 'is_test' => true, 'request_payload' => []])->save();
 
         return $call;
     });
-    $own = ValidationTestHelpers::in($a, false, static function (): ValidationCall {
+    $own = ValidationTestHelpers::in($a, false, static function () use ($endpoint): ValidationCall {
         $call = new ValidationCall;
-        $call->forceFill(['livemode' => false, 'is_test' => true, 'request_payload' => []])->save();
+        $call->forceFill(['livemode' => false, 'is_test' => true, 'request_payload' => [], 'webhook_endpoint_id' => $endpoint->id])->save();
 
         return $call;
     });
     actingAsTenantUser(tenantUser($a, [SystemRole::Owner]));
 
-    Livewire::test(PrePaymentValidationSettings::class)
+    Livewire::test(ValidationCallsRelationManager::class, ['ownerRecord' => $endpoint, 'pageClass' => ViewWebhookEndpoint::class])
         ->assertCanSeeTableRecords([$own])
         ->assertCanNotSeeTableRecords([$foreign]);
 });

@@ -17,6 +17,7 @@ use App\Modules\Webhooks\Enums\ValidationEndpointChange;
 use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
 use App\Modules\Webhooks\Enums\ValidationFinalDecision;
+use App\Modules\Webhooks\Enums\WebhookEndpointStatus;
 use App\Modules\Webhooks\Notifications\ValidationEndpointNotification;
 use App\Modules\Webhooks\Services\HttpPrePaymentValidator;
 use App\Modules\Webhooks\Services\WebhookSigner;
@@ -176,7 +177,7 @@ it('voids the authorization on a timeout under fail_closed, without retrying', f
 
 it('captures on a failure under fail_open and says so in the payment', function (): void {
     Http::fake(['*' => Http::response('oops', 500)]);
-    [, $link, $fake] = Validation::scenario(['failure_policy' => ValidationFailurePolicy::FailOpen]);
+    [, $link, $fake] = Validation::scenario(['validation_failure_policy' => ValidationFailurePolicy::FailOpen]);
 
     Checkout::pay($link)->assertOk()->assertJson(['outcome' => 'paid']);
 
@@ -272,7 +273,7 @@ it('counts the DNS lookup against the 5-second budget: a slow lookup is a timeou
 
 it('does not charge a link that asks for validation when its mode has no endpoint any more', function (): void {
     Http::fake();
-    [, $link, $fake, $endpoint] = Validation::scenario(['failure_policy' => ValidationFailurePolicy::FailOpen]);
+    [, $link, $fake, $endpoint] = Validation::scenario(['validation_failure_policy' => ValidationFailurePolicy::FailOpen]);
     Validation::in($endpoint->tenant_id, false, static fn () => $endpoint->delete());
 
     Checkout::pay($link)->assertJson(['outcome' => 'merchant_rejected']);
@@ -335,15 +336,15 @@ it('e-mails the managers after 10 failures in a row, at most once an hour, and r
     }
 
     Notification::assertNothingSent();
-    expect(Validation::freshEndpoint($endpoint)->isFailing())->toBeFalse();
+    expect(Validation::freshEndpoint($endpoint)->isValidationFailing())->toBeFalse();
 
     Checkout::inTenant($link, static fn () => $validator->decide($link, $attempt));
     Checkout::inTenant($link, static fn () => $validator->decide($link, $attempt));
 
     $fresh = Validation::freshEndpoint($endpoint);
-    expect($fresh->consecutive_failures)->toBe(11)
-        ->and($fresh->isFailing())->toBeTrue()
-        ->and($fresh->last_alerted_at)->not->toBeNull();
+    expect($fresh->validation_consecutive_failures)->toBe(11)
+        ->and($fresh->isValidationFailing())->toBeTrue()
+        ->and($fresh->validation_last_alerted_at)->not->toBeNull();
     Notification::assertSentToTimes($owner, ValidationEndpointNotification::class, 1);
     Notification::assertSentTo($owner, ValidationEndpointNotification::class, static fn (ValidationEndpointNotification $n): bool => $n->change === ValidationEndpointChange::Failing && $n->host === 'validate.merchant.example');
     Notification::assertNotSentTo($viewer, ValidationEndpointNotification::class);
@@ -357,8 +358,8 @@ it('e-mails the managers after 10 failures in a row, at most once an hour, and r
     $merchant['up'] = true;
     Checkout::inTenant($link, static fn () => $validator->decide($link, $attempt));
 
-    expect(Validation::freshEndpoint($endpoint)->consecutive_failures)->toBe(0)
-        ->and(Validation::freshEndpoint($endpoint)->isFailing())->toBeFalse();
+    expect(Validation::freshEndpoint($endpoint)->validation_consecutive_failures)->toBe(0)
+        ->and(Validation::freshEndpoint($endpoint)->isValidationFailing())->toBeFalse();
     Carbon::setTestNow();
 });
 
@@ -389,4 +390,29 @@ it('keeps the request payload encrypted and out of serialization', function (): 
     expect($raw)->not->toContain('ana@example.com')
         ->and($call->toArray())->not->toHaveKey('request_payload')
         ->and(data_get($call->request_payload, 'data.payer.email'))->toBe('ana@example.com');
+});
+
+it('sends delivery_mode "sync" in the body, so the receiver tells it from an event (ADR-0069)', function (): void {
+    Http::fake(['*' => Validation::answer(['decision' => 'approve'])]);
+    [, $link] = Validation::scenario();
+
+    Checkout::pay($link);
+
+    [$request] = Validation::sentRequests();
+    expect(jsonArray($request->body())['delivery_mode'])->toBe('sync');
+});
+
+it('never disables the endpoint because the validation fails: only asynchronous deliveries do (ADR-0069)', function (): void {
+    Http::fake(['*' => Http::response('down', 503)]);
+    [$tenant, $link, , $endpoint] = Validation::scenario();
+    $attempt = Validation::authorizedAttempt($link);
+
+    foreach (range(1, 12) as $ignored) {
+        Checkout::inTenant($link, static fn () => app(HttpPrePaymentValidator::class)->decide($link, $attempt));
+    }
+
+    $fresh = Validation::freshEndpoint($endpoint);
+    expect($fresh->validation_consecutive_failures)->toBe(12)
+        ->and($fresh->status)->toBe(WebhookEndpointStatus::Enabled)
+        ->and($fresh->validates())->toBeTrue();
 });

@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\ApiTestHelpers;
 use Tests\Support\GatewayTestHelpers;
 use Tests\Support\ValidationTestHelpers;
+use Tests\Support\WebhookTestHelpers;
 
 use function Pest\Laravel\postJson;
 use function Pest\Laravel\withHeaders;
@@ -575,7 +576,7 @@ it('accepts pre_payment_validation true when the mode has a validation URL', fun
 it('uses the URL\'s enabled_by_default when the request says nothing, and lets the request turn it off', function (bool $enabledByDefault): void {
     $tenant = ApiTestHelpers::readyTenant();
     [, $key] = ApiTestHelpers::key($tenant);
-    ValidationTestHelpers::endpoint($tenant, attributes: ['enabled_by_default' => $enabledByDefault]);
+    ValidationTestHelpers::endpoint($tenant, attributes: ['validation_enabled_by_default' => $enabledByDefault]);
 
     createLink($key, ApiTestHelpers::body())->assertCreated()->assertJsonPath('pre_payment_validation', $enabledByDefault);
     createLink($key, ApiTestHelpers::body(['pre_payment_validation' => false]))->assertCreated()->assertJsonPath('pre_payment_validation', false);
@@ -584,7 +585,7 @@ it('uses the URL\'s enabled_by_default when the request says nothing, and lets t
 it('refuses pre_payment_validation true in live mode when only the test mode has a URL', function (): void {
     $tenant = ApiTestHelpers::readyTenant(livemode: true);
     [, $key] = ApiTestHelpers::key($tenant, livemode: true);
-    ValidationTestHelpers::endpoint($tenant, livemode: false, attributes: ['enabled_by_default' => true]);
+    ValidationTestHelpers::endpoint($tenant, livemode: false, attributes: ['validation_enabled_by_default' => true]);
 
     expectApiError(createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true])), ApiErrorCode::ValidationEndpointNotConfigured, 'pre_payment_validation');
     // And the test-mode default never leaks into live links.
@@ -594,7 +595,15 @@ it('refuses pre_payment_validation true in live mode when only the test mode has
 it('never uses another tenant\'s validation URL', function (): void {
     $tenant = ApiTestHelpers::readyTenant();
     [, $key] = ApiTestHelpers::key($tenant);
-    ValidationTestHelpers::endpoint(activeTenant(), attributes: ['enabled_by_default' => true]);
+    ValidationTestHelpers::endpoint(activeTenant(), attributes: ['validation_enabled_by_default' => true]);
+
+    expectApiError(createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true])), ApiErrorCode::ValidationEndpointNotConfigured, 'pre_payment_validation');
+});
+
+it('refuses pre_payment_validation true when the webhook endpoint is not subscribed to the validation (ADR-0069)', function (): void {
+    $tenant = ApiTestHelpers::readyTenant();
+    [, $key] = ApiTestHelpers::key($tenant);
+    WebhookTestHelpers::endpoint($tenant, attributes: ['enabled_events' => ['*']]);
 
     expectApiError(createLink($key, ApiTestHelpers::body(['pre_payment_validation' => true])), ApiErrorCode::ValidationEndpointNotConfigured, 'pre_payment_validation');
 });

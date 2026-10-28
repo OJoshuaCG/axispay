@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Webhooks\Enums\DomainEventType;
 use App\Modules\Webhooks\Enums\WebhookEventType;
-use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ListWebhookEndpoints;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ViewWebhookEndpoint;
 use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
@@ -77,17 +76,13 @@ it('explains the webhooks on the endpoint detail', function (): void {
     $component->assertMountedActionModalSee(__('webhooks.help.webhooks.verify_title'));
 });
 
-it('explains the pre-payment validation, not configured and configured', function (string $locale, bool $configured): void {
+it('explains the pre-payment validation on the endpoint detail', function (string $locale): void {
     $tenant = activeTenant();
     app()->setLocale($locale);
-
-    if ($configured) {
-        Validation::endpoint($tenant);
-    }
-
+    $endpoint = Validation::endpoint($tenant);
     actingAsTenantUser(tenantUser($tenant, [SystemRole::IntegrationManager]));
 
-    $component = Livewire::test(PrePaymentValidationSettings::class)
+    $component = Livewire::test(ViewWebhookEndpoint::class, ['record' => $endpoint->getRouteKey()])
         ->assertActionVisible(IntegrationHelp::VALIDATION_ACTION)
         ->mountAction(IntegrationHelp::VALIDATION_ACTION)
         ->assertActionMounted(IntegrationHelp::VALIDATION_ACTION);
@@ -100,13 +95,4 @@ it('explains the pre-payment validation, not configured and configured', functio
     $component->assertMountedActionModalSee(__('webhooks.help.validation.limits.size', ['kb' => 4]));
     $component->assertMountedActionModalSee(__('webhooks.help.validation.response.payer_message', ['max' => 200]));
     $component->assertMountedActionModalSee(__('webhooks.help.validation.alert', ['count' => 10, 'minutes' => 60]));
-})->with(['en', 'es'])->with(['not configured' => false, 'configured' => true]);
-
-it('offers the explanation from the not-configured section', function (): void {
-    $tenant = activeTenant();
-    actingAsTenantUser(tenantUser($tenant, [SystemRole::IntegrationManager]));
-
-    Livewire::test(PrePaymentValidationSettings::class)
-        ->assertSee(__('webhooks.validation.page.not_configured'))
-        ->assertSee(__('webhooks.help.hint'));
-});
+})->with(['en', 'es']);

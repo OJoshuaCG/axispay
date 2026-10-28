@@ -94,14 +94,13 @@ it('creates an endpoint, returns its secret once and stores it encrypted', funct
     Notification::assertSentTo($owner, WebhookEndpointNotification::class);
 });
 
-it('allows at most 5 endpoints per mode', function (): void {
+it('allows one endpoint per mode by default', function (): void {
     $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
     GatewayTestHelpers::reauthenticated();
+    expect(config()->integer('axispay.webhooks.max_endpoints_per_mode'))->toBe(1);
 
-    foreach (range(1, 5) as $i) {
-        WebhookTestHelpers::endpoint($tenant);
-    }
+    WebhookTestHelpers::endpoint($tenant);
 
     $refused = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(CreateWebhookEndpoint::class)->handle($owner, endpointData()));
     expect($refused->reason)->toBe(WebhookEndpointRefusal::TooManyEndpoints);
@@ -110,6 +109,21 @@ it('allows at most 5 endpoints per mode', function (): void {
     actingAsTenantUser($owner, livemode: true);
     GatewayTestHelpers::reauthenticated();
     expect(app(CreateWebhookEndpoint::class)->handle($owner, endpointData())->endpoint->livemode)->toBeTrue();
+});
+
+it('lets the limit be raised by configuration without a schema change (ADR-0069)', function (): void {
+    config(['axispay.webhooks.max_endpoints_per_mode' => 5]);
+    $tenant = activeTenant();
+    $owner = actingAsTenantUser(tenantUser($tenant));
+    GatewayTestHelpers::reauthenticated();
+
+    foreach (range(1, 4) as $i) {
+        WebhookTestHelpers::endpoint($tenant);
+    }
+    app(CreateWebhookEndpoint::class)->handle($owner, endpointData());
+
+    $refused = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(CreateWebhookEndpoint::class)->handle($owner, endpointData()));
+    expect($refused->reason)->toBe(WebhookEndpointRefusal::TooManyEndpoints);
 });
 
 it('refuses a URL the SSRF protection blocks, at registration', function (): void {

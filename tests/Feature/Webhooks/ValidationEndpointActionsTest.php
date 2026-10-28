@@ -5,26 +5,24 @@ declare(strict_types=1);
 use App\Modules\Access\Enums\SystemRole;
 use App\Modules\Audit\Enums\AuditAction;
 use App\Modules\Audit\Models\AuditLog;
-use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
-use App\Modules\Tenancy\Enums\TenantStatus;
-use App\Modules\Webhooks\Actions\ConfigureValidationEndpoint;
-use App\Modules\Webhooks\Actions\RemoveValidationEndpoint;
-use App\Modules\Webhooks\Actions\RotateValidationEndpointSecret;
+use App\Modules\PaymentLinks\Enums\PaymentLinkStatus;
+use App\Modules\PaymentLinks\Models\PaymentLink;
+use App\Modules\Webhooks\Actions\CreateWebhookEndpoint;
+use App\Modules\Webhooks\Actions\DeleteWebhookEndpoint;
+use App\Modules\Webhooks\Actions\DisableWebhookEndpoint;
 use App\Modules\Webhooks\Actions\TestValidationEndpoint;
-use App\Modules\Webhooks\Data\ValidationEndpointData;
-use App\Modules\Webhooks\Enums\UnsafeDestinationReason;
-use App\Modules\Webhooks\Enums\ValidationEndpointChange;
+use App\Modules\Webhooks\Actions\UpdateWebhookEndpoint;
+use App\Modules\Webhooks\Data\WebhookEndpointData;
 use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
 use App\Modules\Webhooks\Enums\ValidationResponseProblem;
 use App\Modules\Webhooks\Enums\WebhookEndpointRefusal;
-use App\Modules\Webhooks\Exceptions\UnsafeDestinationException;
+use App\Modules\Webhooks\Enums\WebhookEventType;
 use App\Modules\Webhooks\Exceptions\WebhookEndpointNotAllowedException;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
-use App\Modules\Webhooks\Notifications\ValidationEndpointNotification;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Services\WebhookSigner;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Tests\Support\FakeHostResolver;
@@ -33,125 +31,117 @@ use Tests\Support\ValidationTestHelpers as Validation;
 use Tests\Support\WebhookTestHelpers;
 
 /**
- * Plan 15.8.1 / 17.3: the actions the panel calls to manage the pre-payment
- * validation URL (`webhooks:manage`, re-authentication, SSRF check, secret,
- * "Test validation").
+ * ADR-0069: the pre-payment validation is an event (`payment.pre_validation`)
+ * of the tenant's webhook endpoint. The actions that manage that
+ * subscription, its guards (`validation_in_use`, one validator per mode) and
+ * the "Test validation" action.
  */
 beforeEach(function (): void {
     FakeHostResolver::install();
     Notification::fake();
 });
 
-function validationData(string $url = Validation::URL, bool $enabledByDefault = false, ValidationFailurePolicy $policy = ValidationFailurePolicy::FailClosed): ValidationEndpointData
+/**
+ * @param  list<string>  $events
+ */
+function validatingEndpointData(array $events = ['payment.pre_validation'], ValidationFailurePolicy $policy = ValidationFailurePolicy::FailClosed, bool $enabledByDefault = false): WebhookEndpointData
 {
-    return new ValidationEndpointData($url, $enabledByDefault, $policy);
+    return new WebhookEndpointData(Validation::URL, null, $events, $policy, $enabledByDefault);
 }
 
-it('configures the URL, returns its own secret once and stores it encrypted', function (): void {
+/** An active link that asks for validation, so the endpoint is "in use". */
+function openValidatingLink(string $tenantId): PaymentLink
+{
+    return Validation::in($tenantId, false, static function (): PaymentLink {
+        return PaymentLink::factory()->createOne(['pre_payment_validation' => true, 'status' => PaymentLinkStatus::Active]);
+    });
+}
+
+it('creates the endpoint subscribed to the validation and stores its settings', function (): void {
     $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
     GatewayTestHelpers::reauthenticated();
-    $webhookEndpoint = WebhookTestHelpers::endpoint($tenant);
 
-    $issued = app(ConfigureValidationEndpoint::class)->handle($owner, validationData(enabledByDefault: true));
+    $issued = app(CreateWebhookEndpoint::class)->handle($owner, validatingEndpointData(['payment.succeeded', 'payment.pre_validation'], ValidationFailurePolicy::FailOpen, true));
 
-    $raw = Validation::in($tenant, false, static fn () => ValidationEndpoint::query()->toBase()->value('secret'));
-    expect($issued->created)->toBeTrue()
-        ->and($issued->secret)->toMatch('/^whsec_[A-Za-z0-9+\/]{43}=$/')
-        ->and($issued->secret)->not->toBe($webhookEndpoint->secret)
-        ->and($issued->endpoint->enabled_by_default)->toBeTrue()
-        ->and($issued->endpoint->failure_policy)->toBe(ValidationFailurePolicy::FailClosed)
-        ->and($issued->endpoint->livemode)->toBeFalse()
-        ->and($raw)->not->toContain('whsec_')
-        ->and($issued->endpoint->toArray())->not->toHaveKey('secret')
-        ->and(AuditLog::query()->where('action', AuditAction::ValidationEndpointConfigured->value)->count())->toBe(1);
-    Notification::assertSentTo($owner, ValidationEndpointNotification::class, static fn (ValidationEndpointNotification $n): bool => $n->change === ValidationEndpointChange::Configured);
+    $endpoint = $issued->endpoint;
+    expect($endpoint->validates())->toBeTrue()
+        ->and($endpoint->validator_slot)->toBe(WebhookEndpoint::VALIDATOR_SLOT)
+        ->and($endpoint->validation_failure_policy)->toBe(ValidationFailurePolicy::FailOpen)
+        ->and($endpoint->validation_enabled_by_default)->toBeTrue()
+        ->and($issued->secret)->toMatch('/^whsec_[A-Za-z0-9+\/]{43}=$/');
 });
 
-it('updates the one URL of the mode and keeps its secret', function (): void {
+it('keeps the wildcard for asynchronous events only: the validation needs its own checkbox', function (): void {
+    $tenant = activeTenant();
+    $endpoint = WebhookTestHelpers::endpoint($tenant, attributes: ['enabled_events' => ['*']]);
+
+    expect($endpoint->validates())->toBeFalse()
+        ->and($endpoint->validator_slot)->toBeNull()
+        ->and($endpoint->subscribesTo(WebhookEventType::PaymentSucceeded))->toBeTrue()
+        ->and($endpoint->subscribesTo(WebhookEventType::PaymentPreValidation))->toBeFalse();
+
+    $both = WebhookTestHelpers::endpoint($tenant, true, ['enabled_events' => ['*', 'payment.pre_validation']]);
+
+    expect($both->validates())->toBeTrue()
+        ->and($both->subscribesTo(WebhookEventType::PaymentSucceeded))->toBeTrue();
+});
+
+it('lets only one endpoint per mode be the validator', function (): void {
+    config(['axispay.webhooks.max_endpoints_per_mode' => 2]);
     $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
     GatewayTestHelpers::reauthenticated();
-    $first = app(ConfigureValidationEndpoint::class)->handle($owner, validationData());
+    Validation::endpoint($tenant);
 
-    $second = app(ConfigureValidationEndpoint::class)->handle($owner, validationData('https://other.merchant.example/v', policy: ValidationFailurePolicy::FailOpen));
+    $refused = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(CreateWebhookEndpoint::class)->handle($owner, validatingEndpointData()));
+    expect($refused->reason)->toBe(WebhookEndpointRefusal::ValidatorAlreadyExists);
 
-    expect($second->created)->toBeFalse()
-        ->and($second->secret)->toBeNull()
-        ->and($second->endpoint->id)->toBe($first->endpoint->id)
-        ->and($second->endpoint->url)->toBe('https://other.merchant.example/v')
-        ->and($second->endpoint->failure_policy)->toBe(ValidationFailurePolicy::FailOpen)
-        ->and(Validation::freshEndpoint($second->endpoint)->secret)->toBe($first->secret)
-        ->and(Validation::in($tenant, false, static fn () => ValidationEndpoint::query()->count()))->toBe(1);
+    // The database refuses it too, whatever the application does.
+    expect(fn () => Validation::endpoint($tenant))->toThrow(QueryException::class);
+
+    // The other mode has its own validator.
+    expect(Validation::endpoint($tenant, true)->validator_slot)->toBe(WebhookEndpoint::VALIDATOR_SLOT);
 });
 
-it('keeps one URL per mode', function (): void {
-    $tenant = activeTenant();
-    $owner = actingAsTenantUser(tenantUser($tenant), livemode: true);
-    GatewayTestHelpers::reauthenticated();
-
-    $live = app(ConfigureValidationEndpoint::class)->handle($owner, validationData());
-
-    expect($live->endpoint->livemode)->toBeTrue()
-        ->and(Validation::in($tenant, false, static fn () => ValidationEndpoint::query()->count()))->toBe(0);
-});
-
-it('requires re-authentication, webhooks:manage and a writable panel', function (): void {
-    $tenant = activeTenant();
-    $owner = actingAsTenantUser(tenantUser($tenant));
-
-    expect(fn () => app(ConfigureValidationEndpoint::class)->handle($owner, validationData()))->toThrow(ReauthenticationRequiredException::class);
-
-    $viewer = actingAsTenantUser(tenantUser($tenant, [SystemRole::Viewer]));
-    GatewayTestHelpers::reauthenticated();
-    expect(fn () => app(ConfigureValidationEndpoint::class)->handle($viewer, validationData()))->toThrow(AuthorizationException::class);
-
-    $suspended = activeTenant(TenantStatus::Suspended);
-    $suspendedOwner = actingAsTenantUser(tenantUser($suspended));
-    GatewayTestHelpers::reauthenticated();
-    $refusal = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(ConfigureValidationEndpoint::class)->handle($suspendedOwner, validationData()));
-    expect($refusal->reason)->toBe(WebhookEndpointRefusal::TenantReadOnly);
-});
-
-it('refuses a URL the SSRF protection blocks', function (): void {
-    $owner = actingAsTenantUser(tenantUser(activeTenant()));
-    GatewayTestHelpers::reauthenticated();
-    FakeHostResolver::install(['validate.merchant.example' => ['127.0.0.1']]);
-
-    $e = thrownBy(UnsafeDestinationException::class, fn () => app(ConfigureValidationEndpoint::class)->handle($owner, validationData()));
-
-    expect($e->reason)->toBe(UnsafeDestinationReason::ForbiddenAddress);
-});
-
-it('rotates the secret and signs with both for 24 hours', function (): void {
-    Carbon::setTestNow('2026-10-07 12:00:00');
+it('refuses to unsubscribe, disable or delete the validator while open links ask for validation', function (): void {
     $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
     GatewayTestHelpers::reauthenticated();
-    $issued = app(ConfigureValidationEndpoint::class)->handle($owner, validationData());
+    $endpoint = Validation::endpoint($tenant);
+    openValidatingLink($tenant->id);
 
-    $rotated = app(RotateValidationEndpointSecret::class)->handle($owner, $issued->endpoint);
+    $unsubscribe = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(UpdateWebhookEndpoint::class)->handle($owner, $endpoint, validatingEndpointData(['payment.succeeded'])));
+    $disable = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(DisableWebhookEndpoint::class)->handle($owner, $endpoint));
+    $delete = thrownBy(WebhookEndpointNotAllowedException::class, fn () => app(DeleteWebhookEndpoint::class)->handle($owner, $endpoint));
 
-    $fresh = Validation::freshEndpoint($issued->endpoint);
-    expect($rotated->secret)->not->toBe($issued->secret)
-        ->and($fresh->signingSecrets())->toBe([$rotated->secret, $issued->secret])
-        ->and($fresh->signingSecrets(now()->addHours(25)->toImmutable()))->toBe([$rotated->secret]);
-    Carbon::setTestNow();
+    expect($unsubscribe->reason)->toBe(WebhookEndpointRefusal::ValidationInUse)
+        ->and($disable->reason)->toBe(WebhookEndpointRefusal::ValidationInUse)
+        ->and($delete->reason)->toBe(WebhookEndpointRefusal::ValidationInUse)
+        ->and(Validation::freshEndpoint($endpoint)->validates())->toBeTrue();
 });
 
-it('removes the URL after re-authentication, even for a read-only tenant', function (): void {
-    $tenant = activeTenant(TenantStatus::Suspended);
+it('lets the validator be changed or removed when no open link needs it', function (): void {
+    $tenant = activeTenant();
     $owner = actingAsTenantUser(tenantUser($tenant));
+    GatewayTestHelpers::reauthenticated();
     $endpoint = Validation::endpoint($tenant);
 
-    expect(fn () => app(RemoveValidationEndpoint::class)->handle($owner, $endpoint))->toThrow(ReauthenticationRequiredException::class);
+    $updated = app(UpdateWebhookEndpoint::class)->handle($owner, $endpoint, validatingEndpointData(['payment.succeeded']));
 
+    expect($updated->validates())->toBeFalse()
+        ->and($updated->validator_slot)->toBeNull();
+
+    app(DeleteWebhookEndpoint::class)->handle($owner, $updated);
+    expect(Validation::in($tenant, false, static fn (): int => WebhookEndpoint::query()->count()))->toBe(0);
+});
+
+it('requires webhooks:manage to subscribe an endpoint to the validation', function (): void {
+    $tenant = activeTenant();
+    $viewer = actingAsTenantUser(tenantUser($tenant, [SystemRole::Viewer]));
     GatewayTestHelpers::reauthenticated();
-    app(RemoveValidationEndpoint::class)->handle($owner, $endpoint);
 
-    expect(Validation::in($tenant, false, static fn () => ValidationEndpoint::query()->count()))->toBe(0)
-        ->and(AuditLog::query()->where('action', AuditAction::ValidationEndpointRemoved->value)->count())->toBe(1);
-    Notification::assertSentTo($owner, ValidationEndpointNotification::class, static fn (ValidationEndpointNotification $n): bool => $n->change === ValidationEndpointChange::Removed);
+    expect(fn () => app(CreateWebhookEndpoint::class)->handle($viewer, validatingEndpointData()))->toThrow(AuthorizationException::class);
 });
 
 it('tests the URL with a signed sample and returns what the panel shows', function (): void {
@@ -183,7 +173,7 @@ it('tests the URL with a signed sample and returns what the panel shows', functi
         ->and($result->call->is_test)->toBeTrue()
         ->and($result->call->payment_link_id)->toBeNull()
         // A test never touches the endpoint's health.
-        ->and(Validation::freshEndpoint($endpoint)->consecutive_failures)->toBe(0)
+        ->and(Validation::freshEndpoint($endpoint)->validation_consecutive_failures)->toBe(0)
         ->and(AuditLog::query()->where('action', AuditAction::ValidationEndpointTestSent->value)->count())->toBe(1);
 });
 
@@ -199,7 +189,7 @@ it('reports an invalid answer in the test without counting it as a failure of th
         ->and($result->decision)->toBeNull()
         ->and($result->failureKind)->toBe(ValidationFailureKind::InvalidResponse)
         ->and($result->errors)->toBe([ValidationResponseProblem::DecisionMissing])
-        ->and(Validation::freshEndpoint($endpoint)->consecutive_failures)->toBe(0);
+        ->and(Validation::freshEndpoint($endpoint)->validation_consecutive_failures)->toBe(0);
 });
 
 it('reports a timeout in the test', function (): void {
@@ -214,25 +204,18 @@ it('reports a timeout in the test', function (): void {
         ->and($result->failureKind)->toBe(ValidationFailureKind::Timeout);
 });
 
-it('never lets a user act on another tenant\'s URL (isolation)', function (): void {
+it('never lets a user act on another tenant\'s validator (isolation)', function (): void {
     Http::fake();
     $other = activeTenant();
-    $foreign = Validation::endpoint($other, false, ['enabled_by_default' => true]);
+    $foreign = Validation::endpoint($other, false, ['validation_enabled_by_default' => true]);
     $owner = actingAsTenantUser(tenantUser(activeTenant()));
     GatewayTestHelpers::reauthenticated();
 
     // Not visible in the actor's context (tenant scope: a 404 for the panel).
-    expect(ValidationEndpoint::query()->find($foreign->id))->toBeNull();
+    expect(WebhookEndpoint::query()->find($foreign->id))->toBeNull();
 
-    expect(fn () => app(RotateValidationEndpointSecret::class)->handle($owner, $foreign))->toThrow(AuthorizationException::class)
-        ->and(fn () => app(RemoveValidationEndpoint::class)->handle($owner, $foreign))->toThrow(AuthorizationException::class)
-        ->and(fn () => app(TestValidationEndpoint::class)->handle($owner, $foreign))->toThrow(AuthorizationException::class);
-
-    // Configuring creates the actor's own URL; the other tenant's is untouched.
-    $mine = app(ConfigureValidationEndpoint::class)->handle($owner, validationData('https://mine.merchant.example/v'));
-
-    expect($mine->endpoint->id)->not->toBe($foreign->id)
-        ->and(Validation::freshEndpoint($foreign)->url)->toBe(Validation::URL)
-        ->and(Validation::freshEndpoint($foreign)->secret)->toBe($foreign->secret);
+    expect(fn () => app(DeleteWebhookEndpoint::class)->handle($owner, $foreign))->toThrow(AuthorizationException::class)
+        ->and(fn () => app(TestValidationEndpoint::class)->handle($owner, $foreign))->toThrow(AuthorizationException::class)
+        ->and(Validation::freshEndpoint($foreign)->url)->toBe(Validation::URL);
     Http::assertNothingSent();
 });
