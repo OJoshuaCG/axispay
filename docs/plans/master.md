@@ -371,6 +371,8 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
 
 ### ADR-024 — Validación previa al cobro: callback síncrono, separado de los webhooks · `DECIDIDO`
 
+> **Enmienda (2026-10-28, ADR-0069):** ya no es una entidad separada. El comercio configura **un solo endpoint de webhook** por modo; la validación es el evento síncrono `payment.pre_validation` de ese endpoint (nunca incluido en `*`), con `delivery_mode: sync` en el cuerpo. Un secreto, una pantalla. La semántica síncrona descrita abajo no cambia. Las tablas `validation_endpoints` desaparecen (sus campos pasan a `webhook_endpoints`); `validation_calls` se conserva.
+
 - **Contexto:** el responsable del proyecto quiere que, antes de cobrar, la plataforma consulte al sistema del tenant para validar la operación (stock, precio vigente, orden aún pendiente, etc.). Si la validación falla, no se cobra; si pasa, se cobra, y los webhooks posteriores solo notifican.
 - **Por qué no es un webhook:** los webhooks son asíncronos, con reintentos de hasta ~27 horas, entrega "al menos una vez" y sin contenido de respuesta relevante. La validación es **síncrona** (el pagador está esperando), necesita una **respuesta con decisión** y no admite reintentos largos.
 - **Opciones sobre el momento de la validación:**
@@ -724,12 +726,9 @@ Esta regla aplica a: `payment_attempts → payment_links`, `fx_quotes → paymen
 - `connected_at`, `disconnected_at`, `disconnect_reason`, `last_synced_at`.
 - Único: `(provider, provider_account_id, livemode)` (una misma cuenta de Stripe no puede vincularse a dos tenants). Único: `(tenant_id, provider, livemode)` para conexiones no desconectadas (una conexión activa por proveedor y modo; se implementa con una columna generada análoga a `active_link_id`). Único: `credentials_fingerprint` cuando no es nulo.
 
-**`validation_endpoints`** (ADR-024; una por tenant y modo)
-- `id`, `tenant_id`, `livemode`, `url` (`VARCHAR(2048)`), `secret` (cifrado, formato `whsec_...`), `previous_secret` (cifrado, nullable), `previous_secret_expires_at`.
-- `enabled_by_default` (si los links nuevos usan la validación cuando la API no indica nada).
-- `failure_policy` (`fail_closed` | `fail_open`; default `fail_closed`).
-- `status` (`enabled` | `disabled`), `consecutive_failures`, `last_failure_at`.
-- Único: `(tenant_id, livemode)`.
+**`validation_endpoints`** (ADR-024; **eliminada por ADR-0069, 2026-10-28**: sus campos viven en `webhook_endpoints`, 7.6)
+- Ahora en `webhook_endpoints`: `validation_enabled_by_default` (si los links nuevos usan la validación cuando la API no indica nada), `validation_failure_policy` (`fail_closed` | `fail_open`; default `fail_closed`), `validation_consecutive_failures`, `validation_last_failure_at`, `validation_last_success_at`, `validation_last_alerted_at`, y `validator_slot` (nullable; `1` cuando el endpoint está suscrito a `payment.pre_validation`).
+- Único: `(tenant_id, livemode, validator_slot)`: a lo sumo un endpoint por tenant y modo recibe la validación, aunque el tenant tenga varios endpoints.
 
 ### 7.5 Links y pagos
 
@@ -1739,14 +1738,14 @@ Aplica a los webhooks **y** a la URL de validación previa (15.8). Al **registra
 
 ### 15.8 Validación previa al cobro (callback síncrono; ADR-024)
 
-> **No es un webhook.** Comparte con los webhooks la firma HMAC y la protección SSRF, pero su semántica es distinta: es síncrono, espera una decisión y su resultado determina si se cobra.
+> **Es un evento síncrono del endpoint de webhook (ADR-0069, 2026-10-28).** Comparte con los demás eventos la URL, el secreto, la firma HMAC y la protección SSRF, pero su semántica es distinta: es síncrono (`delivery_mode: sync`), espera una decisión y su resultado determina si se cobra. Se elige con el resto de los eventos y `*` nunca lo incluye.
 
 #### 15.8.1 Configuración (panel, permiso `webhooks:manage`)
 
-- Una URL por modo (`validation_endpoints`), con secret propio (`whsec_...`, distinto del de los webhooks), rotación con doble firma durante 24 horas, igual que en 15.5.
+- La URL y el secreto son los del endpoint de webhook (un secreto para todo, con rotación y doble firma durante 24 horas, igual que en 15.5). El endpoint debe estar suscrito a `payment.pre_validation`; a lo sumo un endpoint por modo lo está. Mientras haya links abiertos que piden validación, el endpoint no se puede borrar ni darse de baja de ese evento (`validation_in_use`).
 - `enabled_by_default`: si los links nuevos usan la validación cuando la API no indica nada.
 - `failure_policy`: `fail_closed` (default) o `fail_open`. El panel explica las consecuencias de cada una con un texto claro.
-- Botón **"Probar validación"**: envía un payload de ejemplo (`test: true`) y muestra la respuesta, la latencia y si el formato es válido.
+- Botón **"Enviar prueba"** con el tipo de evento (`ping` o `payment.pre_validation`): para la validación envía un payload de ejemplo (`test: true`) y muestra la respuesta, la latencia y si el formato es válido.
 - Por link: `pre_payment_validation: true|false` en `POST /v1/payment_links` (si se omite, se usa `enabled_by_default`). Si se pide `true` y el tenant no tiene URL configurada para ese modo → `400 validation_endpoint_not_configured`.
 
 #### 15.8.2 Momento de la llamada
@@ -1755,7 +1754,7 @@ En el flujo de 11.4, en este orden: campos del pagador validados → rate limits
 
 #### 15.8.3 Request
 
-`POST` a la URL configurada, con los headers de Standard Webhooks (`webhook-id` = ID de `validation_calls`, `webhook-timestamp`, `webhook-signature`) y además `x-axispay-kind: pre_payment_validation`.
+`POST` a la URL configurada, con los headers de Standard Webhooks (`webhook-id` = ID de `validation_calls`, `webhook-timestamp`, `webhook-signature`) y además `x-axispay-kind: pre_payment_validation`. El cuerpo lleva `type: payment.pre_validation` y `delivery_mode: sync`; los demás eventos llevan `delivery_mode: async`.
 
 ```json
 {
@@ -2404,7 +2403,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | 9 | Términos y condiciones: comisiones no reembolsables (ADR-012), suspensión (ADR-013), responsabilidades de disputas | `PENDIENTE` (el contenido). Dónde se publican ya existe: panel superadmin → Legal, visible en `/legal` (2026-09-30, [ADR-0056](../adr/0056-checkout-experience-legal-texts-merchant-logo-and-theme.md)) | Redactar con asesoría legal | Salida a producción |
 | 10 | Nombre comercial, dominios y prefijo de llaves definitivos | `PARCIALMENTE RESUELTO` (2026-09-24, ADR-0037): nombre interno `AxisPay` / `axispay`, prefijo de llaves `axp_`, nombre público configurable con `AXISPAY_DISPLAY_NAME`. Dominios: `PENDIENTE` | Definir los dominios antes de la salida a producción | Salida a producción (dominios) |
 | 11 | Tope de markup FX (propuesta: 10%) | `PROPUESTO` | Confirmar | Fase 6 |
-| 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | Rate de la API `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 100 requests/minuto por API key en ambos modos, configurable. Endpoints de webhook: `PROPUESTO` | Confirmar el límite de endpoints | Fase 5 |
+| 12 | Límite de endpoints de webhook por tenant (propuesta: 5 por modo) y límites de rate de la API | Rate de la API `DECIDIDO` (2026-09-26, [ADR-0048](../adr/0048-payment-links-api-phase-3.md)): 100 requests/minuto por API key en ambos modos, configurable. Endpoints de webhook: `DECIDIDO` (2026-10-28, [ADR-0069](../adr/0069-single-webhook-endpoint-with-pre-payment-validation.md)): 1 por tenant y modo por defecto (`max_endpoints_per_mode`), con el esquema listo para varios | — | Fase 5 |
 | 13 | Proveedor de correo transaccional y de monitoreo de errores | `PENDIENTE` | Postmark/SES; GlitchTip autoalojado o Sentry | Fase 0 |
 
 ---

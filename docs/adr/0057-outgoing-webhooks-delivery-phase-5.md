@@ -1,6 +1,6 @@
 # ADR-0057: Outgoing webhooks in Phase 5: outbox, delivery attempts, retries and SSRF protection
 
-- **Status:** Accepted (by the project owner, 2026-10-02)
+- **Status:** Accepted (by the project owner, 2026-10-02); amended by [ADR-0069](0069-single-webhook-endpoint-with-pre-payment-validation.md) (2026-10-28): one endpoint per mode by default (`max_endpoints_per_mode` = 1), `*` never includes `payment.pre_validation`, and the endpoint's health counts asynchronous deliveries only
 - **Date:** 2026-10-06
 - **Source:** master plan sections 7.6, 15.1-15.7, 17.3, 22 and 27 (Phase 5); [ADR-0008](0008-outgoing-webhooks-standard-webhooks.md), [ADR-0051](0051-checkout-and-card-payments-phase-4.md) (business events recorded since Phase 4).
 

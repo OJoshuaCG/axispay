@@ -1,6 +1,6 @@
 # ADR-0008: Outgoing webhooks: HMAC-SHA256 following Standard Webhooks
 
-- **Status:** Accepted
+- **Status (2026-10-28):** the same Standard Webhooks signature also signs the synchronous `payment.pre_validation` call ([ADR-0069](0069-single-webhook-endpoint-with-pre-payment-validation.md)). Original status: Accepted
 - **Date:** 2026-09 (master plan v1.1)
 - **Source:** `docs/plans/master.md`, section 3, ADR-008
 
