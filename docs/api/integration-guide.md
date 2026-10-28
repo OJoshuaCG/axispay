@@ -93,7 +93,7 @@ In the tenant panel, under **Settings -> API keys** (the panel shows the mode se
 | The account status is **active** (or in its grace period). | `403 tenant_suspended` when the account is suspended or closed. |
 | The account has a **Stripe connection in the same mode as the key that is able to charge**. For a test key with the "use my API keys" connection method, a Stripe account that is not activated yet is enough for test payments; live mode always needs a Stripe account that can accept charges. | `409 gateway_not_ready` (also while the account is still finishing onboarding). |
 | For `return_url`: the host is in the account's allowed return domains. | `400 return_url_not_allowed`. |
-| For `pre_payment_validation: true`: a validation URL is configured for this mode. | `400 validation_endpoint_not_configured`. |
+| For `pre_payment_validation: true`: your webhook endpoint for this mode is subscribed to `payment.pre_validation`. | `400 validation_endpoint_not_configured`. |
 
 Account status and the API:
 
@@ -249,7 +249,7 @@ When a request has several problems, the first failing field is reported.
 | `metadata_invalid` | 400 | `metadata` breaks its limits (see section 6). |
 | `return_url_not_allowed` | 400 | The `return_url` host is not in the account's allowed return domains, or it is not HTTPS in live mode. |
 | `payer_field_invalid` | 400 | `payer_fields` has an unknown field or an invalid requirement. |
-| `validation_endpoint_not_configured` | 400 | `pre_payment_validation: true` but no validation URL is configured for this mode. |
+| `validation_endpoint_not_configured` | 400 | `pre_payment_validation: true` but your webhook endpoint for this mode is not subscribed to `payment.pre_validation`. |
 | `idempotency_key_required` | 400 | `Idempotency-Key` is missing on `POST /v1/payment_links` or `POST /v1/refunds`. |
 | `idempotency_key_reused` | 422 | The key was already used with a different request (or, after 24 hours, with a different body for a key that created a link or a refund). Use a new key for a new request. |
 | `idempotency_request_in_progress` | 409 | A request with the same key is still running. Retry shortly with the same key. |
@@ -296,7 +296,7 @@ Unknown fields are refused (`parameter_invalid`), which catches typos such as `e
 | `return_url` | string (URL) | No | Where the payer can return after paying. Absolute `http(s)` URL of at most 2048 characters, without user or password. **HTTPS is required in live mode** and the **host must exactly match** one of the account's allowed return domains (subdomains are not implied). After a payment the URL gets a signed proof appended, see [Returning the payer to your site](#returning-the-payer-to-your-site). Error: `return_url_not_allowed`. |
 | `auto_redirect` | boolean | No | `true` sends the payer back to `return_url` by themselves, after a short countdown they can stop, once the payment succeeded. Needs `return_url` (`parameter_invalid` otherwise). Default `false`. Fixed when the link is created. |
 | `locale` | string | No | `es` or `en`: language of the payment page. Default: the account's checkout language. |
-| `pre_payment_validation` | boolean | No | `true` asks your server to approve each payment of this link (see [section 8](#8-pre-payment-validation-callback)); needs a validation URL for this mode (`validation_endpoint_not_configured` otherwise). `false` turns it off for this link. Omitted: the account's "use for new links" setting decides. Fixed when the link is created. |
+| `pre_payment_validation` | boolean | No | `true` asks your server to approve each payment of this link (see [section 8](#8-pre-payment-validation-callback)); needs your webhook endpoint to be subscribed to `payment.pre_validation` in this mode (`validation_endpoint_not_configured` otherwise). `false` turns it off for this link. Omitted: the account's "use for new links" setting decides. Fixed when the link is created. |
 | `fx` | object | No | Currency conversion of a USD link paid with a Mexican card, see [Currency conversion](#currency-conversion-usd-links-and-mexican-cards): `{ "mode": "none" \| "fixed" \| "banxico_fix", "rate": "20.000000" }` (`rate` only with `fixed`). Omit it to use the account's default. |
 
 **Expiration.** If you send neither `expires_in_hours` nor `expires_at`, the account's default applies (7 days unless the account lowered it). The expiry must fall between **15 minutes** and the account's maximum (**60 days** at most; the account sets its own default and maximum, never above 60 days, in its payment settings) from now, otherwise `expiration_out_of_range`.
@@ -941,7 +941,7 @@ Because `payment_link.expired` and `payment_link.canceled` are not sent yet, lea
 
 This is a summary; the full guide, with setup in the panel, the delivery log, troubleshooting and more code, is [`docs/guides/webhooks.md`](../guides/webhooks.md).
 
-**Setting up an endpoint.** In the panel, **Settings -> Webhooks -> Add endpoint**, per mode (up to 5 endpoints per mode). Choose the events it receives and copy the signing secret (`whsec_...`), shown once. Each endpoint has its own secret.
+**Setting up an endpoint.** In the panel, **Settings -> Webhooks -> Add endpoint**, per mode (one endpoint per mode for now; ask us if you need more). Choose the events it receives and copy the signing secret (`whsec_...`), shown once. Each endpoint has its own secret.
 
 **Endpoint requirements (and protection against requests to internal networks):**
 
@@ -1018,8 +1018,8 @@ PHP and Python versions are in the [webhooks guide](../guides/webhooks.md#verify
 An optional, **synchronous** check that lets your system veto a payment: "may we charge this?" It is not a webhook: your answer decides whether the payment is charged.
 
 - **When:** only for links with `pre_payment_validation` on, after the payer's card was authorized and before it is charged. The payer waits on a "Verifying your order" screen.
-- **Setup:** the merchant configures **one validation URL per mode** in the panel (**Settings -> Pre-payment validation**) with its own signing secret, and chooses a failure policy. Without a configured URL you cannot create links with `pre_payment_validation: true`.
-- **The call:** a signed `POST` (same Standard Webhooks signature as events, with the validation URL's own secret) with `webhook-id` = the call ID (`val_...`) and the extra header `x-axispay-kind: pre_payment_validation`. The body has `id`, `type: "payment.pre_validation"`, `livemode`, `test` (`true` for the panel's "Test validation" button), `created_at`, `attempt_number` (a payer who retries after a declined card is validated again) and `data` with `payment` (`id`: the `pay_...` ID of this payment attempt, the same in the immediate retry and in every other call about that attempt, different for each new attempt of the link), `payment_link` (`id`, `client_reference_id`, `metadata`, `description`, `amount`, `currency`, `expires_at`), `charge` (the exact `amount` and `currency`, already converted to MXN when `fx` says so, and `fx`: `{ "applied": false }` or the conversion applied, with the same fields as the payment's `fx`), `card` (`brand` and `country` only, never the number) and `payer` (e-mail and full name, when collected).
+- **Setup:** the merchant ticks **Validate payments before charging** on the **single webhook endpoint** of the mode (**Settings -> Webhooks**), which signs with the endpoint's secret, and chooses a failure policy. Without a subscribed endpoint you cannot create links with `pre_payment_validation: true`.
+- **The call:** a signed `POST` (same Standard Webhooks signature as events, with the endpoint's secret) with `webhook-id` = the call ID (`val_...`) and the extra header `x-axispay-kind: pre_payment_validation`. The body has `id`, `type: "payment.pre_validation"`, `delivery_mode: "sync"` (events carry `"async"`), `livemode`, `test` (`true` for the panel's "Test validation" button), `created_at`, `attempt_number` (a payer who retries after a declined card is validated again) and `data` with `payment` (`id`: the `pay_...` ID of this payment attempt, the same in the immediate retry and in every other call about that attempt, different for each new attempt of the link), `payment_link` (`id`, `client_reference_id`, `metadata`, `description`, `amount`, `currency`, `expires_at`), `charge` (the exact `amount` and `currency`, already converted to MXN when `fx` says so, and `fx`: `{ "applied": false }` or the conversion applied, with the same fields as the payment's `fx`), `card` (`brand` and `country` only, never the number) and `payer` (e-mail and full name, when collected).
 - **Your answer:** HTTP **200** with a JSON object of at most **4 KB**, **within 30 seconds in total** by default (2 seconds to connect; the platform operator can set the limit between 5 and 60 seconds, and the panel's help screen shows the value in force):
 
   ```json
@@ -1033,7 +1033,7 @@ An optional, **synchronous** check that lets your system veto a payment: "may we
   Only `decision` (`approve` or `reject`) is mandatory. `reason_code` (lowercase letters, digits and `_`, up to 64), `payer_message` (plain text shown to the payer on a rejection, up to 200 characters) and `cancel_link` (with `true` on a rejection, the link is canceled with reason `rejected_by_merchant`) are optional; a mistake in an optional field only drops that field. Unknown fields are ignored.
 - **Failures and policy.** No answer in time, a connection or TLS error, a status other than 200 (redirects are not followed), or an invalid answer is a failure. The merchant's policy applies: `fail_closed` (default) does **not** charge; `fail_open` charges and marks the payment `pre_validation.outcome = failed`, `policy_applied = fail_open` so you can review it. A connection that could not be opened is retried once at once; nothing is retried after your server received the request.
 - **An approval does not guarantee the charge.** Confirm the sale only with `payment.succeeded` (or `GET /v1/events`). If you reserve stock when approving, release it if `payment.succeeded` does not arrive within a reasonable time (15 minutes is a good default).
-- If the merchant removes the validation URL, links created with validation are **not charged** until a URL is configured again.
+- If the merchant unsubscribes the endpoint from the validation, links created with validation are **not charged** until a URL is configured again.
 
 Full details, code examples for answering the call and the stock reservation pattern: [`docs/guides/webhooks.md`](../guides/webhooks.md#pre-payment-validation).
 

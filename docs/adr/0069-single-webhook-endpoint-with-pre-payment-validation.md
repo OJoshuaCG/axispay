@@ -27,7 +27,7 @@ The panel had two destinations that the merchant configured separately: "Webhook
 ## Consequences
 
 - One screen, one URL, one secret: the merchant configures one thing, and the documentation talks about one thing.
-- Migrations are rewritten (no data to migrate); the two Phase 5 migrations that created `validation_endpoints` and the endpoint columns change.
+- One additive migration (`2026_10_28_000100_merge_validation_endpoint_into_webhook_endpoint`) adds the validation columns to `webhook_endpoints`, renames `validation_calls.validation_endpoint_id` to `webhook_endpoint_id` and drops `validation_endpoints`; the Phase 5 migrations stay untouched so databases that already ran them keep working. Rows of the old table are not copied (nothing in production).
 - The timeout of a synchronous call is still the global `AXISPAY_VALIDATION_TIMEOUT_SECONDS` ([ADR-0061](0061-validation-timeout-single-setting.md)); the asynchronous one stays at 10 s.
 - A merchant that today receives the validation at a URL of its own must put that URL in the single endpoint and subscribe to `payment.pre_validation`.
 - Offering several endpoints later needs only the limit, and a rule for which endpoint the merchant wants as the validator (already one per mode by the unique column).

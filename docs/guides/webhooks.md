@@ -12,12 +12,12 @@ Source of truth: master plan sections 15.1 to 15.8 (Spanish), [ADR-0057](../adr/
 | When | During the payment, after the card is authorized and before it is charged | After something changed: a payment succeeded, a card was declined, a link was paid... |
 | Does your answer matter? | Yes. Your answer decides whether the payment is charged | Only as a receipt: any 2xx status means "received" |
 | Timing | Synchronous: the payer waits, at most 30 seconds by default (see [Timeouts and failures](#timeouts-and-failures)) | Asynchronous: sent in the background, retried for about 27 hours |
-| How many | One URL per mode (test and live) | Up to 5 endpoints per mode, each with the events it wants |
+| How many | The same single endpoint per mode (test and live), subscribed to `payment.pre_validation` | The same endpoint, subscribed to the events it wants |
 | Optional? | Yes. Without it, payments are charged without asking you | Yes |
 
-Both calls are signed the same way (see [Verifying the signature](#verifying-the-signature)), but each has its own secret: the validation secret never signs events, and each event endpoint has a secret of its own.
+Since ADR-0069 both go to the **same webhook endpoint** and are signed with the **same secret** (see [Verifying the signature](#verifying-the-signature)). Tell them apart by the `delivery_mode` field of the body (`sync` for the validation, `async` for events), by `type` (`payment.pre_validation`) or by the `x-axispay-kind` header of the validation.
 
-Test mode and live mode are fully separate. Endpoints, the validation URL, secrets and logs of one mode never mix with the other. The panel always shows the mode selected in its top bar.
+Test mode and live mode are fully separate. The endpoint, its secret and logs of one mode never mix with the other. The panel always shows the mode selected in its top bar.
 
 ## Where they fit in a payment
 
@@ -108,15 +108,15 @@ The full contract is in [`docs/api/openapi.yaml`](../api/openapi.yaml).
 
 ### Setting it up
 
-In the panel: **Settings → Pre-payment validation → Configure** (permission "manage webhooks"). One URL per mode.
+In the panel: **Settings → Webhooks**, on your endpoint, tick **Validate payments before charging** (permission "manage webhooks"). The endpoint receives the validation as the event `payment.pre_validation`; the "all events" choice never includes it, so you must tick it on purpose. One endpoint per mode for now.
 
-- **Validation URL**: the same URL rules as for events.
+- **URL**: the endpoint's own URL, with the same URL rules as for events.
 - **If your server fails**, choose one policy:
   - **Do not charge (recommended)**: when your server does not answer in time, answers with an error or sends an invalid answer, the payment is not charged; the card reservation is released and the payer is asked to contact you. Nothing is ever charged without your approval, but an outage of your server stops your sales.
   - **Charge anyway**: in the same situations the payment is charged and marked "validation failed, charged" in the panel, the API and the `payment.succeeded` event. Sales continue during an outage, but you must review those payments yourself and refund them if needed.
-- **Use it for new links by default**: whether links use validation when the API request does not say. Each link can also ask for it or not when it is created through the API; asking for it in a mode without a validation URL is refused.
+- **Use it for new links by default**: whether links use validation when the API request does not say. Each link can also ask for it or not when it is created through the API; asking for it in a mode whose endpoint is not subscribed to `payment.pre_validation` is refused.
 
-The first time you save, a signing secret of its own is shown once. Rotating it works as for events (24 hours of overlap).
+The endpoint's signing secret is the one shown when it was created. Rotating it works as for events (24 hours of overlap).
 
 ### What we send
 
@@ -170,7 +170,7 @@ Never ship goods on the approval alone, and never on the payer returning to your
 
 ### Removing it
 
-**Remove** asks for your password. New links can no longer use validation. Links already created with validation are **not charged** until a validation URL is configured again in that mode, whatever your policy was: we cannot apply a policy that no longer exists, and charging without the check the link promised would be unsafe. The call log is kept for 30 days.
+While open links (active or processing) use validation, the endpoint **cannot be deleted, disabled or unsubscribed** from `payment.pre_validation`: the panel refuses it (`validation_in_use`). Close or cancel those links first. Unsubscribing asks for your password; new links can no longer use validation, and links already created with validation are **not charged** until the endpoint is subscribed again in that mode, whatever your policy was: we cannot apply a policy that no longer exists, and charging without the check the link promised would be unsafe. The call log is kept for 30 days.
 
 ### What you see in the panel
 

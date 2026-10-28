@@ -96,8 +96,8 @@ paths:
         `fx_not_available` on MXN links and when it is off; `fx_rate_invalid` when a fixed rate
         is missing or more than 30 % from the latest published rate; and
         `amount_below_minimum_after_conversion` when the amount converts to less than MXN 10.00.
-        `pre_payment_validation: true` needs a pre-payment validation URL
-        configured in the panel for this mode (`400 validation_endpoint_not_configured`).
+        `pre_payment_validation: true` needs the webhook endpoint of this mode to be
+        subscribed to `payment.pre_validation` in the panel (`400 validation_endpoint_not_configured`).
       parameters:
         - $ref: '#/components/parameters/IdempotencyKeyRequired'
         - $ref: '#/components/parameters/RequestIdIn'
@@ -676,7 +676,7 @@ webhooks:
         and before it is charged (plan 15.8; ADR-024, ADR-0058). Your answer decides whether the
         payment is charged.
 
-        Signed like the events (Standard Webhooks, with the validation URL's own secret), with
+        Signed like the events (Standard Webhooks, with the webhook endpoint's own secret), with
         `webhook-id` = the call ID (`val_...`) and an extra header
         `x-axispay-kind: pre_payment_validation`. Answer `200` with a JSON object of at most 4 KB
         within 30 seconds in total by default (2 seconds to connect; the platform operator sets the
@@ -1188,8 +1188,8 @@ components:
           description: |
             Whether the account's server is asked to approve each payment of this link, after
             the card is authorized and before it is charged (a signed synchronous call, see
-            the integration guide). `true` needs a pre-payment validation URL configured in the
-            panel for this mode, else `400 validation_endpoint_not_configured`. `false` turns it
+            the integration guide). `true` needs the webhook endpoint of this mode subscribed to
+            `payment.pre_validation` in the panel, else `400 validation_endpoint_not_configured`. `false` turns it
             off. Omitted: the URL's "use for new links" setting decides (off when no URL is
             configured). Frozen when the link is created.
     CancelPaymentLinkRequest:
@@ -1733,7 +1733,7 @@ components:
       description: |
         An event: the body of the webhook, byte for byte the same in every delivery, resend and
         read of the history. Amounts and objects are those of the API at the moment it happened.
-      required: [id, type, api_version, livemode, created_at, data]
+      required: [id, type, api_version, delivery_mode, livemode, created_at, data]
       properties:
         id:
           type: string
@@ -1745,6 +1745,9 @@ components:
             - { type: string, const: ping }
         api_version:
           const: v1
+        delivery_mode:
+          const: async
+          description: Always `async` for events; the pre-payment validation call carries `sync` (ADR-0069).
         livemode:
           type: boolean
         created_at:
@@ -1769,7 +1772,7 @@ components:
     PrePaymentValidationRequest:
       type: object
       description: Body of the pre-payment validation call (plan 15.8.3).
-      required: [id, type, livemode, test, created_at, attempt_number, data]
+      required: [id, type, delivery_mode, livemode, test, created_at, attempt_number, data]
       properties:
         id:
           type: string
@@ -1777,6 +1780,9 @@ components:
           examples: [val_01J8Z6Q6T4Y0V8KX2M1N5P7R9S]
         type:
           const: payment.pre_validation
+        delivery_mode:
+          const: sync
+          description: Always `sync` here; events carry `async` (ADR-0069).
         livemode:
           type: boolean
         test:
