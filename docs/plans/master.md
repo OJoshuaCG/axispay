@@ -83,7 +83,7 @@
 | **Cotización FX (FX Quote)** | Snapshot inmutable de una conversión USD→MXN: tipo de cambio, fuente, markup, montos, vigencia. |
 | **Cuenta conectada** | Cuenta de Stripe del tenant vinculada a la plataforma. Con `platform_onboarding` u `oauth` es una cuenta de Stripe Connect (`acct_...`); con `api_key` es la cuenta del comercio accedida con sus propias llaves. |
 | **Método de conexión** | Forma en que el tenant vincula su cuenta de Stripe: `platform_onboarding`, `oauth` o `api_key` (ADR-004). |
-| **Validación previa al cobro** | Callback síncrono al sistema del tenant, justo antes de confirmar un cobro, cuya respuesta (`approve`/`reject`) decide si se cobra (ADR-024). **No es un webhook.** |
+| **Validación previa al cobro** | Callback síncrono al sistema del tenant, justo antes de confirmar un cobro, cuya respuesta (`approve`/`reject`) decide si se cobra (ADR-024). Desde ADR-0069 es un evento síncrono (`payment.pre_validation`) del único endpoint de webhook del tenant, no una entidad aparte. |
 | **Direct charge** | Cargo creado directamente en la cuenta conectada (header `Stripe-Account`). El tenant es el comercio de registro. |
 | **Livemode** | Distinción test/producción, alineada con los modos test/live de Stripe. |
 | **Outbox** | Tabla donde se registran eventos en la misma transacción que el cambio de estado, para entregarlos después de forma confiable. |
@@ -390,7 +390,7 @@ Cada ADR debe replicarse como archivo en `docs/adr/NNNN-titulo.md` durante la fa
   - Detalle completo en la sección 15.8.
 - **Consecuencias:**
   - El servidor del tenant queda en la ruta crítica del pago cuando la validación está activa; su disponibilidad afecta sus ventas (documentarlo claramente).
-  - Nuevas tablas o columnas: configuración en la tabla `validation_endpoints` (7.4) y log en `validation_calls` (7.6).
+  - Nuevas tablas o columnas: configuración en `webhook_endpoints` (7.4, 7.6; la tabla `validation_endpoints` desapareció con ADR-0069) y log en `validation_calls` (7.6).
   - Riesgo residual inherente: entre la aprobación y la confirmación del cobro pasan segundos. Si el comercio necesita garantía de stock, debe **reservarlo** al aprobar y liberarlo si no recibe `payment.succeeded` en un tiempo razonable (documentarlo para los integradores).
 
 
@@ -451,7 +451,7 @@ Estructura sugerida: `app/Modules/<Modulo>/` con subcarpetas `Models`, `Actions`
 | `Payments` | Intentos de pago, reembolsos, disputas; máquina de estados del intento. |
 | `Fx` | Tipos de cambio (Banxico), cotizaciones, reglas de conversión. |
 | `ProviderEvents` | Ingesta, verificación, almacenamiento y despacho de webhooks entrantes; reconciliación. |
-| `Webhooks` | Endpoints de los tenants, outbox de eventos, entrega firmada, reintentos, log de entregas, protección SSRF compartida, y la validación previa al cobro (`validation_endpoints`, `validation_calls`, cliente síncrono). |
+| `Webhooks` | Endpoints de los tenants, outbox de eventos, entrega firmada, reintentos, log de entregas, protección SSRF compartida, y la validación previa al cobro (evento síncrono `payment.pre_validation` del endpoint, `validation_calls`, cliente síncrono). |
 | `Branding` | Logo, colores y nombre visible; validación de contraste. |
 | `PayerFields` | Catálogo de campos del pagador, configuración por tenant y por link, validación y almacenamiento cifrado. |
 | `Reporting` | Rollups diarios, métricas, reportes de uso mensuales. |
@@ -806,7 +806,7 @@ Esta regla aplica a: `payment_attempts → payment_links`, `fx_quotes → paymen
 - `id`, `tenant_id`, `webhook_event_id`, `webhook_endpoint_id`, `attempt_number`, `status` (`pending` | `succeeded` | `failed` | `abandoned`), `scheduled_at`, `sent_at`, `response_status`, `response_body_excerpt` (máximo 2 KB, saneado), `duration_ms`, `error` (timeout, DNS, SSRF bloqueado, TLS...), `next_retry_at`.
 
 **`validation_calls`** (log de validaciones previas; retención de 30 días)
-- `id` (se envía como `webhook-id` del callback), `tenant_id`, `livemode`, `payment_link_id`, `payment_attempt_id` (nullable si el intento aún no existe en Stripe), `validation_endpoint_id`.
+- `id` (se envía como `webhook-id` del callback), `tenant_id`, `livemode`, `payment_link_id`, `payment_attempt_id` (nullable si el intento aún no existe en Stripe), `webhook_endpoint_id` (antes `validation_endpoint_id`; ADR-0069).
 - `request_payload` (JSON congelado), `outcome` (`approved` | `rejected` | `failed`), `failure_kind` (`timeout` | `connection_error` | `http_error` | `invalid_response` | `blocked_destination`, nullable), `policy_applied` (`fail_closed` | `fail_open`, cuando `outcome = failed`), `final_decision` (`charge` | `block`).
 - `reason_code`, `payer_message` (saneado), `response_status`, `response_body_excerpt` (máximo 2 KB), `duration_ms`, `created_at`.
 
@@ -1001,7 +1001,7 @@ Los estados internos son un espejo normalizado de los de Stripe (el adaptador ha
 | `metadata_invalid` | 400 | Metadata excede límites o contiene tipos no permitidos. |
 | `return_url_not_allowed` | 400 | Dominio de `return_url` no permitido para el tenant. |
 | `payer_field_invalid` | 400 | Configuración de campos del pagador inválida. |
-| `validation_endpoint_not_configured` | 400 | Se pidió validación previa pero el tenant no tiene URL configurada para el modo. |
+| `validation_endpoint_not_configured` | 400 | Se pidió validación previa pero ningún endpoint de webhook del tenant en ese modo está suscrito a `payment.pre_validation`. |
 | `idempotency_key_required` | 400 | Falta `Idempotency-Key`. |
 | `idempotency_key_reused` | 422 | Mismo key con cuerpo distinto. |
 | `idempotency_request_in_progress` | 409 | Request concurrente con el mismo key. |
@@ -1049,7 +1049,7 @@ Request:
 | `payer_fields` | objeto | No | Override por campo: `hidden`, `optional` o `required` (sección 19). |
 | `return_url` | string | No | HTTPS obligatorio en live; el host debe estar en `allowed_return_domains` del tenant; máximo 2048 caracteres. Evita open redirects. |
 | `locale` | string | No | `es` o `en`; default del tenant. |
-| `pre_payment_validation` | boolean | No | Activa la validación previa al cobro para este link (15.8). Default: `enabled_by_default` del tenant. Requiere URL de validación configurada para el modo. |
+| `pre_payment_validation` | boolean | No | Activa la validación previa al cobro para este link (15.8). Default: `enabled_by_default` del tenant. Requiere un endpoint de webhook suscrito a `payment.pre_validation` en el modo. |
 
 Validaciones de negocio al crear:
 1. Tenant en estado `active` o `grace`.
@@ -2323,7 +2323,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 
 - Endpoints de webhooks (panel), secretos cifrados, rotación, outbox, `DeliverWebhookJob`, calendario de reintentos, deshabilitación por fallos, log de entregas, reenvío manual, evento `ping`, protección SSRF completa, barredor.
 - `GET /v1/events`.
-- **Validación previa al cobro (15.8):** `validation_endpoints`, configuración en el panel, botón de prueba, integración en el flujo del checkout (fuera de bloqueos), políticas `fail_closed`/`fail_open`, `cancel_link`, `validation_calls`, visibilidad en el panel, campo `pre_payment_validation` en la API y bloque `pre_validation` en los pagos y webhooks.
+- **Validación previa al cobro (15.8):** configuración en el endpoint de webhook (ADR-0069), selector de eventos, botón de prueba, integración en el flujo del checkout (fuera de bloqueos), políticas `fail_closed`/`fail_open`, `cancel_link`, `validation_calls`, visibilidad en el panel, campo `pre_payment_validation` en la API y bloque `pre_validation` en los pagos y webhooks.
 - Documentación para integradores (verificación de firma con ejemplos; contrato de la validación previa con ejemplos de servidor en PHP, Node y Python; recomendación de reserva de stock).
 - **Aceptación:** firmas verificables con una librería de Standard Webhooks; reintentos según el calendario; casos críticos 13, 23 y 24; entregas at-least-once probadas con fallos simulados; la validación previa agrega como máximo `AXISPAY_VALIDATION_TIMEOUT_SECONDS` (30 s por defecto) al checkout en el peor caso (ADR-0061).
 
@@ -2375,7 +2375,7 @@ Los scopes de las API keys son un subconjunto: `links:create`, `links:read`, `li
 | Gestión de evidencia de disputas desde el panel | Alcance | Tabla `disputes` existente. |
 | Prellenado de datos del pagador | Alcance | Catálogo de campos listo. |
 | Onboarding embebido de Stripe | Alcance | El flujo de Account Links funciona sin él. |
-| Validación previa **al abrir** el link (además de antes del cobro) | Bloquea la carga de la página por el servidor del tenant; la validación antes del cobro cubre el caso principal | `validation_endpoints` reutilizable; solo requiere otro punto de llamada. |
+| Validación previa **al abrir** el link (además de antes del cobro) | Bloquea la carga de la página por el servidor del tenant; la validación antes del cobro cubre el caso principal | El endpoint validador (ADR-0069) es reutilizable; solo requiere otro punto de llamada. |
 | Firma de la respuesta de la validación previa | TLS ya autentica al servidor del tenant | Formato de headers compatible. |
 | Gestor de secretos (Vault) para `GATEWAY_CREDENTIALS_KEY` | Infraestructura adicional | Encriptador dedicado y versionado de la llave. |
 | Pool + silo (BD dedicada para enterprise) | No hay demanda | Aislamiento por `tenant_id` y `TenantContext` centralizado. |
