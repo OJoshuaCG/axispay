@@ -60,6 +60,7 @@ final class ViewWebhookEndpoint extends ViewRecord implements PresentsTestResult
     {
         return [
             IntegrationHelp::webhooksAction(),
+            IntegrationHelp::validationAction(),
             WebhookEndpointResource::sendTestAction(),
             $this->editAction(),
             $this->enableAction(),

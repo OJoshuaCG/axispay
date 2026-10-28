@@ -8,7 +8,10 @@ use App\Modules\Identity\Exceptions\ReauthenticationRequiredException;
 use App\Modules\Identity\Filament\Concerns\Reauthentication;
 use App\Modules\Identity\Filament\Concerns\TenantPanel;
 use App\Modules\Webhooks\Actions\SendTestWebhook;
+use App\Modules\Webhooks\Actions\TestValidationEndpoint;
+use App\Modules\Webhooks\Data\ValidationTestResult;
 use App\Modules\Webhooks\Data\WebhookEndpointData;
+use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
 use App\Modules\Webhooks\Enums\WebhookDeliveryTrigger;
 use App\Modules\Webhooks\Enums\WebhookEndpointRefusal;
 use App\Modules\Webhooks\Enums\WebhookEventType;
@@ -18,10 +21,12 @@ use App\Modules\Webhooks\Filament\Contracts\PresentsTestResults;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ListWebhookEndpoints;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\Pages\ViewWebhookEndpoint;
 use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\RelationManagers\DeliveriesRelationManager;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\RelationManagers\ValidationCallsRelationManager;
 use App\Modules\Webhooks\Filament\Support\IntegrationHelp;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\WebhookDelivery;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
+use App\Modules\Webhooks\Services\ValidationCallMetrics;
 use App\Support\Filament\Concerns\SentenceCaseLabels;
 use App\Support\Filament\DomainErrors;
 use App\Support\Filament\PanelDefaults;
@@ -29,6 +34,7 @@ use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
@@ -73,7 +79,7 @@ final class WebhookEndpointResource extends Resource
     protected static ?string $slug = 'settings/webhooks';
 
     /** Form fields named like the WebhookEndpointData properties. */
-    public const array FIELDS = ['url', 'description', 'events'];
+    public const array FIELDS = ['url', 'description', 'events', 'validation_failure_policy'];
 
     public static function getModelLabel(): string
     {
@@ -196,6 +202,66 @@ final class WebhookEndpointResource extends Resource
                             ->color('gray')
                             ->state(static fn (WebhookEndpoint $record): array => self::eventLabels($record))
                             ->columnSpanFull(),
+                        TextEntry::make('validation')
+                            ->label(__('webhooks.fields.validation'))
+                            ->state(static fn (WebhookEndpoint $record): string => $record->validates() ? __('webhooks.fields.validation_on') : __('webhooks.fields.validation_off'))
+                            ->badge()
+                            ->color(static fn (WebhookEndpoint $record): string => $record->validates() ? 'success' : 'gray')
+                            ->belowContent(static fn (WebhookEndpoint $record): ?string => $record->validates() ? $record->validation_failure_policy->explanation() : null)
+                            ->columnSpanFull(),
+                        TextEntry::make('validation_enabled_by_default')
+                            ->label(__('webhooks.validation.fields.enabled_by_default'))
+                            ->state(static fn (WebhookEndpoint $record): string => $record->validation_enabled_by_default ? __('webhooks.validation.page.default_on') : __('webhooks.validation.page.default_off'))
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->validates()),
+                        TextEntry::make('validation_last_success_at')
+                            ->label(__('webhooks.validation.fields.last_success_at'))
+                            ->state(static fn (WebhookEndpoint $record): ?string => $record->validation_last_success_at !== null ? self::panelDate($record->validation_last_success_at) : null)
+                            ->placeholder(__('webhooks.validation.page.never'))
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->validates()),
+                        // Plan 15.8.7: rejection rate, failure rate and p95 latency
+                        // of the real calls of the last days.
+                        TextEntry::make('validation_metrics_rejection_rate')
+                            ->label(__('webhooks.validation.metrics.rejection_rate'))
+                            ->state(static function (): ?string {
+                                $metrics = app(ValidationCallMetrics::class)->current();
+
+                                $rate = $metrics->rejectionRate();
+
+                                return $rate === null ? null : self::translated('webhooks.validation.metrics.percent', ['value' => $rate, 'count' => (string) $metrics->rejected]);
+                            })
+                            ->placeholder(__('webhooks.validation.metrics.no_calls'))
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->validates()),
+                        TextEntry::make('validation_metrics_failure_rate')
+                            ->label(__('webhooks.validation.metrics.failure_rate'))
+                            ->state(static function (): ?string {
+                                $metrics = app(ValidationCallMetrics::class)->current();
+
+                                $rate = $metrics->failureRate();
+
+                                return $rate === null ? null : self::translated('webhooks.validation.metrics.percent', ['value' => $rate, 'count' => (string) $metrics->failed]);
+                            })
+                            ->placeholder(__('webhooks.validation.metrics.no_calls'))
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->validates()),
+                        TextEntry::make('validation_metrics_p95_latency')
+                            ->label(__('webhooks.validation.metrics.p95_latency'))
+                            ->state(static function (): ?string {
+                                $metrics = app(ValidationCallMetrics::class)->current();
+
+                                return $metrics->p95LatencyMs === null ? null : self::translated('webhooks.validation.metrics.milliseconds', ['value' => (string) $metrics->p95LatencyMs]);
+                            })
+                            ->placeholder(__('webhooks.validation.metrics.no_calls'))
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->validates()),
+                        TextEntry::make('validation_alert')
+                            ->label(__('webhooks.validation.alert.heading'))
+                            ->state(static fn (WebhookEndpoint $record): string => __('webhooks.validation.alert.description', [
+                                'failures' => $record->validation_consecutive_failures,
+                                'policy' => $record->validation_failure_policy->label(),
+                                'date' => $record->validation_last_failure_at !== null ? self::panelDate($record->validation_last_failure_at) : '—',
+                            ]))
+                            ->color('danger')
+                            ->icon(Heroicon::OutlinedExclamationTriangle)
+                            ->visible(static fn (WebhookEndpoint $record): bool => $record->isValidationFailing())
+                            ->columnSpanFull(),
                         TextEntry::make('previous_secret_expires_at')
                             ->label(__('webhooks.fields.previous_secret'))
                             ->state(static fn (WebhookEndpoint $record): ?string => self::previousSecretLine($record->previous_secret_expires_at))
@@ -209,7 +275,7 @@ final class WebhookEndpointResource extends Resource
 
     public static function getRelations(): array
     {
-        return [DeliveriesRelationManager::class];
+        return [DeliveriesRelationManager::class, ValidationCallsRelationManager::class];
     }
 
     public static function getPages(): array
@@ -252,11 +318,31 @@ final class WebhookEndpointResource extends Resource
                 ->helperText(__('webhooks.fields.events_help'))
                 ->options(self::eventOptions())
                 ->descriptions(self::eventDescriptions())
-                ->in(WebhookEventType::subscribableValues())
+                ->in(WebhookEventType::asynchronousValues())
                 ->columns(['default' => 1, 'sm' => 2])
-                ->required(static fn (Get $get): bool => $get('all_events') !== true)
+                ->required(static fn (Get $get): bool => $get('all_events') !== true && $get('validate_payments') !== true)
                 ->validationMessages(['required' => __('webhooks.form.events_required')])
                 ->visible(static fn (Get $get): bool => $get('all_events') !== true),
+            // The synchronous event is chosen on its own: "every event" never
+            // includes it, because it decides whether a payment is charged
+            // (ADR-0069).
+            Toggle::make('validate_payments')
+                ->label(__('webhooks.fields.validate_payments'))
+                ->helperText(__('webhooks.fields.validate_payments_help'))
+                ->live(),
+            Radio::make('validation_failure_policy')
+                ->label(__('webhooks.validation.fields.failure_policy'))
+                ->helperText(__('webhooks.validation.fields.failure_policy_help', ['seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')]))
+                ->options(self::policyOptions())
+                ->descriptions(self::policyDescriptions())
+                ->in(array_map(static fn (ValidationFailurePolicy $policy): string => $policy->value, ValidationFailurePolicy::cases()))
+                ->default(ValidationFailurePolicy::FailClosed->value)
+                ->required(static fn (Get $get): bool => $get('validate_payments') === true)
+                ->visible(static fn (Get $get): bool => $get('validate_payments') === true),
+            Toggle::make('validation_enabled_by_default')
+                ->label(__('webhooks.validation.fields.enabled_by_default'))
+                ->helperText(__('webhooks.validation.fields.enabled_by_default_help'))
+                ->visible(static fn (Get $get): bool => $get('validate_payments') === true),
             Reauthentication::field(),
         ];
     }
@@ -274,7 +360,10 @@ final class WebhookEndpointResource extends Resource
             'url' => $endpoint->url,
             'description' => $endpoint->description,
             'all_events' => $all,
-            'events' => $all ? [] : $endpoint->enabled_events,
+            'events' => $all ? [] : array_values(array_diff($endpoint->enabled_events, [WebhookEventType::PaymentPreValidation->value])),
+            'validate_payments' => $endpoint->validates(),
+            'validation_failure_policy' => $endpoint->validation_failure_policy->value,
+            'validation_enabled_by_default' => $endpoint->validation_enabled_by_default,
         ];
     }
 
@@ -295,12 +384,21 @@ final class WebhookEndpointResource extends Resource
             }
         }
 
+        $validatesPayments = ($data['validate_payments'] ?? false) === true;
+
+        if ($validatesPayments) {
+            $events[] = WebhookEventType::PaymentPreValidation->value;
+        }
+
         $description = $data['description'] ?? null;
+        $policyValue = is_string($data['validation_failure_policy'] ?? null) ? $data['validation_failure_policy'] : '';
 
         return new WebhookEndpointData(
             url: is_string($data['url'] ?? null) ? $data['url'] : '',
             description: is_string($description) ? $description : null,
             events: $events,
+            validationFailurePolicy: ValidationFailurePolicy::tryFrom($policyValue) ?? ValidationFailurePolicy::FailClosed,
+            validationEnabledByDefault: $validatesPayments && ($data['validation_enabled_by_default'] ?? false) === true,
         );
     }
 
@@ -348,9 +446,33 @@ final class WebhookEndpointResource extends Resource
             ->requiresConfirmation()
             ->modalIcon(Heroicon::OutlinedPaperAirplane)
             ->modalHeading(__('webhooks.actions.send_test_heading'))
-            ->modalDescription(static fn (WebhookEndpoint $record): string => __('webhooks.actions.send_test_help', ['host' => $record->host()]))
+            ->modalDescription(static fn (WebhookEndpoint $record): string => $record->validates()
+                ? __('webhooks.actions.send_test_help_both', ['host' => $record->host(), 'seconds' => config()->integer('axispay.pre_payment_validation.timeout_seconds')])
+                : __('webhooks.actions.send_test_help', ['host' => $record->host()]))
             ->modalSubmitActionLabel(__('webhooks.actions.send_test_submit'))
-            ->action(static function (WebhookEndpoint $record, Action $action, PresentsTestResults $livewire): void {
+            // One test button for both roles of the endpoint (ADR-0069): the
+            // choice only appears when the endpoint receives the validation.
+            ->schema(static fn (WebhookEndpoint $record): array => $record->validates() ? [
+                Radio::make('test_event')
+                    ->label(__('webhooks.fields.send_test_event'))
+                    ->options([
+                        WebhookEventType::Ping->value => __('webhooks.fields.send_test_event_ping'),
+                        WebhookEventType::PaymentPreValidation->value => __('webhooks.fields.send_test_event_validation'),
+                    ])
+                    ->default(WebhookEventType::Ping->value)
+                    ->required(),
+            ] : [])
+            ->action(static function (array $data, WebhookEndpoint $record, Action $action, PresentsTestResults $livewire): void {
+                $sendsValidation = ($data['test_event'] ?? null) === WebhookEventType::PaymentPreValidation->value && $record->validates();
+
+                if ($sendsValidation) {
+                    $result = self::run($action, [], static fn (): ValidationTestResult => app(TestValidationEndpoint::class)->handle(TenantPanel::user(), $record), reauthenticate: false);
+
+                    $livewire->showTestResult(TestResultPresenter::validation($result), __('webhooks.test_result.validation_heading', ['host' => $record->host()]));
+
+                    return;
+                }
+
                 $delivery = self::run($action, [], static fn () => app(SendTestWebhook::class)->handle(TenantPanel::user(), $record), reauthenticate: false);
 
                 $livewire->showTestResult(TestResultPresenter::delivery($delivery), __('webhooks.test_result.webhook_heading', ['host' => $record->host()]));
@@ -365,7 +487,11 @@ final class WebhookEndpointResource extends Resource
     public static function eventLabels(WebhookEndpoint $endpoint): array
     {
         if (in_array(WebhookEventType::WILDCARD, $endpoint->enabled_events, true)) {
-            return [__('webhooks.all_events')];
+            // The wildcard never covers the synchronous validation, which may
+            // be chosen next to it.
+            return $endpoint->validates()
+                ? [__('webhooks.all_events'), WebhookEventType::PaymentPreValidation->value]
+                : [__('webhooks.all_events')];
         }
 
         return array_values($endpoint->enabled_events);
@@ -414,11 +540,39 @@ final class WebhookEndpointResource extends Resource
     {
         $options = [];
 
-        foreach (WebhookEventType::subscribable() as $type) {
+        foreach (WebhookEventType::asynchronous() as $type) {
             $options[$type->value] = $type->description();
         }
 
         return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function policyOptions(): array
+    {
+        $options = [];
+
+        foreach (ValidationFailurePolicy::cases() as $policy) {
+            $options[$policy->value] = $policy->label();
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function policyDescriptions(): array
+    {
+        $descriptions = [];
+
+        foreach (ValidationFailurePolicy::cases() as $policy) {
+            $descriptions[$policy->value] = $policy->explanation();
+        }
+
+        return $descriptions;
     }
 
     /**
@@ -430,7 +584,7 @@ final class WebhookEndpointResource extends Resource
     {
         $descriptions = [];
 
-        foreach (WebhookEventType::subscribable() as $type) {
+        foreach (WebhookEventType::asynchronous() as $type) {
             $descriptions[$type->value] = new HtmlString('<span class="font-numeric text-xs text-fg-secondary">'.e($type->value).'</span>');
         }
 
@@ -452,5 +606,13 @@ final class WebhookEndpointResource extends Resource
     private static function panelDate(CarbonImmutable $time): string
     {
         return $time->setTimezone(FilamentTimezone::get())->translatedFormat(PanelDefaults::DATE_TIME_FORMAT);
+    }
+
+    /**
+     * @param  array<string, string>  $replace
+     */
+    private static function translated(string $key, array $replace): string
+    {
+        return __($key, $replace);
     }
 }

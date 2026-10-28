@@ -30,7 +30,7 @@ use App\Modules\Shared\Money\MoneyDisplay;
 use App\Modules\Tenancy\Enums\CheckoutLocale;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Support\Filament\Concerns\SentenceCaseLabels;
 use App\Support\Filament\DomainErrors;
 use App\Support\Filament\PanelDefaults;
@@ -389,7 +389,7 @@ final class PaymentLinkResource extends Resource
             ->description(__('webhooks.validation.link_calls.description'))
             ->columnSpanFull()
             ->collapsible()
-            ->visible(static fn (PaymentLink $record): bool => Gate::allows('viewAny', ValidationEndpoint::class)
+            ->visible(static fn (PaymentLink $record): bool => Gate::allows('viewAny', WebhookEndpoint::class)
                 && ($record->pre_payment_validation || self::validationCalls($record)->exists()))
             ->schema([
                 TextEntry::make('validation_calls_empty')

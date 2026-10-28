@@ -8,11 +8,11 @@ use App\Modules\Payments\Enums\ValidationOutcome;
 use App\Modules\Payments\Models\PaymentAttempt;
 use App\Modules\Payments\Services\AttemptDisplay;
 use App\Modules\Webhooks\Enums\ValidationCallOutcome;
-use App\Modules\Webhooks\Filament\Pages\PrePaymentValidationSettings;
+use App\Modules\Webhooks\Filament\Resources\WebhookEndpoints\RelationManagers\ValidationCallsRelationManager;
 use App\Modules\Webhooks\Filament\Support\TestResultPresenter;
 use App\Modules\Webhooks\Models\DomainEvent;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Models\WebhookEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
@@ -61,12 +61,12 @@ final class PaymentTimeline
             );
         }
 
-        if (Gate::allows('viewAny', ValidationEndpoint::class)) {
+        if (Gate::allows('viewAny', WebhookEndpoint::class)) {
             foreach (ValidationCall::query()->where('payment_attempt_id', $attempt->id)->where('is_test', false)->orderBy('id')->get() as $call) {
                 $entries[] = self::entry(
                     $call->created_at ?? $attempt->created_at ?? CarbonImmutable::now(),
                     __('payments.timeline.validation', ['outcome' => $call->outcome?->label() ?? '—']),
-                    implode(' · ', array_filter([PrePaymentValidationSettings::callDetail($call), $call->duration_ms !== null ? TestResultPresenter::latency($call->duration_ms) : null])) ?: null,
+                    implode(' · ', array_filter([ValidationCallsRelationManager::callDetail($call), $call->duration_ms !== null ? TestResultPresenter::latency($call->duration_ms) : null])) ?: null,
                     $call->prefixedId(),
                     match ($call->outcome) {
                         ValidationCallOutcome::Approved => 'success',

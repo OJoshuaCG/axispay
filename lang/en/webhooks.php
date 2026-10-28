@@ -41,6 +41,14 @@ return [
         'all_events_help' => 'Includes the events added to the catalog later.',
         'events' => 'Events',
         'events_help' => 'Choose only the events your server uses.',
+        'validate_payments' => 'Validate payments before charging',
+        'validate_payments_help' => 'After the card is authorized and before it is charged, we ask this endpoint whether to go ahead. It is separate from the events above: "Send every event" does not include it.',
+        'validation' => 'Pre-payment validation',
+        'validation_on' => 'On',
+        'validation_off' => 'Off',
+        'send_test_event' => 'What to send',
+        'send_test_event_ping' => 'A test event (ping)',
+        'send_test_event_validation' => 'A sample pre-payment validation',
         'status' => 'Status',
         'health' => 'Deliveries',
         'healthy' => 'No continuous failures',
@@ -81,6 +89,7 @@ return [
         'refund.failed' => 'A refund failed.',
         'dispute.created' => 'A dispute was opened.',
         'dispute.closed' => 'A dispute was closed.',
+        'payment.pre_validation' => 'Before a payment is charged, your server is asked to approve or reject it (synchronous).',
         'ping' => 'Test event sent from the panel.',
     ],
 
@@ -103,6 +112,7 @@ return [
         'send_test' => 'Send test event',
         'send_test_heading' => 'Send a test event?',
         'send_test_help' => 'A signed "ping" event is sent now to :host and the answer is shown. It is not retried and does not affect the endpoint\'s status.',
+        'send_test_help_both' => 'A signed example is sent now to :host and the answer is shown. A pre-payment validation sample waits up to :seconds seconds for your answer; neither charges anything or affects the endpoint\'s status.',
         'send_test_submit' => 'Send',
         'rotate' => 'Rotate secret',
         'rotate_heading' => 'Rotate the signing secret?',
@@ -248,6 +258,8 @@ return [
         'unknown_event' => 'One of the chosen events does not exist.',
         'description_too_long' => 'The description can have up to 255 characters.',
         'endpoint_disabled' => 'The endpoint is disabled. Enable it before resending events.',
+        'validation_in_use' => 'There are open payment links that ask for a pre-payment validation. Cancel them or let them expire before deleting or disabling this endpoint, or unsubscribing it from the pre-payment validation.',
+        'validator_already_exists' => 'Another endpoint already receives the pre-payment validation in this mode. Only one endpoint can.',
     ],
 
     'destination' => [
@@ -369,6 +381,8 @@ return [
             'no_calls' => 'No calls yet',
         ],
         'calls' => [
+            'singular' => 'validation call',
+            'plural' => 'validation calls',
             'title' => 'Recent calls',
             'description' => 'Every validation call of the last 30 days, newest first.',
             'time' => 'Time',
