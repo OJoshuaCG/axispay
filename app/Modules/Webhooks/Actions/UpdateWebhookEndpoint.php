@@ -18,12 +18,14 @@ use App\Modules\Webhooks\Exceptions\WebhookEndpointNotAllowedException;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Services\DestinationGuard;
 use App\Modules\Webhooks\Services\EnabledEvents;
+use App\Modules\Webhooks\Services\ValidationUsage;
 use App\Modules\Webhooks\Services\WebhookEndpointNotifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Changes an endpoint's URL, description and events (plan 15.1):
+ * Changes an endpoint's URL, description, events and validation settings
+ * (plan 15.1, ADR-0069):
  * `webhooks:manage` + re-authentication (plan 17.3); a new URL passes the
  * SSRF protection again. The secret and the mode never change here. E-mails
  * the owners and the users with `webhooks:manage` when something changed.
@@ -36,6 +38,7 @@ final readonly class UpdateWebhookEndpoint
         private DestinationGuard $guard,
         private AuditLogger $audit,
         private WebhookEndpointNotifier $notifier,
+        private ValidationUsage $usage,
     ) {}
 
     /**
@@ -55,15 +58,39 @@ final readonly class UpdateWebhookEndpoint
         $events = EnabledEvents::normalize($data->events);
         $url = trim($data->url) === $endpoint->url ? $endpoint->url : $this->guard->inspect($data->url, $endpoint->livemode)->url;
 
-        [$updated, $changed] = DB::transaction(function () use ($actor, $endpoint, $url, $description, $events): array {
+        [$updated, $changed] = DB::transaction(function () use ($actor, $endpoint, $url, $description, $events, $data): array {
             $locked = WebhookEndpoint::query()->lockForUpdate()->findOrFail($endpoint->id);
-            $locked->forceFill(['url' => $url, 'description' => $description, 'enabled_events' => $events]);
+            $validatedBefore = $locked->validates();
+            $locked->forceFill([
+                'url' => $url,
+                'description' => $description,
+                'enabled_events' => $events,
+                'validation_failure_policy' => $data->validationFailurePolicy,
+                'validation_enabled_by_default' => $data->validationEnabledByDefault,
+            ]);
 
             if (! $locked->isDirty()) {
                 return [$locked, false];
             }
 
+            $validatesNow = $locked->validates();
+
+            // Unsubscribing from the validation must not strand links that
+            // were promised one (ADR-0069, decision 7).
+            if ($validatedBefore && ! $validatesNow) {
+                $this->usage->assertNoOpenLinks();
+            }
+
+            if (! $validatedBefore && $validatesNow && WebhookEndpoint::query()->validator()->exists()) {
+                throw new WebhookEndpointNotAllowedException(WebhookEndpointRefusal::ValidatorAlreadyExists);
+            }
+
             $changes = ['livemode' => $locked->livemode];
+
+            if ($locked->isDirty(['validation_failure_policy', 'validation_enabled_by_default'])) {
+                $changes['validation_failure_policy'] = $locked->validation_failure_policy->value;
+                $changes['validation_enabled_by_default'] = $locked->validation_enabled_by_default;
+            }
 
             if ($locked->isDirty('url')) {
                 $changes['host'] = $locked->host();

@@ -355,9 +355,11 @@ final readonly class CreatePaymentLink
      * Plan 15.8.1: whether the link uses the pre-payment validation. `true`
      * needs a validation URL in the current mode (else `400
      * validation_endpoint_not_configured`); `false` turns it off; omitted,
-     * the URL's `enabled_by_default` decides (off without a URL). If the URL
-     * is removed later, the link keeps asking for validation and is not
-     * charged until one is configured again (ADR-0058).
+     * the endpoint's `validation_enabled_by_default` decides (off without
+     * one). The endpoint cannot be removed or unsubscribed from
+     * `payment.pre_validation` while open links ask for validation
+     * (ADR-0069); if it is gone anyway, the link is not charged until one is
+     * configured again (ADR-0058).
      */
     private function prePaymentValidation(?bool $requested): bool
     {
@@ -371,7 +373,7 @@ final readonly class CreatePaymentLink
             throw PaymentLinkRejectedException::of(ApiErrorCode::ValidationEndpointNotConfigured, param: 'pre_payment_validation');
         }
 
-        return $requested ?? ($endpoint->enabled_by_default ?? false);
+        return $requested ?? ($endpoint->validation_enabled_by_default ?? false);
     }
 
     /**

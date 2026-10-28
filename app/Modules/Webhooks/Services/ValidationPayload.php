@@ -13,6 +13,7 @@ use App\Modules\Shared\Ids\PrefixedId;
 use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Shared\Ids\Ulid;
 use App\Modules\Shared\Time\IsoDateTime;
+use App\Modules\Webhooks\Enums\WebhookDeliveryMode;
 use Carbon\CarbonImmutable;
 
 /**
@@ -50,6 +51,7 @@ final class ValidationPayload
         return [
             'id' => $callPrefixedId,
             'type' => self::TYPE,
+            'delivery_mode' => WebhookDeliveryMode::Sync->value,
             'livemode' => $link->livemode,
             'test' => false,
             'created_at' => IsoDateTime::format($now),
@@ -95,6 +97,7 @@ final class ValidationPayload
         return [
             'id' => $callPrefixedId,
             'type' => self::TYPE,
+            'delivery_mode' => WebhookDeliveryMode::Sync->value,
             'livemode' => $livemode,
             'test' => true,
             'created_at' => IsoDateTime::format($now),

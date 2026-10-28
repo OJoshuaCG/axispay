@@ -47,8 +47,8 @@ return [
         'webhook_endpoints',
         'webhook_events',
         'webhook_deliveries',
-        // Phase 5 (plan 7.4, 7.6, 15.8; ADR-0058): pre-payment validation.
-        'validation_endpoints',
+        // Phase 5 (plan 7.6, 15.8; ADR-0058, ADR-0069): the log of the
+        // synchronous pre-payment validation calls.
         'validation_calls',
         // Phase 6 (plan 7.5, 13.4; ADR-0063): the immutable FX quotes.
         'fx_quotes',

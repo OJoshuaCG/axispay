@@ -16,7 +16,7 @@ use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Enums\WebhookEndpointRefusal;
 use App\Modules\Webhooks\Exceptions\WebhookEndpointNotAllowedException;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Services\PrePaymentValidationClient;
 use App\Modules\Webhooks\Services\ValidationCallRecorder;
 use App\Modules\Webhooks\Services\ValidationPayload;
@@ -45,7 +45,7 @@ final readonly class TestValidationEndpoint
         private AuditLogger $audit,
     ) {}
 
-    public function handle(User $actor, ValidationEndpoint $endpoint): ValidationTestResult
+    public function handle(User $actor, WebhookEndpoint $endpoint): ValidationTestResult
     {
         if (Transactions::open()) {
             throw new LogicException('A validation test is sent outside any database transaction.');
@@ -55,14 +55,14 @@ final readonly class TestValidationEndpoint
             throw new WebhookEndpointNotAllowedException(WebhookEndpointRefusal::TenantReadOnly);
         }
 
-        Gate::forUser($actor)->authorize('test', $endpoint);
+        Gate::forUser($actor)->authorize('sendTest', $endpoint);
 
         $call = new ValidationCall;
         $call->forceFill([
             'id' => Ulid::generate(),
             'tenant_id' => $endpoint->tenant_id,
             'livemode' => $endpoint->livemode,
-            'validation_endpoint_id' => $endpoint->id,
+            'webhook_endpoint_id' => $endpoint->id,
             'is_test' => true,
         ]);
         $payload = ValidationPayload::sample($call->prefixedId(), $endpoint->livemode, CarbonImmutable::now());
@@ -84,7 +84,7 @@ final readonly class TestValidationEndpoint
             default => ValidationFailureKind::InvalidResponse,
         };
 
-        $this->recorder->record($call, $endpoint, $result, $parsed, $failure, $failure !== null ? $endpoint->failure_policy : null);
+        $this->recorder->record($call, $endpoint, $result, $parsed, $failure, $failure !== null ? $endpoint->validation_failure_policy : null);
 
         return new ValidationTestResult(
             call: $call,

@@ -7,6 +7,7 @@ namespace App\Modules\Webhooks\Services;
 use App\Modules\Shared\Ids\PrefixedId;
 use App\Modules\Shared\Ids\ResourceType;
 use App\Modules\Shared\Time\IsoDateTime;
+use App\Modules\Webhooks\Enums\WebhookDeliveryMode;
 use App\Modules\Webhooks\Enums\WebhookEventType;
 use Carbon\CarbonImmutable;
 use stdClass;
@@ -15,7 +16,7 @@ use stdClass;
  * The body of an outgoing webhook (plan 15.3), encoded once and frozen in
  * `webhook_events.payload`:
  *
- *     {"id":"evt_...","type":"payment.succeeded","api_version":"v1",
+ *     {"id":"evt_...","type":"payment.succeeded","delivery_mode":"async","api_version":"v1",
  *      "livemode":true,"created_at":"...Z","data":{"object":{...}, ...}}
  *
  * `data.object` is the event's main object as the API shows it; the other
@@ -41,6 +42,7 @@ final class WebhookPayload
         return json_encode([
             'id' => PrefixedId::encode(ResourceType::Event, $eventUlid),
             'type' => $type->value,
+            'delivery_mode' => WebhookDeliveryMode::Async->value,
             'api_version' => self::API_VERSION,
             'livemode' => $livemode,
             'created_at' => IsoDateTime::format($createdAt),

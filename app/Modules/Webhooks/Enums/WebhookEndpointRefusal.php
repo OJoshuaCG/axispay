@@ -16,6 +16,8 @@ enum WebhookEndpointRefusal: string
     case UnknownEvent = 'unknown_event';
     case DescriptionTooLong = 'description_too_long';
     case EndpointDisabled = 'endpoint_disabled';
+    case ValidationInUse = 'validation_in_use';
+    case ValidatorAlreadyExists = 'validator_already_exists';
 
     public function message(): string
     {

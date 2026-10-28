@@ -8,7 +8,7 @@ use App\Modules\Shared\Database\Transactions;
 use App\Modules\Webhooks\Data\ValidationHttpResult;
 use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Exceptions\UnsafeDestinationException;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -48,7 +48,7 @@ final readonly class PrePaymentValidationClient
         private WebhookSigner $signer,
     ) {}
 
-    public function send(ValidationEndpoint $endpoint, string $webhookId, #[SensitiveParameter] string $body): ValidationHttpResult
+    public function send(WebhookEndpoint $endpoint, string $webhookId, #[SensitiveParameter] string $body): ValidationHttpResult
     {
         if (Transactions::open()) {
             throw new LogicException('A pre-payment validation is never sent inside a database transaction or under a row lock (rules.md rule 7b).');

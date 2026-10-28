@@ -268,7 +268,7 @@ return [
 
     'webhooks' => [
         // Plan 15.1: endpoints per tenant and per mode.
-        'max_endpoints_per_mode' => 5,
+        'max_endpoints_per_mode' => 1,
         'description_max' => 255,
 
         // Plan 15.6: POST with a 5 s connection timeout and 10 s in total.

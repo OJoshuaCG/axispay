@@ -80,7 +80,7 @@ final class ListEventsQuery
 
         return $type !== null && $type->isSubscribable()
             ? $type
-            : throw self::invalid('type', 'type must be one of: '.implode(', ', WebhookEventType::subscribableValues()).'.');
+            : throw self::invalid('type', 'type must be one of: '.implode(', ', WebhookEventType::asynchronousValues()).'.');
     }
 
     private static function time(mixed $value, string $param): ?CarbonImmutable

@@ -16,7 +16,7 @@ use App\Modules\Webhooks\Data\ValidationHttpResult;
 use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use LogicException;
@@ -28,7 +28,7 @@ use LogicException;
  *  - a link created without `pre_payment_validation` is not validated
  *    (NoPrePaymentValidation: straight to capture);
  *  - otherwise the call is logged in `validation_calls` (its ID is the
- *    `webhook-id`), sent (PrePaymentValidationClient: 5 s in total, one
+ *    `webhook-id`), sent (PrePaymentValidationClient: the configured validation timeout, one
  *    retry only when the connection could not be opened) and its answer read
  *    (ValidationResponseParser);
  *  - `approve` → capture; `reject` → void, with the merchant's message and
@@ -60,23 +60,29 @@ final readonly class HttpPrePaymentValidator implements PrePaymentValidator
             return $this->none->decide($link, $attempt);
         }
 
-        $endpoint = ValidationEndpoint::query()
+        // The validation does not depend on the endpoint's `status`: pausing
+        // the asynchronous events must not stop charges that were promised a
+        // validation (ADR-0069).
+        $endpoint = WebhookEndpoint::query()
             ->where('tenant_id', $link->tenant_id)
             ->where('livemode', $link->livemode)
+            ->validator()
             ->first();
 
         [$call, $body] = $this->open($link, $attempt, $endpoint);
 
         if ($endpoint === null) {
-            // The endpoint was removed after the link was created: the link
-            // still promises a validation, so nothing is charged (ADR-0058).
+            // No endpoint subscribes to the validation (the panel refuses to
+            // remove it while links ask for one, ADR-0069, but the link may
+            // predate that guard or the row may be gone): the link still
+            // promises a validation, so nothing is charged (ADR-0058).
             return $this->failed($call, null, null, ValidationFailureKind::EndpointMissing, ValidationFailurePolicy::FailClosed);
         }
 
         $result = $this->client->send($endpoint, $call->prefixedId(), $body);
 
         if ($result->transportFailure !== null) {
-            return $this->failed($call, $endpoint, $result, $result->transportFailure, $endpoint->failure_policy);
+            return $this->failed($call, $endpoint, $result, $result->transportFailure, $endpoint->validation_failure_policy);
         }
 
         $parsed = $this->parser->parse($result);
@@ -84,7 +90,7 @@ final readonly class HttpPrePaymentValidator implements PrePaymentValidator
         if (! $parsed->valid()) {
             $kind = $result->status !== 200 ? ValidationFailureKind::HttpError : ValidationFailureKind::InvalidResponse;
 
-            return $this->failed($call, $endpoint, $result, $kind, $endpoint->failure_policy, $parsed);
+            return $this->failed($call, $endpoint, $result, $kind, $endpoint->validation_failure_policy, $parsed);
         }
 
         $this->recorder->record($call, $endpoint, $result, $parsed, null, null);
@@ -102,7 +108,7 @@ final readonly class HttpPrePaymentValidator implements PrePaymentValidator
      *
      * @return array{ValidationCall, string}
      */
-    private function open(PaymentLink $link, PaymentAttempt $attempt, ?ValidationEndpoint $endpoint): array
+    private function open(PaymentLink $link, PaymentAttempt $attempt, ?WebhookEndpoint $endpoint): array
     {
         $id = Ulid::generate();
         $attemptNumber = ValidationCall::query()->where('payment_link_id', $link->id)->where('is_test', false)->count() + 1;
@@ -112,7 +118,7 @@ final readonly class HttpPrePaymentValidator implements PrePaymentValidator
             'id' => $id,
             'tenant_id' => $link->tenant_id,
             'livemode' => $link->livemode,
-            'validation_endpoint_id' => $endpoint?->id,
+            'webhook_endpoint_id' => $endpoint?->id,
             'payment_link_id' => $link->id,
             'payment_attempt_id' => $attempt->id,
             'attempt_number' => $attemptNumber,
@@ -126,7 +132,7 @@ final readonly class HttpPrePaymentValidator implements PrePaymentValidator
 
     private function failed(
         ValidationCall $call,
-        ?ValidationEndpoint $endpoint,
+        ?WebhookEndpoint $endpoint,
         ?ValidationHttpResult $result,
         ValidationFailureKind $kind,
         ValidationFailurePolicy $policy,

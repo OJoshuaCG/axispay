@@ -10,7 +10,7 @@ use App\Modules\Tenancy\Models\Tenant;
 use App\Modules\Tenancy\Services\TenantOwners;
 use App\Modules\Tenancy\TenantContext;
 use App\Modules\Webhooks\Enums\ValidationEndpointChange;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use App\Modules\Webhooks\Notifications\ValidationEndpointNotification;
 use Illuminate\Support\Facades\Notification;
 
@@ -26,7 +26,7 @@ final readonly class ValidationEndpointNotifier
         private TenantContext $context,
     ) {}
 
-    public function notify(ValidationEndpoint $endpoint, ValidationEndpointChange $change): void
+    public function notify(WebhookEndpoint $endpoint, ValidationEndpointChange $change): void
     {
         $recipients = $this->context->runAsTenant($endpoint->tenant_id, $endpoint->livemode, function () use ($endpoint) {
             $tenant = Tenant::query()->findOrFail($endpoint->tenant_id);
@@ -35,6 +35,6 @@ final readonly class ValidationEndpointNotifier
             return $this->owners->of($tenant)->merge($managers)->unique('id')->values();
         });
 
-        Notification::send($recipients, new ValidationEndpointNotification($change, $endpoint->host(), $endpoint->livemode, $endpoint->consecutive_failures));
+        Notification::send($recipients, new ValidationEndpointNotification($change, $endpoint->host(), $endpoint->livemode, $endpoint->validation_consecutive_failures));
     }
 }

@@ -10,7 +10,9 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ReauthenticationWindow;
 use App\Modules\Webhooks\Enums\WebhookEndpointChange;
+use App\Modules\Webhooks\Exceptions\WebhookEndpointNotAllowedException;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
+use App\Modules\Webhooks\Services\ValidationUsage;
 use App\Modules\Webhooks\Services\WebhookEndpointNotifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,8 +30,12 @@ final readonly class DeleteWebhookEndpoint
         private ReauthenticationWindow $reauthentication,
         private AuditLogger $audit,
         private WebhookEndpointNotifier $notifier,
+        private ValidationUsage $usage,
     ) {}
 
+    /**
+     * @throws WebhookEndpointNotAllowedException `validation_in_use` while open links ask for a validation
+     */
     public function handle(User $actor, WebhookEndpoint $endpoint): void
     {
         Gate::forUser($actor)->authorize('delete', $endpoint);
@@ -37,6 +43,10 @@ final readonly class DeleteWebhookEndpoint
 
         $deleted = DB::transaction(function () use ($actor, $endpoint): WebhookEndpoint {
             $locked = WebhookEndpoint::query()->lockForUpdate()->findOrFail($endpoint->id);
+
+            if ($locked->validates()) {
+                $this->usage->assertNoOpenLinks();
+            }
 
             $this->audit->record(AuditAction::WebhookEndpointDeleted, $locked, [
                 'host' => $locked->host(),

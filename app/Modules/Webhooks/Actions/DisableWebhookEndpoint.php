@@ -10,6 +10,7 @@ use App\Modules\Audit\Services\AuditLogger;
 use App\Modules\Identity\Models\User;
 use App\Modules\Webhooks\Enums\WebhookEndpointStatus;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
+use App\Modules\Webhooks\Services\ValidationUsage;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -22,7 +23,10 @@ use Illuminate\Support\Facades\Gate;
  */
 final readonly class DisableWebhookEndpoint
 {
-    public function __construct(private AuditLogger $audit) {}
+    public function __construct(
+        private AuditLogger $audit,
+        private ValidationUsage $usage,
+    ) {}
 
     public function handle(User $actor, WebhookEndpoint $endpoint): WebhookEndpoint
     {
@@ -33,6 +37,12 @@ final readonly class DisableWebhookEndpoint
 
             if (! $locked->isEnabled()) {
                 return $locked;
+            }
+
+            // Pausing the endpoint would also pause its validation role and
+            // strand links that were promised one (ADR-0069, decision 7).
+            if ($locked->validates()) {
+                $this->usage->assertNoOpenLinks();
             }
 
             $locked->forceFill([

@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace App\Modules\Webhooks\Services;
 
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 
 /**
- * The validation endpoint of the current tenant and mode, if any (plan
- * 15.8.1: at most one). Used by the payment link creation to accept
- * `pre_payment_validation` and to apply `enabled_by_default`.
+ * The webhook endpoint of the current tenant and mode that answers the
+ * pre-payment validation, if any (ADR-0069: at most one, the one subscribed to
+ * `payment.pre_validation`). Used by the payment link creation to accept
+ * `pre_payment_validation` and to apply `validation_enabled_by_default`.
  */
 final class ValidationEndpoints
 {
-    public function current(): ?ValidationEndpoint
+    public function current(): ?WebhookEndpoint
     {
-        return ValidationEndpoint::query()->first();
+        return WebhookEndpoint::query()->validator()->first();
     }
 }

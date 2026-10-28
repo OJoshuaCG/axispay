@@ -17,6 +17,7 @@ use App\Modules\Webhooks\Data\WebhookEndpointData;
 use App\Modules\Webhooks\Enums\WebhookEndpointChange;
 use App\Modules\Webhooks\Enums\WebhookEndpointRefusal;
 use App\Modules\Webhooks\Enums\WebhookEndpointStatus;
+use App\Modules\Webhooks\Enums\WebhookEventType;
 use App\Modules\Webhooks\Exceptions\UnsafeDestinationException;
 use App\Modules\Webhooks\Exceptions\WebhookEndpointNotAllowedException;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
@@ -29,10 +30,12 @@ use Illuminate\Support\Facades\Gate;
 
 /**
  * Registers a webhook endpoint in the panel's current mode (plan 15.1):
- * `webhooks:manage` + re-authentication (plan 17.3), at most 5 per mode, the
- * URL checked by the SSRF protection (plan 15.7). The secret `whsec_...` is
- * generated here, stored encrypted and returned in plaintext ONCE. E-mails
- * the owners and the users with `webhooks:manage`.
+ * `webhooks:manage` + re-authentication (plan 17.3), at most
+ * `axispay.webhooks.max_endpoints_per_mode` per mode (1 for now, ADR-0069),
+ * the URL checked by the SSRF protection (plan 15.7). The secret `whsec_...`
+ * is generated here, stored encrypted and returned in plaintext ONCE; the
+ * same secret signs the asynchronous events and the pre-payment validation.
+ * E-mails the owners and the users with `webhooks:manage`.
  */
 final readonly class CreateWebhookEndpoint
 {
@@ -66,12 +69,20 @@ final readonly class CreateWebhookEndpoint
         $url = $this->guard->inspect($data->url, $livemode)->url;
         $secret = $this->signer->generateSecret();
 
-        $endpoint = DB::transaction(function () use ($actor, $livemode, $url, $description, $events, $secret): WebhookEndpoint {
+        $subscribesToValidation = in_array(WebhookEventType::PaymentPreValidation->value, $events, true);
+
+        $endpoint = DB::transaction(function () use ($actor, $data, $livemode, $url, $description, $events, $secret, $subscribesToValidation): WebhookEndpoint {
             // Serializes concurrent creations, so the limit holds.
             $this->tenantLock->lock($actor->tenant_id);
 
             if (WebhookEndpoint::query()->count() >= max(1, config()->integer('axispay.webhooks.max_endpoints_per_mode'))) {
                 throw new WebhookEndpointNotAllowedException(WebhookEndpointRefusal::TooManyEndpoints);
+            }
+
+            // The schema also enforces it (validator_slot); checking first
+            // gives the panel a readable refusal instead of a constraint error.
+            if ($subscribesToValidation && WebhookEndpoint::query()->validator()->exists()) {
+                throw new WebhookEndpointNotAllowedException(WebhookEndpointRefusal::ValidatorAlreadyExists);
             }
 
             $endpoint = new WebhookEndpoint;
@@ -80,6 +91,8 @@ final readonly class CreateWebhookEndpoint
                 'url' => $url,
                 'description' => $description,
                 'enabled_events' => $events,
+                'validation_failure_policy' => $data->validationFailurePolicy,
+                'validation_enabled_by_default' => $data->validationEnabledByDefault,
                 'secret' => $secret,
                 'status' => WebhookEndpointStatus::Enabled,
                 'created_by_user_id' => $actor->id,
@@ -88,6 +101,8 @@ final readonly class CreateWebhookEndpoint
             $this->audit->record(AuditAction::WebhookEndpointCreated, $endpoint, [
                 'host' => $endpoint->host(),
                 'enabled_events' => $events,
+                'validation_failure_policy' => $endpoint->validation_failure_policy->value,
+                'validation_enabled_by_default' => $endpoint->validation_enabled_by_default,
                 'livemode' => $livemode,
             ], actor: Actor::user($actor->id));
 

@@ -29,7 +29,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $id
  * @property string $tenant_id
  * @property bool $livemode
- * @property string|null $validation_endpoint_id
+ * @property string|null $webhook_endpoint_id
  * @property string|null $payment_link_id
  * @property string|null $payment_attempt_id
  * @property int|null $attempt_number

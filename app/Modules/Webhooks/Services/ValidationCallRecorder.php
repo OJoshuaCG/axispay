@@ -12,7 +12,7 @@ use App\Modules\Webhooks\Enums\ValidationFailureKind;
 use App\Modules\Webhooks\Enums\ValidationFailurePolicy;
 use App\Modules\Webhooks\Enums\ValidationFinalDecision;
 use App\Modules\Webhooks\Models\ValidationCall;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
+use App\Modules\Webhooks\Models\WebhookEndpoint;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -38,7 +38,7 @@ final readonly class ValidationCallRecorder
 
     public function record(
         ValidationCall $call,
-        ?ValidationEndpoint $endpoint,
+        ?WebhookEndpoint $endpoint,
         ?ValidationHttpResult $result,
         ?ParsedValidationResponse $parsed,
         ?ValidationFailureKind $failure,
@@ -57,7 +57,7 @@ final readonly class ValidationCallRecorder
             default => ValidationFinalDecision::Block,
         };
 
-        $alert = DB::transaction(function () use ($call, $endpoint, $result, $parsed, $failure, $policy, $outcome, $finalDecision): ?ValidationEndpoint {
+        $alert = DB::transaction(function () use ($call, $endpoint, $result, $parsed, $failure, $policy, $outcome, $finalDecision): ?WebhookEndpoint {
             $call->forceFill([
                 'outcome' => $outcome,
                 'failure_kind' => $failure,
@@ -87,9 +87,9 @@ final readonly class ValidationCallRecorder
     }
 
     /** Returns the endpoint when its managers must be e-mailed now. */
-    private function updateHealth(string $endpointId, bool $success): ?ValidationEndpoint
+    private function updateHealth(string $endpointId, bool $success): ?WebhookEndpoint
     {
-        $locked = ValidationEndpoint::query()->lockForUpdate()->find($endpointId);
+        $locked = WebhookEndpoint::query()->lockForUpdate()->find($endpointId);
 
         if ($locked === null) {
             return null; // removed during the call
@@ -98,17 +98,18 @@ final readonly class ValidationCallRecorder
         $now = CarbonImmutable::now();
 
         if ($success) {
-            $locked->forceFill(['consecutive_failures' => 0, 'last_success_at' => $now])->save();
+            $locked->forceFill(['validation_consecutive_failures' => 0, 'validation_last_success_at' => $now])->save();
 
             return null;
         }
 
-        $locked->forceFill(['consecutive_failures' => $locked->consecutive_failures + 1, 'last_failure_at' => $now]);
+        $locked->forceFill(['validation_consecutive_failures' => $locked->validation_consecutive_failures + 1, 'validation_last_failure_at' => $now]);
         $interval = max(1, config()->integer('axispay.pre_payment_validation.alert_interval_minutes'));
-        $due = $locked->isFailing() && ($locked->last_alerted_at === null || $locked->last_alerted_at->lessThanOrEqualTo($now->subMinutes($interval)));
+        $lastAlert = $locked->validation_last_alerted_at;
+        $due = $locked->isValidationFailing() && ($lastAlert === null || $lastAlert->lessThanOrEqualTo($now->subMinutes($interval)));
 
         if ($due) {
-            $locked->forceFill(['last_alerted_at' => $now]);
+            $locked->forceFill(['validation_last_alerted_at' => $now]);
         }
 
         $locked->save();

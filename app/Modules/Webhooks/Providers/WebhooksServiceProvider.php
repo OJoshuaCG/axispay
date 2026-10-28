@@ -8,10 +8,8 @@ use App\Modules\Webhooks\Console\PurgeValidationCallsCommand;
 use App\Modules\Webhooks\Console\PurgeWebhookDeliveriesCommand;
 use App\Modules\Webhooks\Console\SweepWebhookOutboxCommand;
 use App\Modules\Webhooks\Contracts\HostResolver;
-use App\Modules\Webhooks\Models\ValidationEndpoint;
 use App\Modules\Webhooks\Models\WebhookDelivery;
 use App\Modules\Webhooks\Models\WebhookEndpoint;
-use App\Modules\Webhooks\Policies\ValidationEndpointPolicy;
 use App\Modules\Webhooks\Policies\WebhookDeliveryPolicy;
 use App\Modules\Webhooks\Policies\WebhookEndpointPolicy;
 use App\Modules\Webhooks\Services\DnsHostResolver;
@@ -35,7 +33,6 @@ final class WebhooksServiceProvider extends ServiceProvider
     {
         Gate::policy(WebhookEndpoint::class, WebhookEndpointPolicy::class);
         Gate::policy(WebhookDelivery::class, WebhookDeliveryPolicy::class);
-        Gate::policy(ValidationEndpoint::class, ValidationEndpointPolicy::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([SweepWebhookOutboxCommand::class, PurgeValidationCallsCommand::class, PurgeWebhookDeliveriesCommand::class]);
