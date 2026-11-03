@@ -91,7 +91,8 @@
     .btn.head-cta { display: none; }
     @media (min-width: 48rem) { .nav { display: flex; } .btn.head-cta { display: inline-flex; } }
 
-    .hero { padding-top: 4rem; padding-bottom: 3.5rem; }
+    .hero { padding-top: 3.5rem; padding-bottom: 3.5rem; display: grid; gap: 2.5rem; align-items: center; }
+    @media (min-width: 62rem) { .hero { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 4rem; padding-top: 5rem; padding-bottom: 5rem; } }
     .eyebrow { font-family: var(--font-mono); font-size: .875rem; color: var(--accent); margin: 0 0 1rem; }
     h1, h2 { text-wrap: balance; }
     h1 { font-size: clamp(2.25rem, 6vw, 3.75rem); line-height: 1.1; margin: 0 0 1.25rem; letter-spacing: -.02em; max-width: 18ch; }
@@ -107,9 +108,17 @@
     .btn-ghost { border-color: var(--border-strong); }
     .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
 
-    .receipt { margin-top: 3rem; max-width: 28rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.25rem 1.5rem; }
-    .receipt .row { display: flex; justify-content: space-between; gap: 1rem; padding: .375rem 0; color: var(--fg-secondary); }
+    .receipt {
+      width: 100%; max-width: 28rem; justify-self: start; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 1rem; padding: 1.5rem; box-shadow: 0 12px 32px light-dark(rgb(13 16 23 / .08), rgb(0 0 0 / .45));
+    }
+    @media (min-width: 62rem) { .receipt { justify-self: end; } }
+    .receipt .row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .375rem 0; color: var(--fg-secondary); }
     .receipt .row strong { color: var(--fg); }
+    .receipt .url { margin: .125rem 0 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: .8125rem; color: var(--fg-secondary); overflow-wrap: anywhere; }
+    .receipt .item { margin: 0; color: var(--fg-secondary); }
+    .receipt .amount { display: block; margin: .25rem 0 1rem; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 2rem; line-height: 1.2; font-weight: 500; color: var(--fg); }
+    .receipt .amount small { font-size: 1rem; color: var(--fg-secondary); }
     .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     .receipt .total { border-top: 1px dashed var(--border-strong); margin-top: .5rem; padding-top: .75rem; font-weight: 700; color: var(--fg); }
     .status { display: inline-block; padding: .125rem .625rem; border-radius: 999px; background: var(--accent-subtle); color: var(--accent); font-size: .875rem; font-weight: 600; }
@@ -189,17 +198,21 @@
 
   <main id="main">
     <div id="top" class="wrap hero">
-      <p class="eyebrow" data-i18n="eyebrow">Stripe Connect · multi-tenant</p>
-      <h1 data-i18n="title">Payment links for every tenant.</h1>
-      <p class="lead" data-i18n="lead">Your systems request a link through an API. Payers check out on your own domain. Each tenant runs its own panel, and you operate them all from one place.</p>
-      <div class="actions">
-        <a class="btn btn-accent" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
-        <a class="btn btn-ghost" href="#how" data-i18n="ctaHow">How it works</a>
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="eyebrow">Stripe Connect · multi-tenant</p>
+        <h1 data-i18n="title">Payment links for every tenant.</h1>
+        <p class="lead" data-i18n="lead">Your systems request a link through an API. Payers check out on your own domain. Each tenant runs its own panel, and you operate them all from one place.</p>
+        <div class="actions">
+          <a class="btn btn-accent" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
+          <a class="btn btn-ghost" href="#how" data-i18n="ctaHow">How it works</a>
+        </div>
       </div>
 
-      <div class="receipt" role="img" aria-label="Example payment link">
+      <div class="receipt" role="img" aria-label="Example payment link: PL-2048, annual plan, 1,200.00 MXN, paid">
         <div class="row"><span data-i18n="rcptFor">Payment link</span><strong class="num">PL-2048</strong></div>
-        <div class="row"><span data-i18n="rcptItem">Annual plan</span><span class="num">1,200.00 MXN</span></div>
+        <p class="url">pay.&lt;domain&gt;/l/PL-2048</p>
+        <p class="item" data-i18n="rcptItem">Annual plan</p>
+        <span class="amount">1,200.00 <small>MXN</small></span>
         <div class="row total"><span data-i18n="rcptStatus">Status</span><span class="status" data-i18n="rcptPaid">Paid</span></div>
       </div>
     </div>
@@ -314,7 +327,7 @@
 
   <footer>
     <div class="wrap">
-      <span>&copy; <span id="year">2026</span> AxisPay</span>
+      <span>&copy; <span id="year">2026</span> AxisPay &middot; <span data-i18n="footBy">Designed and built by</span> <a href="https://ojoshuacg.github.io/OJoshuaCG/portfolio/" rel="author">Joshua CG</a></span>
       <a href="https://github.com/OJoshuaCG/axispay" data-i18n="footRepo">Source code on GitHub</a>
     </div>
   </footer>
@@ -358,12 +371,12 @@
           r8: 'Reembolsos y disputas', r9: 'Métricas, branding y campos del pagador', r10: 'Planes y reportes de uso', r11: 'Endurecimiento y salida a producción',
           stackTitle: 'Bajo el capó', stackSub: 'Un stack convencional, bien probado y fácil de operar.',
           ctaTitle: 'Lee el código. Lee la documentación.', ctaSub: 'Todo es público: la arquitectura, las decisiones detrás de ella y el plan.',
-          footRepo: 'Código fuente en GitHub'
+          footRepo: 'Código fuente en GitHub', footBy: 'Diseñado y construido por'
         }
       };
       var meta = {
-        en: { title: 'AxisPay | Payment links for every tenant', toLight: 'Switch to light theme', toDark: 'Switch to dark theme' },
-        es: { title: 'AxisPay | Links de pago para cada cliente', toLight: 'Cambiar a tema claro', toDark: 'Cambiar a tema oscuro' }
+        en: { receipt: 'Example payment link: PL-2048, annual plan, 1,200.00 MXN, paid', title: 'AxisPay | Payment links for every tenant', toLight: 'Switch to light theme', toDark: 'Switch to dark theme' },
+        es: { receipt: 'Ejemplo de link de pago: PL-2048, plan anual, 1,200.00 MXN, pagado', title: 'AxisPay | Links de pago para cada cliente', toLight: 'Cambiar a tema claro', toDark: 'Cambiar a tema oscuro' }
       };
       var lang = 'en';
       var nodes = document.querySelectorAll('[data-i18n]');
@@ -393,6 +406,7 @@
         lang = l;
         root.lang = l;
         document.title = meta[l].title;
+        document.querySelector('.receipt').setAttribute('aria-label', meta[l].receipt);
         nodes.forEach(function (n) {
           var v = T[l][n.getAttribute('data-i18n')];
           if (v) n.textContent = v;
