@@ -9,40 +9,45 @@
   <meta property="og:description" content="A multi-tenant payment-links orchestrator on Stripe Connect.">
   <meta property="og:type" content="website">
   <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f8f9f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2322b573'/%3E%3Cpath d='M9 16h14M17 10l6 6-6 6' fill='none' stroke='%230d1017' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Mukta:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    /* Resolve the theme before first paint so there is no flash. Without JS the page follows the system. */
+    (function () {
+      var d = document.documentElement, t = null;
+      d.classList.add('js');
+      try { t = localStorage.getItem('axispay-theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      d.setAttribute('data-theme', t);
+    })();
+  </script>
   <style>
     :root {
-      --canvas: #f8f9f9;
-      --surface: #ffffff;
-      --fg: #0d1017;
-      --fg-secondary: #4a5161;
-      --border: #dfe2e6;
-      --primary: #1f63c7;
-      --primary-hover: #1a54a9;
-      --accent: #177b4e;
-      --accent-subtle: #edf9f4;
+      color-scheme: light dark;
+      --canvas: light-dark(#f8f9f9, #0d1017);
+      --surface: light-dark(#ffffff, #111620);
+      --fg: light-dark(#0d1017, #f8f9f9);
+      --fg-secondary: light-dark(#4a5161, #a3a9b5);
+      --border: light-dark(#dfe2e6, #232b3b);
+      --border-strong: light-dark(#838a97, #5d677a);
+      --primary: light-dark(#1f63c7, #5e8fd7);
+      --accent: light-dark(#177b4e, #22b573);
+      --on-accent: light-dark(#ffffff, #0d1017);
+      --accent-subtle: light-dark(#edf9f4, rgb(34 181 115 / 0.15));
       --mark: #22b573;
       --font-body: 'Mukta', system-ui, sans-serif;
       --font-mono: 'Geist Mono', ui-monospace, monospace;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --canvas: #0d1017;
-        --surface: #111620;
-        --fg: #f8f9f9;
-        --fg-secondary: #a3a9b5;
-        --border: #232b3b;
-        --primary: #5e8fd7;
-        --primary-hover: #8fb1e3;
-        --accent: #22b573;
-        --accent-subtle: rgb(34 181 115 / 0.15);
-      }
-    }
+    :root[data-theme="light"] { color-scheme: light; }
+    :root[data-theme="dark"] { color-scheme: dark; }
+
     * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; }
+    html { scroll-padding-top: 5rem; }
+    @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
     body {
       margin: 0;
       background: var(--canvas);
@@ -54,45 +59,70 @@
     a { color: inherit; }
     .wrap { max-width: 68rem; margin: 0 auto; padding: 0 1rem; }
     @media (min-width: 40rem) { .wrap { padding: 0 1.5rem; } }
+    :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 
-    header { border-bottom: 1px solid var(--border); }
-    .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; }
+    .skip {
+      position: absolute; left: 1rem; top: -4rem; z-index: 30; padding: .625rem 1rem;
+      background: var(--surface); border: 1px solid var(--border-strong); border-radius: .5rem; font-weight: 600;
+    }
+    .skip:focus { top: .75rem; }
+
+    header { position: sticky; top: 0; z-index: 20; background: var(--canvas); border-bottom: 1px solid var(--border); }
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-height: 4rem; }
     .brand { display: flex; align-items: center; gap: .625rem; font-weight: 700; font-size: 1.25rem; text-decoration: none; }
     .mark { width: 1.75rem; height: 1.75rem; border-radius: .5rem; background: var(--mark); display: grid; place-items: center; }
     .mark svg { width: 1rem; height: 1rem; stroke: #0d1017; }
-    .lang { display: flex; gap: .25rem; }
-    .lang button {
-      min-width: 2.75rem; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .5rem;
-      background: transparent; color: var(--fg-secondary); font: inherit; font-weight: 600; cursor: pointer;
+    .nav { display: none; gap: 1.5rem; margin-left: auto; margin-right: 1rem; }
+    .nav a { text-decoration: none; color: var(--fg-secondary); font-weight: 500; padding: .5rem 0; }
+    .nav a:hover { color: var(--fg); }
+    .tools { display: flex; align-items: center; gap: .5rem; }
+    .ctl {
+      display: inline-grid; place-items: center; min-width: 2.75rem; min-height: 2.75rem;
+      border: 1px solid var(--border-strong); border-radius: .5rem; background: transparent; color: var(--fg);
+      font: inherit; font-weight: 600; cursor: pointer; transition: border-color .2s ease-out, color .2s ease-out;
     }
-    .lang button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); }
+    .ctl:hover { border-color: var(--primary); color: var(--primary); }
+    .ctl svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+    .lang { display: flex; gap: .25rem; }
+    .lang .ctl { color: var(--fg-secondary); }
+    .lang .ctl[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); }
+    [data-theme="dark"] .i-moon, [data-theme="light"] .i-sun { display: none; }
+    html:not(.js) #theme { display: none; }
+    .btn.head-cta { display: none; }
+    @media (min-width: 48rem) { .nav { display: flex; } .btn.head-cta { display: inline-flex; } }
 
     .hero { padding-top: 4rem; padding-bottom: 3.5rem; }
     .eyebrow { font-family: var(--font-mono); font-size: .875rem; color: var(--accent); margin: 0 0 1rem; }
+    h1, h2 { text-wrap: balance; }
     h1 { font-size: clamp(2.25rem, 6vw, 3.75rem); line-height: 1.1; margin: 0 0 1.25rem; letter-spacing: -.02em; max-width: 18ch; }
     .lead { font-size: 1.25rem; color: var(--fg-secondary); max-width: 40rem; margin: 0 0 2rem; }
     .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
     .btn {
       display: inline-flex; align-items: center; min-height: 2.75rem; padding: .5rem 1.5rem;
       border-radius: .625rem; font-weight: 600; text-decoration: none; border: 1px solid transparent;
+      transition: filter .2s ease-out, border-color .2s ease-out, color .2s ease-out;
     }
-    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent { background: var(--accent); color: var(--on-accent); }
     .btn-accent:hover { filter: brightness(.92); }
-    .btn-ghost { border-color: var(--border); }
+    .btn-ghost { border-color: var(--border-strong); }
     .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
-    :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
 
-    .receipt {
-      margin-top: 3rem; max-width: 28rem; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 1rem; padding: 1.25rem 1.5rem;
-    }
+    .receipt { margin-top: 3rem; max-width: 28rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.25rem 1.5rem; }
     .receipt .row { display: flex; justify-content: space-between; gap: 1rem; padding: .375rem 0; color: var(--fg-secondary); }
     .receipt .row strong { color: var(--fg); }
-    .num { font-family: var(--font-mono); }
-    .receipt .total { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .75rem; font-weight: 700; color: var(--fg); }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .receipt .total { border-top: 1px dashed var(--border-strong); margin-top: .5rem; padding-top: .75rem; font-weight: 700; color: var(--fg); }
     .status { display: inline-block; padding: .125rem .625rem; border-radius: 999px; background: var(--accent-subtle); color: var(--accent); font-size: .875rem; font-weight: 600; }
 
+    .trust { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--surface); }
+    .trust ul { display: grid; gap: 1rem 1.5rem; grid-template-columns: 1fr; list-style: none; margin: 0; padding: 1.5rem 0; }
+    @media (min-width: 40rem) { .trust ul { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 62rem) { .trust ul { grid-template-columns: repeat(4, 1fr); } }
+    .trust li { display: flex; align-items: center; gap: .75rem; font-weight: 500; }
+    .trust svg { flex: none; width: 1.5rem; height: 1.5rem; fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+
     section { padding: 3.5rem 0; border-top: 1px solid var(--border); }
+    .trust + section { border-top: 0; }
     h2 { font-size: clamp(1.625rem, 4vw, 2.25rem); line-height: 1.2; margin: 0 0 .75rem; letter-spacing: -.01em; }
     .sub { color: var(--fg-secondary); max-width: 40rem; margin: 0 0 2.5rem; }
     .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
@@ -101,34 +131,64 @@
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.5rem; }
     .card h3 { margin: 0 0 .5rem; font-size: 1.25rem; }
     .card p { margin: 0; color: var(--fg-secondary); }
-    .badge { margin-left: .5rem; font-size: .75rem; font-weight: 600; padding: .125rem .5rem; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-secondary); vertical-align: middle; }
-    .step { font-family: var(--font-mono); color: var(--primary); font-size: .875rem; margin-bottom: .5rem; display: block; }
-    .host { font-family: var(--font-mono); font-size: .875rem; color: var(--primary); margin-bottom: .5rem; display: block; }
+    .badge { margin-left: .5rem; font-size: .75rem; font-weight: 600; padding: .125rem .5rem; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--fg-secondary); vertical-align: middle; }
+    .step, .host { font-family: var(--font-mono); color: var(--primary); font-size: .875rem; margin-bottom: .5rem; display: block; }
+
+    .road h3 { display: flex; align-items: center; gap: .5rem; font-size: 1.125rem; margin: 0 0 1rem; }
+    .road h3 svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+    .road ul { margin: 0; padding: 0; list-style: none; display: grid; gap: .625rem; }
+    .road li { color: var(--fg-secondary); padding-left: 1rem; border-left: 2px solid var(--border-strong); }
+
     .stack { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 0; list-style: none; }
-    .stack li { font-family: var(--font-mono); font-size: .875rem; border: 1px solid var(--border); border-radius: .5rem; padding: .375rem .75rem; background: var(--surface); }
+    .stack li { font-family: var(--font-mono); font-size: .875rem; border: 1px solid var(--border-strong); border-radius: .5rem; padding: .375rem .75rem; background: var(--surface); }
+
+    .cta { text-align: center; }
+    .cta .sub { margin-left: auto; margin-right: auto; }
+    .cta .actions { justify-content: center; }
 
     footer { border-top: 1px solid var(--border); padding: 2rem 0; color: var(--fg-secondary); font-size: .9375rem; }
     footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
     footer a { text-underline-offset: 3px; }
-    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+    /* Subtle reveal: only transform and opacity; content stays visible without JS or with reduced motion. */
+    .js .reveal { opacity: 0; transform: translateY(12px); transition: opacity .35s ease-out, transform .35s ease-out; }
+    .js .reveal.in { opacity: 1; transform: none; }
+    @media print { .js .reveal { opacity: 1; transform: none; transition: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .js .reveal { opacity: 1; transform: none; transition: none; }
+      .ctl, .btn { transition: none; }
+    }
   </style>
 </head>
 <body>
+  <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
   <header>
     <div class="wrap bar">
       <a class="brand" href="#top" aria-label="AxisPay">
         <span class="mark" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M9 3l5 5-5 5"/></svg></span>
         AxisPay
       </a>
-      <div class="lang" role="group" aria-label="Language">
-        <button type="button" data-lang="en" aria-pressed="true">EN</button>
-        <button type="button" data-lang="es" aria-pressed="false">ES</button>
+      <nav class="nav" aria-label="Primary">
+        <a href="#how" data-i18n="navHow">How it works</a>
+        <a href="#features" data-i18n="navFeat">Features</a>
+        <a href="#status" data-i18n="navStatus">Status</a>
+      </nav>
+      <div class="tools">
+        <a class="btn btn-ghost head-cta" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
+        <button type="button" class="ctl" id="theme" aria-label="Switch to dark theme">
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+        <div class="lang" role="group" aria-label="Language">
+          <button type="button" class="ctl" data-lang="en" aria-pressed="true">EN</button>
+          <button type="button" class="ctl" data-lang="es" aria-pressed="false">ES</button>
+        </div>
       </div>
     </div>
   </header>
 
-  <main id="top">
-    <div class="wrap hero">
+  <main id="main">
+    <div id="top" class="wrap hero">
       <p class="eyebrow" data-i18n="eyebrow">Stripe Connect · multi-tenant</p>
       <h1 data-i18n="title">Payment links for every tenant.</h1>
       <p class="lead" data-i18n="lead">Your systems request a link through an API. Payers check out on your own domain. Each tenant runs its own panel, and you operate them all from one place.</p>
@@ -144,53 +204,110 @@
       </div>
     </div>
 
+    <div class="trust">
+      <div class="wrap">
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg><span data-i18n="t1">Built on Stripe Connect</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span data-i18n="t2">Two-factor authentication</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span data-i18n="t3">Audit log on every tenant</span></li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></svg><span data-i18n="t4">Money stored as integers</span></li>
+        </ul>
+      </div>
+    </div>
+
     <section id="how">
       <div class="wrap">
-        <h2 data-i18n="howTitle">From request to payment in three steps</h2>
-        <p class="sub" data-i18n="howSub">No payment code in your systems: AxisPay owns the link, the checkout and the Stripe side.</p>
+        <h2 class="reveal" data-i18n="howTitle">From request to payment in three steps</h2>
+        <p class="sub reveal" data-i18n="howSub">No payment code in your systems: AxisPay owns the link, the checkout and the Stripe side.</p>
         <div class="grid three">
-          <article class="card"><span class="step">01</span><h3 data-i18n="s1t">Request a link</h3><p data-i18n="s1d">A tenant system calls the public API with its API key. Idempotency keys make retries safe.</p></article>
-          <article class="card"><span class="step">02</span><h3 data-i18n="s2t">The payer checks out</h3><p data-i18n="s2d">A hosted checkout on your own domain, built on the Stripe Payment Element.</p></article>
-          <article class="card"><span class="step">03</span><h3 data-i18n="s3t">Everyone stays informed</h3><p data-i18n="s3d">Tenants follow their payments in their panel, and you can connect webhooks to react to events.</p></article>
+          <article class="card reveal"><span class="step">01</span><h3 data-i18n="s1t">Request a link</h3><p data-i18n="s1d">A tenant system calls the public API with its API key. Idempotency keys make retries safe.</p></article>
+          <article class="card reveal"><span class="step">02</span><h3 data-i18n="s2t">The payer checks out</h3><p data-i18n="s2d">A hosted checkout on your own domain, built on the Stripe Payment Element.</p></article>
+          <article class="card reveal"><span class="step">03</span><h3 data-i18n="s3t">Everyone stays informed</h3><p data-i18n="s3d">Tenants follow their payments in their panel, and you can connect webhooks to react to events.</p></article>
         </div>
       </div>
     </section>
 
     <section id="features">
       <div class="wrap">
-        <h2 data-i18n="featTitle">Built for platforms with many customers</h2>
-        <p class="sub" data-i18n="featSub">One installation, many isolated tenants, each with their own users, roles and payments.</p>
+        <h2 class="reveal" data-i18n="featTitle">Built for platforms with many customers</h2>
+        <p class="sub reveal" data-i18n="featSub">One installation, many isolated tenants, each with their own users, roles and payments.</p>
         <div class="grid">
-          <article class="card"><h3 data-i18n="f1t">Multi-tenant by design</h3><p data-i18n="f1d">Every tenant is isolated. Users, roles, two-factor authentication and an audit log come built in.</p></article>
-          <article class="card"><h3 data-i18n="f2t">Payment links API</h3><p data-i18n="f2d">A public API with API keys and idempotency, so your systems never touch card data.</p></article>
-          <article class="card"><h3 data-i18n="f3t">Hosted checkout</h3><p data-i18n="f3d">Payers pay on a page served from your own domain, in English or Spanish, light or dark.</p></article>
-          <article class="card"><h3 data-i18n="f4t">Money done right</h3><p data-i18n="f4d">Amounts are stored as integers in minor units, never as floats, so totals always add up.</p></article>
-          <article class="card"><h3><span data-i18n="f5t">Outgoing webhooks</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f5d">One endpoint per tenant with event selection and pre-payment validation.</p></article>
-          <article class="card"><h3><span data-i18n="f6t">Currency conversion</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f6d">Quotes with a fixed tenant rate or the Banxico FIX rate, confirmed by the payer.</p></article>
+          <article class="card reveal"><h3 data-i18n="f1t">Multi-tenant by design</h3><p data-i18n="f1d">Every tenant is isolated. Users, roles, two-factor authentication and an audit log come built in.</p></article>
+          <article class="card reveal"><h3 data-i18n="f2t">Payment links API</h3><p data-i18n="f2d">A public API with API keys and idempotency, so your systems never touch card data.</p></article>
+          <article class="card reveal"><h3 data-i18n="f3t">Hosted checkout</h3><p data-i18n="f3d">Payers pay on a page served from your own domain, in English or Spanish, light or dark.</p></article>
+          <article class="card reveal"><h3 data-i18n="f4t">Money done right</h3><p data-i18n="f4d">Amounts are stored as integers in minor units, never as floats, so totals always add up.</p></article>
+          <article class="card reveal"><h3><span data-i18n="f5t">Outgoing webhooks</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f5d">One endpoint per tenant with event selection and pre-payment validation.</p></article>
+          <article class="card reveal"><h3><span data-i18n="f6t">Currency conversion</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f6d">Quotes with a fixed tenant rate or the Banxico FIX rate, confirmed by the payer.</p></article>
         </div>
       </div>
     </section>
 
     <section id="surfaces">
       <div class="wrap">
-        <h2 data-i18n="surfTitle">Four surfaces, one platform</h2>
-        <p class="sub" data-i18n="surfSub">Each audience gets its own entry point.</p>
+        <h2 class="reveal" data-i18n="surfTitle">Four surfaces, one platform</h2>
+        <p class="sub reveal" data-i18n="surfSub">Each audience gets its own entry point.</p>
         <div class="grid">
-          <article class="card"><span class="host">api.&lt;domain&gt;</span><h3 data-i18n="u1t">Public API</h3><p data-i18n="u1d">For tenant systems, authenticated with API keys.</p></article>
-          <article class="card"><span class="host">app.&lt;domain&gt;</span><h3 data-i18n="u2t">Tenant panel</h3><p data-i18n="u2d">For each tenant's team to manage users, roles and payments.</p></article>
-          <article class="card"><span class="host">admin.&lt;domain&gt;</span><h3 data-i18n="u3t">Platform panel</h3><p data-i18n="u3d">For superadmins to operate every tenant.</p></article>
-          <article class="card"><span class="host">pay.&lt;domain&gt;</span><h3 data-i18n="u4t">Checkout</h3><p data-i18n="u4d">For payers, with the Stripe Payment Element.</p></article>
+          <article class="card reveal"><span class="host">api.&lt;domain&gt;</span><h3 data-i18n="u1t">Public API</h3><p data-i18n="u1d">For tenant systems, authenticated with API keys.</p></article>
+          <article class="card reveal"><span class="host">app.&lt;domain&gt;</span><h3 data-i18n="u2t">Tenant panel</h3><p data-i18n="u2d">For each tenant's team to manage users, roles and payments.</p></article>
+          <article class="card reveal"><span class="host">admin.&lt;domain&gt;</span><h3 data-i18n="u3t">Platform panel</h3><p data-i18n="u3d">For superadmins to operate every tenant.</p></article>
+          <article class="card reveal"><span class="host">pay.&lt;domain&gt;</span><h3 data-i18n="u4t">Checkout</h3><p data-i18n="u4d">For payers, with the Stripe Payment Element.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="status" class="road">
+      <div class="wrap">
+        <h2 class="reveal" data-i18n="roadTitle">Where the project stands</h2>
+        <p class="sub reveal" data-i18n="roadSub">AxisPay is open source and under active development. This is the honest picture.</p>
+        <div class="grid three">
+          <article class="card reveal">
+            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span data-i18n="rDone">Done</span></h3>
+            <ul>
+              <li data-i18n="r1">Foundations and CI</li>
+              <li data-i18n="r2">Tenancy, identity and roles</li>
+              <li data-i18n="r3">Stripe connection</li>
+              <li data-i18n="r4">API keys and payment-links API</li>
+              <li data-i18n="r5">Checkout and card payments</li>
+            </ul>
+          </article>
+          <article class="card reveal">
+            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span data-i18n="inProgress">In progress</span></h3>
+            <ul>
+              <li data-i18n="r6">Outgoing webhooks and pre-payment validation</li>
+              <li data-i18n="r7">Currency conversion</li>
+            </ul>
+          </article>
+          <article class="card reveal">
+            <h3><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/></svg><span data-i18n="rPlanned">Planned</span></h3>
+            <ul>
+              <li data-i18n="r8">Refunds and disputes</li>
+              <li data-i18n="r9">Metrics, branding and payer fields</li>
+              <li data-i18n="r10">Plans and usage reports</li>
+              <li data-i18n="r11">Hardening and go-live</li>
+            </ul>
+          </article>
         </div>
       </div>
     </section>
 
     <section id="stack">
       <div class="wrap">
-        <h2 data-i18n="stackTitle">Under the hood</h2>
-        <p class="sub" data-i18n="stackSub">A conventional, well-tested stack that is easy to operate. It is open source, and still in active development.</p>
-        <ul class="stack">
+        <h2 class="reveal" data-i18n="stackTitle">Under the hood</h2>
+        <p class="sub reveal" data-i18n="stackSub">A conventional, well-tested stack that is easy to operate.</p>
+        <ul class="stack reveal">
           <li>PHP 8.4</li><li>Laravel 13</li><li>Filament 5</li><li>MariaDB 11.8</li><li>Stripe Connect</li><li>Tailwind CSS 4</li><li>Docker</li><li>Dokploy</li>
         </ul>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="wrap">
+        <h2 class="reveal" data-i18n="ctaTitle">Read the code. Read the docs.</h2>
+        <p class="sub reveal" data-i18n="ctaSub">Everything is public: the architecture, the decisions behind it and the plan.</p>
+        <div class="actions reveal">
+          <a class="btn btn-accent" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
+          <a class="btn btn-ghost" href="https://github.com/OJoshuaCG/axispay/tree/main/docs" data-i18n="ctaDocs">Read the docs</a>
+        </div>
       </div>
     </section>
   </main>
@@ -204,13 +321,16 @@
 
   <script>
     (function () {
+      var root = document.documentElement;
       var T = {
         es: {
+          skip: 'Saltar al contenido', navHow: 'Cómo funciona', navFeat: 'Funciones', navStatus: 'Estado',
           eyebrow: 'Stripe Connect · multi-tenant',
           title: 'Links de pago para cada cliente.',
           lead: 'Tus sistemas piden un link por API. El pagador paga en tu propio dominio. Cada cliente tiene su panel y tú los operas todos desde un solo lugar.',
-          ctaRepo: 'Ver en GitHub', ctaHow: 'Cómo funciona',
+          ctaRepo: 'Ver en GitHub', ctaHow: 'Cómo funciona', ctaDocs: 'Leer la documentación',
           rcptFor: 'Link de pago', rcptItem: 'Plan anual', rcptStatus: 'Estado', rcptPaid: 'Pagado',
+          t1: 'Construido sobre Stripe Connect', t2: 'Autenticación en dos pasos', t3: 'Bitácora de auditoría por cliente', t4: 'Dinero guardado como enteros',
           howTitle: 'De la solicitud al pago en tres pasos',
           howSub: 'Sin código de pagos en tus sistemas: AxisPay se encarga del link, el checkout y la parte de Stripe.',
           s1t: 'Pide un link', s1d: 'Un sistema cliente llama a la API pública con su API key. Las llaves de idempotencia hacen seguros los reintentos.',
@@ -230,34 +350,80 @@
           u2t: 'Panel del cliente', u2d: 'Para que el equipo de cada cliente gestione usuarios, roles y pagos.',
           u3t: 'Panel de plataforma', u3d: 'Para que los superadmins operen a todos los clientes.',
           u4t: 'Checkout', u4d: 'Para los pagadores, con el Stripe Payment Element.',
-          stackTitle: 'Bajo el capó',
-          stackSub: 'Un stack convencional, bien probado y fácil de operar. Es código abierto y sigue en desarrollo activo.',
+          roadTitle: 'Dónde está el proyecto',
+          roadSub: 'AxisPay es código abierto y sigue en desarrollo activo. Este es el panorama real.',
+          rDone: 'Listo', rPlanned: 'Planeado',
+          r1: 'Fundamentos y CI', r2: 'Multi-tenancy, identidad y roles', r3: 'Conexión con Stripe', r4: 'API keys y API de links de pago', r5: 'Checkout y pagos con tarjeta',
+          r6: 'Webhooks salientes y validación previa al pago', r7: 'Conversión de moneda',
+          r8: 'Reembolsos y disputas', r9: 'Métricas, branding y campos del pagador', r10: 'Planes y reportes de uso', r11: 'Endurecimiento y salida a producción',
+          stackTitle: 'Bajo el capó', stackSub: 'Un stack convencional, bien probado y fácil de operar.',
+          ctaTitle: 'Lee el código. Lee la documentación.', ctaSub: 'Todo es público: la arquitectura, las decisiones detrás de ella y el plan.',
           footRepo: 'Código fuente en GitHub'
         }
       };
+      var meta = {
+        en: { title: 'AxisPay | Payment links for every tenant', toLight: 'Switch to light theme', toDark: 'Switch to dark theme' },
+        es: { title: 'AxisPay | Links de pago para cada cliente', toLight: 'Cambiar a tema claro', toDark: 'Cambiar a tema oscuro' }
+      };
+      var lang = 'en';
       var nodes = document.querySelectorAll('[data-i18n]');
       var en = {};
       nodes.forEach(function (n) { en[n.getAttribute('data-i18n')] = n.textContent; });
       T.en = en;
-      function apply(lang) {
-        document.documentElement.lang = lang;
+
+      var themeBtn = document.getElementById('theme');
+      function syncThemeLabel() {
+        themeBtn.setAttribute('aria-label', root.getAttribute('data-theme') === 'dark' ? meta[lang].toLight : meta[lang].toDark);
+      }
+      function setTheme(t, persist) {
+        root.setAttribute('data-theme', t);
+        if (persist) { try { localStorage.setItem('axispay-theme', t); } catch (e) {} }
+        syncThemeLabel();
+      }
+      themeBtn.addEventListener('click', function () {
+        setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true);
+      });
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+        var stored = null;
+        try { stored = localStorage.getItem('axispay-theme'); } catch (err) {}
+        if (!stored) setTheme(e.matches ? 'dark' : 'light', false);
+      });
+
+      function apply(l) {
+        lang = l;
+        root.lang = l;
+        document.title = meta[l].title;
         nodes.forEach(function (n) {
-          var v = T[lang][n.getAttribute('data-i18n')];
+          var v = T[l][n.getAttribute('data-i18n')];
           if (v) n.textContent = v;
         });
         document.querySelectorAll('[data-lang]').forEach(function (b) {
-          b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang));
+          b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === l));
         });
-        try { localStorage.setItem('axispay-lang', lang); } catch (e) {}
+        syncThemeLabel();
+        try { localStorage.setItem('axispay-lang', l); } catch (e) {}
       }
       document.querySelectorAll('[data-lang]').forEach(function (b) {
         b.addEventListener('click', function () { apply(b.getAttribute('data-lang')); });
       });
       document.getElementById('year').textContent = new Date().getFullYear();
+
       var saved = null;
       try { saved = localStorage.getItem('axispay-lang'); } catch (e) {}
       var start = saved || ((navigator.language || 'en').slice(0, 2) === 'es' ? 'es' : 'en');
-      if (start !== 'en') apply(start);
+      if (start !== 'en') apply(start); else syncThemeLabel();
+
+      var items = document.querySelectorAll('.reveal');
+      if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (en2) {
+            if (en2.isIntersecting) { en2.target.classList.add('in'); io.unobserve(en2.target); }
+          });
+        }, { threshold: 0.1 });
+        items.forEach(function (el, i) { el.style.transitionDelay = (i % 3) * 60 + 'ms'; io.observe(el); });
+      } else {
+        items.forEach(function (el) { el.classList.add('in'); });
+      }
     })();
   </script>
 </body>
