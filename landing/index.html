@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AxisPay | Payment links for every tenant</title>
+  <meta name="description" content="AxisPay is a multi-tenant payment-links orchestrator on Stripe Connect. Request a link through an API, let payers check out on your own domain, and manage everything from dedicated panels.">
+  <meta property="og:title" content="AxisPay | Payment links for every tenant">
+  <meta property="og:description" content="A multi-tenant payment-links orchestrator on Stripe Connect.">
+  <meta property="og:type" content="website">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2322b573'/%3E%3Cpath d='M9 16h14M17 10l6 6-6 6' fill='none' stroke='%230d1017' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Mukta:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --canvas: #f8f9f9;
+      --surface: #ffffff;
+      --fg: #0d1017;
+      --fg-secondary: #4a5161;
+      --border: #dfe2e6;
+      --primary: #1f63c7;
+      --primary-hover: #1a54a9;
+      --accent: #177b4e;
+      --accent-subtle: #edf9f4;
+      --mark: #22b573;
+      --font-body: 'Mukta', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --canvas: #0d1017;
+        --surface: #111620;
+        --fg: #f8f9f9;
+        --fg-secondary: #a3a9b5;
+        --border: #232b3b;
+        --primary: #5e8fd7;
+        --primary-hover: #8fb1e3;
+        --accent: #22b573;
+        --accent-subtle: rgb(34 181 115 / 0.15);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 1.0625rem;
+      line-height: 1.6;
+    }
+    a { color: inherit; }
+    .wrap { max-width: 68rem; margin: 0 auto; padding: 0 1rem; }
+    @media (min-width: 40rem) { .wrap { padding: 0 1.5rem; } }
+
+    header { border-bottom: 1px solid var(--border); }
+    .bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; }
+    .brand { display: flex; align-items: center; gap: .625rem; font-weight: 700; font-size: 1.25rem; text-decoration: none; }
+    .mark { width: 1.75rem; height: 1.75rem; border-radius: .5rem; background: var(--mark); display: grid; place-items: center; }
+    .mark svg { width: 1rem; height: 1rem; stroke: #0d1017; }
+    .lang { display: flex; gap: .25rem; }
+    .lang button {
+      min-width: 2.75rem; min-height: 2.75rem; border: 1px solid var(--border); border-radius: .5rem;
+      background: transparent; color: var(--fg-secondary); font: inherit; font-weight: 600; cursor: pointer;
+    }
+    .lang button[aria-pressed="true"] { border-color: var(--primary); color: var(--primary); }
+
+    .hero { padding-top: 4rem; padding-bottom: 3.5rem; }
+    .eyebrow { font-family: var(--font-mono); font-size: .875rem; color: var(--accent); margin: 0 0 1rem; }
+    h1 { font-size: clamp(2.25rem, 6vw, 3.75rem); line-height: 1.1; margin: 0 0 1.25rem; letter-spacing: -.02em; max-width: 18ch; }
+    .lead { font-size: 1.25rem; color: var(--fg-secondary); max-width: 40rem; margin: 0 0 2rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+    .btn {
+      display: inline-flex; align-items: center; min-height: 2.75rem; padding: .5rem 1.5rem;
+      border-radius: .625rem; font-weight: 600; text-decoration: none; border: 1px solid transparent;
+    }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover { filter: brightness(.92); }
+    .btn-ghost { border-color: var(--border); }
+    .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+    :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+    .receipt {
+      margin-top: 3rem; max-width: 28rem; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 1rem; padding: 1.25rem 1.5rem;
+    }
+    .receipt .row { display: flex; justify-content: space-between; gap: 1rem; padding: .375rem 0; color: var(--fg-secondary); }
+    .receipt .row strong { color: var(--fg); }
+    .num { font-family: var(--font-mono); }
+    .receipt .total { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .75rem; font-weight: 700; color: var(--fg); }
+    .status { display: inline-block; padding: .125rem .625rem; border-radius: 999px; background: var(--accent-subtle); color: var(--accent); font-size: .875rem; font-weight: 600; }
+
+    section { padding: 3.5rem 0; border-top: 1px solid var(--border); }
+    h2 { font-size: clamp(1.625rem, 4vw, 2.25rem); line-height: 1.2; margin: 0 0 .75rem; letter-spacing: -.01em; }
+    .sub { color: var(--fg-secondary); max-width: 40rem; margin: 0 0 2.5rem; }
+    .grid { display: grid; gap: 1rem; grid-template-columns: 1fr; }
+    @media (min-width: 40rem) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 62rem) { .grid.three { grid-template-columns: repeat(3, 1fr); } }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.5rem; }
+    .card h3 { margin: 0 0 .5rem; font-size: 1.25rem; }
+    .card p { margin: 0; color: var(--fg-secondary); }
+    .badge { margin-left: .5rem; font-size: .75rem; font-weight: 600; padding: .125rem .5rem; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-secondary); vertical-align: middle; }
+    .step { font-family: var(--font-mono); color: var(--primary); font-size: .875rem; margin-bottom: .5rem; display: block; }
+    .host { font-family: var(--font-mono); font-size: .875rem; color: var(--primary); margin-bottom: .5rem; display: block; }
+    .stack { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 0; list-style: none; }
+    .stack li { font-family: var(--font-mono); font-size: .875rem; border: 1px solid var(--border); border-radius: .5rem; padding: .375rem .75rem; background: var(--surface); }
+
+    footer { border-top: 1px solid var(--border); padding: 2rem 0; color: var(--fg-secondary); font-size: .9375rem; }
+    footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 1rem; }
+    footer a { text-underline-offset: 3px; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap bar">
+      <a class="brand" href="#top" aria-label="AxisPay">
+        <span class="mark" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h12M9 3l5 5-5 5"/></svg></span>
+        AxisPay
+      </a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="es" aria-pressed="false">ES</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <div class="wrap hero">
+      <p class="eyebrow" data-i18n="eyebrow">Stripe Connect · multi-tenant</p>
+      <h1 data-i18n="title">Payment links for every tenant.</h1>
+      <p class="lead" data-i18n="lead">Your systems request a link through an API. Payers check out on your own domain. Each tenant runs its own panel, and you operate them all from one place.</p>
+      <div class="actions">
+        <a class="btn btn-accent" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
+        <a class="btn btn-ghost" href="#how" data-i18n="ctaHow">How it works</a>
+      </div>
+
+      <div class="receipt" role="img" aria-label="Example payment link">
+        <div class="row"><span data-i18n="rcptFor">Payment link</span><strong class="num">PL-2048</strong></div>
+        <div class="row"><span data-i18n="rcptItem">Annual plan</span><span class="num">1,200.00 MXN</span></div>
+        <div class="row total"><span data-i18n="rcptStatus">Status</span><span class="status" data-i18n="rcptPaid">Paid</span></div>
+      </div>
+    </div>
+
+    <section id="how">
+      <div class="wrap">
+        <h2 data-i18n="howTitle">From request to payment in three steps</h2>
+        <p class="sub" data-i18n="howSub">No payment code in your systems: AxisPay owns the link, the checkout and the Stripe side.</p>
+        <div class="grid three">
+          <article class="card"><span class="step">01</span><h3 data-i18n="s1t">Request a link</h3><p data-i18n="s1d">A tenant system calls the public API with its API key. Idempotency keys make retries safe.</p></article>
+          <article class="card"><span class="step">02</span><h3 data-i18n="s2t">The payer checks out</h3><p data-i18n="s2d">A hosted checkout on your own domain, built on the Stripe Payment Element.</p></article>
+          <article class="card"><span class="step">03</span><h3 data-i18n="s3t">Everyone stays informed</h3><p data-i18n="s3d">Tenants follow their payments in their panel, and you can connect webhooks to react to events.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <h2 data-i18n="featTitle">Built for platforms with many customers</h2>
+        <p class="sub" data-i18n="featSub">One installation, many isolated tenants, each with their own users, roles and payments.</p>
+        <div class="grid">
+          <article class="card"><h3 data-i18n="f1t">Multi-tenant by design</h3><p data-i18n="f1d">Every tenant is isolated. Users, roles, two-factor authentication and an audit log come built in.</p></article>
+          <article class="card"><h3 data-i18n="f2t">Payment links API</h3><p data-i18n="f2d">A public API with API keys and idempotency, so your systems never touch card data.</p></article>
+          <article class="card"><h3 data-i18n="f3t">Hosted checkout</h3><p data-i18n="f3d">Payers pay on a page served from your own domain, in English or Spanish, light or dark.</p></article>
+          <article class="card"><h3 data-i18n="f4t">Money done right</h3><p data-i18n="f4d">Amounts are stored as integers in minor units, never as floats, so totals always add up.</p></article>
+          <article class="card"><h3><span data-i18n="f5t">Outgoing webhooks</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f5d">One endpoint per tenant with event selection and pre-payment validation.</p></article>
+          <article class="card"><h3><span data-i18n="f6t">Currency conversion</span><span class="badge" data-i18n="inProgress">In progress</span></h3><p data-i18n="f6d">Quotes with a fixed tenant rate or the Banxico FIX rate, confirmed by the payer.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="surfaces">
+      <div class="wrap">
+        <h2 data-i18n="surfTitle">Four surfaces, one platform</h2>
+        <p class="sub" data-i18n="surfSub">Each audience gets its own entry point.</p>
+        <div class="grid">
+          <article class="card"><span class="host">api.&lt;domain&gt;</span><h3 data-i18n="u1t">Public API</h3><p data-i18n="u1d">For tenant systems, authenticated with API keys.</p></article>
+          <article class="card"><span class="host">app.&lt;domain&gt;</span><h3 data-i18n="u2t">Tenant panel</h3><p data-i18n="u2d">For each tenant's team to manage users, roles and payments.</p></article>
+          <article class="card"><span class="host">admin.&lt;domain&gt;</span><h3 data-i18n="u3t">Platform panel</h3><p data-i18n="u3d">For superadmins to operate every tenant.</p></article>
+          <article class="card"><span class="host">pay.&lt;domain&gt;</span><h3 data-i18n="u4t">Checkout</h3><p data-i18n="u4d">For payers, with the Stripe Payment Element.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="stack">
+      <div class="wrap">
+        <h2 data-i18n="stackTitle">Under the hood</h2>
+        <p class="sub" data-i18n="stackSub">A conventional, well-tested stack that is easy to operate. It is open source, and still in active development.</p>
+        <ul class="stack">
+          <li>PHP 8.4</li><li>Laravel 13</li><li>Filament 5</li><li>MariaDB 11.8</li><li>Stripe Connect</li><li>Tailwind CSS 4</li><li>Docker</li><li>Dokploy</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>&copy; <span id="year">2026</span> AxisPay</span>
+      <a href="https://github.com/OJoshuaCG/axispay" data-i18n="footRepo">Source code on GitHub</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var T = {
+        es: {
+          eyebrow: 'Stripe Connect · multi-tenant',
+          title: 'Links de pago para cada cliente.',
+          lead: 'Tus sistemas piden un link por API. El pagador paga en tu propio dominio. Cada cliente tiene su panel y tú los operas todos desde un solo lugar.',
+          ctaRepo: 'Ver en GitHub', ctaHow: 'Cómo funciona',
+          rcptFor: 'Link de pago', rcptItem: 'Plan anual', rcptStatus: 'Estado', rcptPaid: 'Pagado',
+          howTitle: 'De la solicitud al pago en tres pasos',
+          howSub: 'Sin código de pagos en tus sistemas: AxisPay se encarga del link, el checkout y la parte de Stripe.',
+          s1t: 'Pide un link', s1d: 'Un sistema cliente llama a la API pública con su API key. Las llaves de idempotencia hacen seguros los reintentos.',
+          s2t: 'El pagador paga', s2d: 'Un checkout alojado en tu propio dominio, construido sobre el Stripe Payment Element.',
+          s3t: 'Todos se enteran', s3d: 'Cada cliente sigue sus pagos en su panel, y puedes conectar webhooks para reaccionar a los eventos.',
+          featTitle: 'Hecho para plataformas con muchos clientes',
+          featSub: 'Una instalación, muchos clientes aislados, cada uno con sus usuarios, roles y pagos.',
+          f1t: 'Multi-tenant desde el diseño', f1d: 'Cada cliente está aislado. Usuarios, roles, autenticación en dos pasos y bitácora de auditoría vienen incluidos.',
+          f2t: 'API de links de pago', f2d: 'Una API pública con API keys e idempotencia, para que tus sistemas nunca toquen datos de tarjeta.',
+          f3t: 'Checkout alojado', f3d: 'El pagador paga en una página servida desde tu dominio, en español o inglés, en tema claro u oscuro.',
+          f4t: 'Dinero bien manejado', f4d: 'Los montos se guardan como enteros en unidades menores, nunca como decimales flotantes, así los totales siempre cuadran.',
+          f5t: 'Webhooks salientes', f5d: 'Un endpoint por cliente con selección de eventos y validación previa al pago.',
+          f6t: 'Conversión de moneda', f6d: 'Cotizaciones con tipo de cambio fijo del cliente o el FIX de Banxico, confirmadas por el pagador.',
+          inProgress: 'En desarrollo',
+          surfTitle: 'Cuatro superficies, una plataforma', surfSub: 'Cada audiencia tiene su propia puerta de entrada.',
+          u1t: 'API pública', u1d: 'Para los sistemas de los clientes, autenticada con API keys.',
+          u2t: 'Panel del cliente', u2d: 'Para que el equipo de cada cliente gestione usuarios, roles y pagos.',
+          u3t: 'Panel de plataforma', u3d: 'Para que los superadmins operen a todos los clientes.',
+          u4t: 'Checkout', u4d: 'Para los pagadores, con el Stripe Payment Element.',
+          stackTitle: 'Bajo el capó',
+          stackSub: 'Un stack convencional, bien probado y fácil de operar. Es código abierto y sigue en desarrollo activo.',
+          footRepo: 'Código fuente en GitHub'
+        }
+      };
+      var nodes = document.querySelectorAll('[data-i18n]');
+      var en = {};
+      nodes.forEach(function (n) { en[n.getAttribute('data-i18n')] = n.textContent; });
+      T.en = en;
+      function apply(lang) {
+        document.documentElement.lang = lang;
+        nodes.forEach(function (n) {
+          var v = T[lang][n.getAttribute('data-i18n')];
+          if (v) n.textContent = v;
+        });
+        document.querySelectorAll('[data-lang]').forEach(function (b) {
+          b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang));
+        });
+        try { localStorage.setItem('axispay-lang', lang); } catch (e) {}
+      }
+      document.querySelectorAll('[data-lang]').forEach(function (b) {
+        b.addEventListener('click', function () { apply(b.getAttribute('data-lang')); });
+      });
+      document.getElementById('year').textContent = new Date().getFullYear();
+      var saved = null;
+      try { saved = localStorage.getItem('axispay-lang'); } catch (e) {}
+      var start = saved || ((navigator.language || 'en').slice(0, 2) === 'es' ? 'es' : 'en');
+      if (start !== 'en') apply(start);
+    })();
+  </script>
+</body>
+</html>
