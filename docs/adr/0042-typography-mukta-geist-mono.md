@@ -1,6 +1,6 @@
 # ADR-0042: Typography: Mukta for text, Geist Mono for currency and numeric data
 
-- **Status:** Accepted (by the project owner, 2026-09-25)
+- **Status:** Accepted (by the project owner, 2026-09-25). The text face (Mukta) was replaced by Geist in [ADR-0070](0070-tierra-firme-visual-identity.md); the Geist Mono decision and the money rule still hold
 - **Date:** 2026-09-25
 - **Source:** project owner decision; `docs/frontend/tokens.md`, `payments-ui.md`; [ADR-0025](0025-filament-panels.md), [ADR-0030](0030-filament-theme-and-dark-mode-bridge.md)
 

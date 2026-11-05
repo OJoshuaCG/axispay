@@ -5,16 +5,16 @@ This page lists every design token, where it is defined, and the utility it prod
 ## Quick answer
 
 - In views, use the **semantic** utilities: `bg-page`, `bg-surface`, `text-fg`, `text-fg-secondary`, `border-line`, `bg-primary`, `text-error`, and so on.
-- Primitive utilities (`bg-blue-500`, `text-neutral-400`) exist for the preview page and rare decorative needs. They never carry meaning and do not switch with the theme.
+- Primitive utilities (`bg-forest-500`, `text-neutral-400`) exist for the preview page and rare decorative needs. They never carry meaning and do not switch with the theme.
 - Anything not listed on this page for a reset namespace does not exist as a utility.
 
 ## Architecture
 
 ```
 primitives.css          semantic.css                          theme.css
---color-blue-600  --->  --color-primary: light-dark(          @theme: spacing, type, radius,
---color-blue-500        var(--color-blue-600),                 icons, motion, z-index, opacity
-                        var(--color-blue-500))
+--color-forest-600  -->  --color-primary: light-dark(         @theme: spacing, type, radius,
+--color-forest-400        var(--color-forest-600),             icons, motion, z-index, opacity
+                          var(--color-forest-400))
         \                        |                                     |
          \-----------------------+------------> Tailwind utilities <---/
                                                 bg-primary, text-fg, p-inset-md, z-modal ...
@@ -46,10 +46,11 @@ Not reset, so Tailwind defaults still apply: the numeric spacing scale (`p-4`, `
 
 ## Color primitives
 
-Defined in `primitives.css`. Utilities: `bg-*`, `text-*`, `border-*`, etc. (e.g. `bg-blue-500`).
+Defined in `primitives.css`. Utilities: `bg-*`, `text-*`, `border-*`, etc. (e.g. `bg-forest-500`).
 
 | Scale | 50 | 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 |
 |---|---|---|---|---|---|---|---|---|---|---|
+| forest | `#eaf3ef` | `#d3e7de` | `#b0d5c5` | `#86d6bf` | `#5fc3a6` | `#2e8a6e` | `#0f5c4c` | `#0a4a3d` | `#0a3a30` | `#072a22` |
 | blue | `#edf3fb` | `#dbe6f6` | `#b7cded` | `#8fb1e3` | `#5e8fd7` | `#1f63c7` | `#1a54a9` | `#154387` | `#103367` | `#0b2448` |
 | green | `#edf9f4` | `#dcf3e9` | `#b8e7d2` | `#90dab9` | `#60ca9a` | `#22b573` | `#1d9a62` | `#177b4e` | `#125e3c` | `#0c4129` |
 
@@ -57,14 +58,15 @@ Neutral has extra steps:
 
 | neutral step | 0 | 50 | 100 | 200 | 300 | 400 | 450 | 500 | 550 | 600 | 700 | 800 | 900 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| value | `#ffffff` | `#f8f9f9` | `#eff0f1` | `#dddfe2` | `#bcbfc5` | `#9398a2` | `#858a94` | `#697080` | `#5f6673` | `#1c2536` | `#171d2b` | `#111620` | `#0d1017` |
+| value | `#ffffff` | `#f6f4ef` | `#efece5` | `#e2ddd3` | `#b9b2a5` | `#948d80` | `#857e72` | `#6f695f` | `#5e5850` | `#23211e` | `#1c1b18` | `#191815` | `#141311` |
 
-`neutral-450` (3:1 control edges on light) and `neutral-550` (secondary text on light) were added; `neutral-500` was retuned. Note the jump in lightness between 550 and 600: 600–900 are the dark-theme surfaces.
+The neutrals are warm (sand in light, charcoal in dark; ADR-0070). `neutral-450` (3:1 control edges on light) and `neutral-550` (secondary text on light) are extra steps. Note the jump in lightness between 550 and 600: 600–900 are the dark-theme surfaces.
 
 Status hues are partial scales (only the values in use):
 
 | Hue | Steps |
 |---|---|
+| clay | 50 `#fdf1e4`, 400 `#e9a36a`, 700 `#9a5a22` |
 | amber | 50 `#fdf3e7`, 400 `#f0a94e`, 700 `#b45309` |
 | red | 50 `#fbeaea`, 400 `#e5695f`, 700 `#b91c1c`, 800 `#991b1b`, 900 `#7f1d1d` |
 
@@ -76,11 +78,11 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `page` | neutral-0 | neutral-900 | Page background |
-| `surface` | neutral-50 | neutral-700 | Cards, raised areas |
+| `page` | neutral-50 | neutral-900 | Page background |
+| `surface` | neutral-0 | neutral-700 | Cards, raised areas |
 | `surface-alt` | neutral-100 | neutral-600 | Hover fills, neutral badges, disabled fields |
-| `surface-pressed` | neutral-200 | `#2a3346` (same hairline value as dark `line`) | Pressed state of low-emphasis controls (ghost button `:active`) |
-| `line` | neutral-200 | `#2a3346` (one-off) | Hairlines, dividers, card borders |
+| `surface-pressed` | neutral-200 | `#2e2b26` (one-off, close to dark `line`) | Pressed state of low-emphasis controls (ghost button `:active`) |
+| `line` | neutral-200 | `#34312b` (one-off) | Hairlines, dividers, card borders |
 | `line-strong` | neutral-450 | neutral-500 | Input and control edges (3:1) |
 | `canvas` | neutral-50 | neutral-900 | Background of app shells behind raised panels (Filament panel body, sign-in page) |
 | `raised` | neutral-0 | neutral-700 | Panels on the canvas: topbar, sidebar, tables, sections, modals, dropdowns |
@@ -103,19 +105,20 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 
 | Token | Light | Dark | Use |
 |---|---|---|---|
-| `primary` | blue-600 | blue-500 | Main action fill, brand emphasis |
-| `primary-hover` | blue-700 | blue-600 | Hover |
-| `primary-active` | blue-800 | blue-700 | Pressed |
-| `primary-subtle` | blue-50 | `rgb(31 99 199 / 0.15)` | Tinted background |
-| `accent` | green-700 | green-500 | Accent text and icons |
-| `accent-fill` | green-700 | same | Accent button fill |
-| `accent-hover` | green-800 | same | Hover |
-| `accent-active` | green-900 | same | Pressed |
-| `accent-subtle` | green-50 | `rgb(34 181 115 / 0.15)` | Tinted background |
-| `feature` | blue-600 | green-500 | Decorative brand color only |
-| `feature-subtle` | blue-50 | `rgb(34 181 115 / 0.12)` | Decorative background |
-| `brand-mark` | green-500 | same | Brand mark tile (`fill-brand-mark`): the panel stand-in shown when there is no platform logo or the display is "name only" (ADR-0053) |
-| `brand-mark-fg` | neutral-900 | same | Glyph on the brand mark tile (`stroke-brand-mark-fg`, 7.2:1). Decorative |
+| `primary` | forest-600 | forest-400 | Main action fill, brand emphasis |
+| `primary-hover` | forest-700 | forest-300 | Hover |
+| `primary-active` | forest-800 | forest-200 | Pressed |
+| `primary-subtle` | forest-50 | `rgb(95 195 166 / 0.14)` | Tinted background |
+| `accent` | forest-600 | forest-400 | Accent text and icons (same family as primary, ADR-0070) |
+| `accent-fill` | forest-600 | forest-400 | Accent button fill |
+| `accent-hover` | forest-700 | forest-300 | Hover |
+| `accent-active` | forest-800 | forest-200 | Pressed |
+| `accent-subtle` | forest-50 | `rgb(95 195 166 / 0.14)` | Tinted background |
+| `feature` | clay-400 | same | Decorative brand color only |
+| `feature-subtle` | clay-50 | `rgb(233 163 106 / 0.12)` | Decorative background |
+| `brand-mark` | forest-600 | forest-400 | Brand mark tile (`fill-brand-mark`): the panel stand-in shown when there is no platform logo or the display is "name only" (ADR-0053) |
+| `brand-mark-fg` | neutral-50 | forest-900 | Glyph on the brand mark tile (`stroke-brand-mark-fg`). Decorative |
+| `brand-mark-dot` | clay-400 | forest-900 | Dot of the brand mark (`fill-brand-mark-dot`). Decorative |
 | `logo-plate` | transparent | neutral-50 | Plate behind the merchant's logo on the payment page when the merchant has no dark variant (`bg-logo-plate`, ADR-0056), so a logo drawn for white backgrounds stays readable in dark. Decorative; never behind text |
 
 ### Status
@@ -140,9 +143,9 @@ Defined in `semantic.css`. Each token `--color-<name>` produces `bg-<name>`, `te
 |---|---|---|---|
 | `amount-positive` | = `success` | = `success` | Positive signed amounts |
 | `amount-negative` | = `error` | = `error` | Negative signed amounts |
-| `link` | blue-600 | blue-400 | Links (applied globally in `base.css`) |
-| `link-visited` | blue-800 | blue-300 | Visited links |
-| `focus-ring` | blue-600 | blue-400 | The global focus outline |
+| `link` | forest-600 | forest-400 | Links (applied globally in `base.css`) |
+| `link-visited` | forest-800 | forest-300 | Visited links |
+| `focus-ring` | forest-600 | forest-400 | The global focus outline |
 
 ## Spacing and layout
 
@@ -174,13 +177,13 @@ Font families (ADR-0042):
 
 | Utility | Token | Face | Use |
 |---|---|---|---|
-| `font-sans` (default) | `--font-sans` | Mukta, then system sans-serif | All text |
+| `font-sans` (default) | `--font-sans` | Geist, then system sans-serif | All text |
 | `font-numeric` | `--font-numeric` | Geist Mono, then `ui-monospace, SFMono-Regular, Menlo, Consolas, monospace` | Currency amounts and numeric money data. Applied by `<x-amount>` and the `amount` utility; do not add it by hand where those fit |
 | `font-mono` | `--font-mono` | Geist Mono, then the system monospace stack | Code, keys, IDs, token names. Never for money |
 
-`--font-mukta` and `--font-geist-mono` are emitted by the `@fonts` directive in the layout (and by `ViteFontProvider` in the panels). `vite.config.js` loads Mukta 400/500/600/700 and Geist Mono 400/600 from the pinned `@fontsource/*` packages, one latin-subset WOFF2 file per weight (latin covers English, Spanish, `€` and U+2212 MINUS SIGN), `display: swap`, preloading Mukta 400 and 600 only. It uses the plugin's `local()` provider on those files, not `fontsource()`: in laravel-vite-plugin 3.2.0 `fontsource()` emits the woff2 and woff of a weight as two rules with identical descriptors, the woff wins, and browsers downloaded both (see the comment in `vite.config.js`). Mukta has `optimizedFallbacks: true`: `fontaine` (devDependency, optional peer of `laravel-vite-plugin`) emits a metric-matched `"Mukta fallback"` face (local Arial with ascent/descent/line-gap/size-adjust overrides) so the font swap barely shifts layout. Removing `fontaine` silently disables it (the plugin only warns). Geist Mono has it off: fontaine does not detect it as monospace and would put a scaled Arial in front of the monospace stack; the system monospace fonts already share its 0.6em digit width.
+`--font-geist` and `--font-geist-mono` are emitted by the `@fonts` directive in the layout (and by `ViteFontProvider` in the panels). `vite.config.js` loads Geist 400/500/600/700 and Geist Mono 400/600 from the pinned `@fontsource/*` packages, one latin-subset WOFF2 file per weight (latin covers English, Spanish, `€` and U+2212 MINUS SIGN), `display: swap`, preloading Mukta 400 and 600 only. It uses the plugin's `local()` provider on those files, not `fontsource()`: in laravel-vite-plugin 3.2.0 `fontsource()` emits the woff2 and woff of a weight as two rules with identical descriptors, the woff wins, and browsers downloaded both (see the comment in `vite.config.js`). Mukta has `optimizedFallbacks: true`: `fontaine` (devDependency, optional peer of `laravel-vite-plugin`) emits a metric-matched `"Mukta fallback"` face (local Arial with ascent/descent/line-gap/size-adjust overrides) so the font swap barely shifts layout. Removing `fontaine` silently disables it (the plugin only warns). Geist Mono has it off: fontaine does not detect it as monospace and would put a scaled Arial in front of the monospace stack; the system monospace fonts already share its 0.6em digit width.
 
-The type scale below was kept when Mukta replaced Jost: every size sets an explicit line height, so Mukta's tall ascent/descent (1.13/0.53em, sized for Devanagari) do not change the line box. Its Latin x-height is 0.468em and cap height 0.63em (Geist Mono: 0.53em / 0.71em). Checked on `/design-system` from 320 to 1440px in both languages.
+The type scale below sets an explicit line height on every size, so the face's ascent and descent do not change the line box. Checked on `/design-system` in English and Spanish.
 
 | Utility | Size | Line height | Letter spacing |
 |---|---|---|---|
@@ -196,7 +199,7 @@ The type scale below was kept when Mukta replaced Jost: every size sets an expli
 
 ### Panel type scale (Filament panels only)
 
-Filament's sizes were tuned for Inter; Mukta's smaller x-height (0.47em vs about 0.54em) made the panels' 14px text read like 12px. The panel theme (`resources/css/filament/theme.css`) remaps Tailwind's `--text-xs/sm/base` on `html.fi` to these tokens from `theme.css` (ADR-0044). Blade pages keep the scale above. Never set a font size on individual `.fi-*` classes; change these tokens.
+Filament's sizes were tuned for Inter, whose x-height Geist matches, so since ADR-0070 the panel scale is one notch above Filament's defaults only on desktop (it was larger while the text face was Mukta, ADR-0044). The panel theme (`resources/css/filament/theme.css`) remaps Tailwind's `--text-xs/sm/base` on `html.fi` to these tokens from `theme.css` (ADR-0044). Blade pages keep the scale above. Never set a font size on individual `.fi-*` classes; change these tokens.
 
 | Token | Value | Applies to |
 |---|---|---|
@@ -211,7 +214,7 @@ Page titles (`text-3xl`, up to 36px) and the sign-in heading (`text-2xl`, 24px) 
 |---|---|
 | `font-normal` 400, `font-medium` 500, `font-semibold` 600, `font-bold` 700 | `tracking-tight` -0.02em, `tracking-snug` -0.01em, `tracking-normal` 0em, `tracking-wide` 0.02em, `tracking-wider` 0.06em |
 
-Only the four loaded Mukta weights exist; there is no `font-light` or `font-black`. Geist Mono loads 400 and 600 only: on amounts, `font-medium` renders 400 and `font-bold` renders 600.
+Only the four loaded Geist weights exist; there is no `font-light` or `font-black`. Geist Mono loads 400 and 600 only: on amounts, `font-medium` renders 400 and `font-bold` renders 600.
 
 ## Radius
 
@@ -302,7 +305,7 @@ Filament's logo box takes its height from `--pl-brand-logo-height`, a private va
 | `*-hover`, `*-active` | Interaction states of a fill | `hover:bg-primary-hover` |
 | `*-subtle` | Tinted background; **never text** | `bg-success-subtle` |
 | `stack-*` / `inset-*` | Gaps between items / padding inside containers | `gap-stack-sm`, `p-inset-md` |
-| Primitive `<hue>-<step>` | Raw scale value, no meaning | `bg-blue-50` |
+| Primitive `<hue>-<step>` | Raw scale value, no meaning | `bg-forest-50` |
 
 Note the split between `error` (text and icons) and `error-fill` (solid destructive controls), and between `accent` (text) and `accent-fill` (button fill): the text token changes with the theme, the fill does not.
 

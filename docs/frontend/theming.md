@@ -121,14 +121,14 @@ The browser chrome follows the **effective** theme, manual choice included.
 
 | Situation | Who sets it | Value |
 |---|---|---|
-| Server render / System | Layout `<meta>` tags, one per `prefers-color-scheme` | `#ffffff` / `#0d1017` |
+| Server render / System | Layout `<meta>` tags, one per `prefers-color-scheme` | `#f6f4ef` / `#141311` |
 | Saved manual theme, before first paint | Pre-paint script copies the chosen scheme's `content` into both tags (keeps the original in `data-default-content`) | Server hex of that scheme |
 | Manual theme, after `theme.js` runs or on change | `syncThemeColor()` in `theme.js` | Computed `--color-page` of `<html>` (e.g. `rgb(13, 16, 23)`) |
-| Back to System | `theme.js` restores the server values | `#ffffff` / `#0d1017` |
+| Back to System | `theme.js` restores the server values | `#f6f4ef` / `#141311` |
 
 ```html
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" data-theme-color="light">
-<meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)" data-theme-color="dark">
+<meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)" data-theme-color="light">
+<meta name="theme-color" content="#141311" media="(prefers-color-scheme: dark)" data-theme-color="dark">
 ```
 
 The two hexes are the only copy of `page` outside the tokens: they are needed before any CSS loads. They live in one component, `<x-theme-color-meta />` (`components/theme-color-meta.blade.php`), which every layout (the app layout and the checkout layout) includes. The payment page's body is `canvas` but its `<html>` stays `page`, so the browser chrome takes `page`. If `page` changes in `primitives.css` / `semantic.css`, update them there. `theme.js` hardcodes no color.
@@ -154,7 +154,7 @@ The panels use the same tokens through a separate Vite entry, `resources/css/fil
 |---|---|---|
 | Token import | `resources/css/filament/theme.css` | Imports `primitives.css`, `semantic.css` and `theme.css` **before** Filament's theme, so our values win over Tailwind's defaults (palette, shadows, radius, type scale). `base.css` is not imported. |
 | Filament palettes | `app/Support/Filament/DesignTokenPalette.php` | Registers Filament's `primary`, `info`, `success`, `gray`, `warning`, `danger` scales from the hex values in `primitives.css` (missing steps map to the nearest primitive; see `MAP`). No color is copied. |
-| Font | `app/Support/Filament/ViteFontProvider.php` | Self-hosted Mukta and Geist Mono (`Vite::fonts()`); the panel theme maps `--font-sans` → `--font-mukta` and `--font-mono` → `--font-numeric` (Geist Mono), so `->fontFamily(FontFamily::Mono)` is the money-column convention ([payments-ui.md](payments-ui.md#filament-panels)). |
+| Font | `app/Support/Filament/ViteFontProvider.php` | Self-hosted Geist and Geist Mono (`Vite::fonts()`); the panel theme maps `--font-sans` → `--font-geist` and `--font-mono` → `--font-numeric` (Geist Mono), so `->fontFamily(FontFamily::Mono)` is the money-column convention ([payments-ui.md](payments-ui.md#filament-panels)). |
 | Dark-mode bridge | `resources/views/filament/partials/theme-bridge.blade.php` (render hook `HEAD_END`) | Mirrors Filament's `.dark` class on `<html>` into `data-theme="dark|light"` before first paint and on every change (`MutationObserver`). |
 | Default mode | `app/Support/Filament/PanelDefaults.php` | `->defaultThemeMode(ThemeMode::Light)`: light when nothing is saved (ADR-0044). |
 | Theme control | `resources/views/filament/partials/theme-control.blade.php` | Light / Dark / System segmented group (`aria-pressed` buttons). On the sign-in pages (with the language switcher, `guest-controls`) and in the topbar from `md` up (`panel-controls`). |

@@ -17,13 +17,13 @@ This page covers how money and payment flows are presented: amounts, amount and 
 
 ### Numeric font
 
-Text is Mukta (`font-sans`); currency amounts and numeric money data are Geist Mono (`font-numeric`, token `--font-numeric`, ADR-0042). The `amount` utility (`resources/css/components.css`) sets both the face and `font-variant-numeric: tabular-nums slashed-zero`, so digits have equal width, columns align and values do not shift while updating.
+Text is Geist (`font-sans`); currency amounts and numeric money data are Geist Mono (`font-numeric`, token `--font-numeric`, ADR-0042). The `amount` utility (`resources/css/components.css`) sets both the face and `font-variant-numeric: tabular-nums slashed-zero`, so digits have equal width, columns align and values do not shift while updating.
 
 - Geist Mono is monospace: every digit is 600 units wide, so figures align without any OpenType feature. `tabular-nums` is kept for the fallback faces, which are not all monospace.
 - Geist Mono has **no** `zero` feature: slashed zero only appears in fallback fonts that support it. Do not rely on it to distinguish 0 from O.
 - Loaded weights: 400 (every amount) and 600 (emphasized totals, `font-semibold`). `font-medium` on an amount renders 400, `font-bold` renders 600.
 - `<x-amount>` applies `amount` automatically. Add `class="amount"` yourself on amount inputs (there is no separate `numeric` prop) and on any other numeric money column.
-- Geist Mono is wider than Mukta: a 9-character amount at `text-base` is about 86px. Keep amounts `whitespace-nowrap` (as `<x-amount>` does) in a `minmax(0,1fr)_auto` grid so the label wraps, not the amount.
+- Geist Mono is wider than Geist: a 9-character amount at `text-base` is about 86px. Keep amounts `whitespace-nowrap` (as `<x-amount>` does) in a `minmax(0,1fr)_auto` grid so the label wraps, not the amount.
 - IDs, keys and code use `font-mono`. It is the same face today, but a separate token: do not use `font-mono` for money or `font-numeric` for code.
 
 ### Filament panels
@@ -202,7 +202,7 @@ Two cards on the `canvas` (ADR-0056 part C): the details (summary and legal link
 - Outcomes (paid, expired, canceled, blocked) are one card: the status, then the summary. Processing keeps both cards, the status in the right one.
 - The cards are `<x-checkout.card>` (`bg-page`), never `x-card`: primary on a raised surface fails contrast in dark. In dark the cards are flat and outlined.
 - The Pay button is `primary`, `size="lg"`, full width and **not sticky** (iOS keyboard, focus not obscured). It reads "Pay 1,500.00 MXN" with the amount in the numeric font, stays `aria-disabled` until the card form is ready, and switches to "Processing payment…" while a request is in flight.
-- Light, dark or system, chosen in the header (light by default, ADR-0044); Stripe's card form gets the page's own colors (read from the rendered utilities) and Mukta, and is updated when the theme on screen changes.
+- Light, dark or system, chosen in the header (light by default, ADR-0044); Stripe's card form gets the page's own colors (read from the rendered utilities) and Geist, and is updated when the theme on screen changes.
 
 ### States and feedback
 

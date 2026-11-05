@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **"Tierra firme" visual identity for the Blade pages and both panels**
+  (ADR-0070): forest-green primary with clay/amber decoration on warm neutrals,
+  Geist replaces Mukta as the text face (Geist Mono stays for money), the
+  default brand mark is the new logo glyph, labels on primary fills are
+  theme-aware, and the landing and README use the logos in `landing/assets`.
+
 - **One webhook endpoint per tenant, with the pre-payment validation as an
   event** (ADR-0069): the separate "Pre-payment validation" entity and page are
   gone. The validation is the synchronous event `payment.pre_validation` of the

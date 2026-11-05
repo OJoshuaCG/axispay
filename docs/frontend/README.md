@@ -18,13 +18,13 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 
 ## Golden rules
 
-1. **Use design-system utilities only.** Never write hex values, `rgb()`, or arbitrary values such as `bg-[#1f63c7]` or `p-[13px]` in views. Tailwind's default palette, type scale, radii, shadows and easings are removed, so `bg-white`, `text-gray-500` or `shadow-2xl` do not exist. See [tokens.md](tokens.md).
-2. **Body text is `text-fg`. `text-primary` is brand blue**, for emphasis and brand accents, not for paragraphs. Secondary copy uses `text-fg-secondary`; `text-fg-muted` is for placeholders and non-essential metadata and is never used on `bg-surface-alt`.
+1. **Use design-system utilities only.** Never write hex values, `rgb()`, or arbitrary values such as `bg-[#0f5c4c]` or `p-[13px]` in views. Tailwind's default palette, type scale, radii, shadows and easings are removed, so `bg-white`, `text-gray-500` or `shadow-2xl` do not exist. See [tokens.md](tokens.md).
+2. **Body text is `text-fg`. `text-primary` is brand forest green**, for emphasis and brand accents, not for paragraphs. Secondary copy uses `text-fg-secondary`; `text-fg-muted` is for placeholders and non-essential metadata and is never used on `bg-surface-alt`.
 3. **Change a value in one place.** Each kind of value has exactly one home file (table below). Components read tokens; they never redefine them.
 4. **Primary is for action; feature is decorative.** `primary` (buttons, focus, selection) marks the main transactional action. `feature` / `feature-subtle` is brand decoration only, never buttons, links or text that must be read.
 5. **Accent green is for non-transactional calls to action** (marketing, onboarding). Never use `variant="accent"` for pay or confirm buttons.
 6. **Money always goes through `<x-amount>`** (or at minimum the `amount` utility). Signed amounts always carry `+` or `−`; color is never the only signal. See [payments-ui.md](payments-ui.md).
-7. **Currency and numeric money data always use `font-numeric` (Geist Mono)**, through `<x-amount>` or the `amount` utility (amount inputs: `class="amount"`; Filament columns: `->fontFamily(FontFamily::Mono)`). Text is Mukta (`font-sans`). Never set a font family by hand on money. See [payments-ui.md](payments-ui.md#numeric-font) and ADR-0042.
+7. **Currency and numeric money data always use `font-numeric` (Geist Mono)**, through `<x-amount>` or the `amount` utility (amount inputs: `class="amount"`; Filament columns: `->fontFamily(FontFamily::Mono)`). Text is Geist (`font-sans`). Never set a font family by hand on money. See [payments-ui.md](payments-ui.md#numeric-font) and ADR-0042.
 8. **Payment states come from `App\Enums\PaymentStatus`** via `<x-payment-status>`. Never hand-pick a badge color or label for a status.
 9. **Every user-facing string goes through `__()`**, with the key in both `lang/en` and `lang/es` (including `label`, sr-only text and JS strings passed via `data-*`). Never concatenate translated fragments. See [i18n.md](i18n.md).
 10. **Design mobile-first and verify at 320px** in Spanish (the longest strings): no horizontal scroll, no clipped text, 44px targets, 16px inputs. See [responsive.md](responsive.md).
@@ -44,10 +44,10 @@ The preview page is `resources/views/design-system.blade.php`. It writes every c
 | Global element defaults (body, links, focus outline, selection, reduced motion) | `resources/css/base.css` |
 | Custom utilities Tailwind cannot express (`amount`: numeric font + tabular figures; `seg-group` / `seg-option`: segmented controls; `dialog-enter`: a modal's reduced-motion-aware opening) | `resources/css/components.css` |
 | Page scroll lock behind an open modal `<dialog>` | `resources/css/base.css` (`html:has(dialog[open])`) |
-| Panel type scale (Filament text sizes for Mukta) | `resources/css/theme.css` (`--panel-text-*`), applied in `resources/css/filament/theme.css` |
+| Panel type scale (Filament text sizes for Geist) | `resources/css/theme.css` (`--panel-text-*`), applied in `resources/css/filament/theme.css` |
 | Panel theme control, default panel theme | `resources/views/filament/partials/theme-control.blade.php`, `app/Support/Filament/PanelDefaults.php` |
 | Import order of the CSS layers | `resources/css/app.css` |
-| Font loading (Mukta and Geist Mono weights, subsets, preload, fontaine fallback metrics) | `vite.config.js` |
+| Font loading (Geist and Geist Mono weights, subsets, preload, fontaine fallback metrics) | `vite.config.js` |
 | Breakpoint contract, safe-area and gutter tokens | `resources/css/theme.css` |
 | A user-facing string (English / Spanish) | `lang/en/<domain>.php` and `lang/es/<domain>.php` |
 | Supported languages | `config/app.php` → `supported_locales` |
