@@ -29,8 +29,8 @@ final class DesignTokenPalette
      */
     public const array MAP = [
         'primary' => [
-            50 => 'blue-50', 100 => 'blue-100', 200 => 'blue-200', 300 => 'blue-300', 400 => 'blue-400',
-            500 => 'blue-500', 600 => 'blue-600', 700 => 'blue-700', 800 => 'blue-800', 900 => 'blue-900', 950 => 'blue-900',
+            50 => 'forest-50', 100 => 'forest-100', 200 => 'forest-200', 300 => 'forest-300', 400 => 'forest-400',
+            500 => 'forest-500', 600 => 'forest-600', 700 => 'forest-700', 800 => 'forest-800', 900 => 'forest-900', 950 => 'forest-900',
         ],
         'info' => [
             50 => 'blue-50', 100 => 'blue-100', 200 => 'blue-200', 300 => 'blue-300', 400 => 'blue-400',

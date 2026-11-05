@@ -9,6 +9,13 @@
 --}}
 @php
     $scales = [
+        'Forest' => [
+            ['50', 'bg-forest-50'], ['100', 'bg-forest-100'], ['200', 'bg-forest-200'], ['300', 'bg-forest-300'], ['400', 'bg-forest-400'],
+            ['500', 'bg-forest-500'], ['600', 'bg-forest-600'], ['700', 'bg-forest-700'], ['800', 'bg-forest-800'], ['900', 'bg-forest-900'],
+        ],
+        'Clay' => [
+            ['50', 'bg-clay-50'], ['400', 'bg-clay-400'], ['700', 'bg-clay-700'],
+        ],
         'Blue' => [
             ['50', 'bg-blue-50'], ['100', 'bg-blue-100'], ['200', 'bg-blue-200'], ['300', 'bg-blue-300'], ['400', 'bg-blue-400'],
             ['500', 'bg-blue-500'], ['600', 'bg-blue-600'], ['700', 'bg-blue-700'], ['800', 'bg-blue-800'], ['900', 'bg-blue-900'],
@@ -42,7 +49,7 @@
         ],
         'Destructive fills' => [['bg-error-fill', '--color-error-fill'], ['bg-error-fill-hover', '--color-error-fill-hover'], ['bg-error-fill-active', '--color-error-fill-active'], ['bg-on-error', '--color-on-error']],
         'Money' => [['bg-amount-positive', '--color-amount-positive'], ['bg-amount-negative', '--color-amount-negative']],
-        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle'], ['bg-brand-mark', '--color-brand-mark'], ['bg-brand-mark-fg', '--color-brand-mark-fg'], ['bg-logo-plate', '--color-logo-plate']],
+        'Links & feature' => [['bg-link', '--color-link'], ['bg-link-visited', '--color-link-visited'], ['bg-feature', '--color-feature'], ['bg-feature-subtle', '--color-feature-subtle'], ['bg-brand-mark', '--color-brand-mark'], ['bg-brand-mark-fg', '--color-brand-mark-fg'], ['bg-brand-mark-dot', '--color-brand-mark-dot'], ['bg-logo-plate', '--color-logo-plate']],
     ];
 
     $typeScale = [
@@ -138,7 +145,7 @@
             {{-- Font families (ADR-0042): Mukta for text, Geist Mono for currency and numeric data. --}}
             <div class="grid gap-stack-md md:grid-cols-2">
                 <div class="flex min-w-0 flex-col gap-stack-sm rounded-lg border border-line bg-surface p-inset-md">
-                    <span class="font-mono text-xs break-all text-fg-secondary">font-sans &middot; Mukta 400/500/600/700</span>
+                    <span class="font-mono text-xs break-all text-fg-secondary">font-sans &middot; Geist 400/500/600/700</span>
                     <p class="text-2xl font-semibold break-words">{{ __('design-system.typography.sans_heading') }}</p>
                     <p class="break-words">{{ __('design-system.typography.sans_sample') }}</p>
                     <p class="break-words text-fg-secondary">Aa Bb Cc Ññ Áá Éé Üü ¿? ¡! 0123456789</p>

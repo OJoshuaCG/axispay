@@ -337,6 +337,6 @@ it('re-reads a payment left in 3D Secure less often the longer it stays idle (P1
     expect($reads())->toBe($afterTwo + 1);
 });
 
-it('sends Stripe only the Mukta weights the card form uses (P19)', function (): void {
+it('sends Stripe only the Geist weights the card form uses (P19)', function (): void {
     expect(CheckoutFonts::STRIPE_WEIGHTS)->toBe([400, 500]);
 });

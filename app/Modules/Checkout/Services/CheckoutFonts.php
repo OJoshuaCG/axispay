@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Vite;
  * Self-hosted font files of the build (vite.config.js fonts), for what the
  * checkout needs beyond `@fonts`:
  *
- *  - Mukta sources for Stripe Elements (`fonts: [{family, src, weight}]`),
+ *  - Geist sources for Stripe Elements (`fonts: [{family, src, weight}]`),
  *    so the card fields inside Stripe's iframe use the page's typeface. The
  *    iframe is on Stripe's origin: the woff2 files must be served with CORS
  *    (docker/app/nginx.conf). Never a font CDN;
@@ -25,7 +25,7 @@ final class CheckoutFonts
     private ?array $manifest = null;
 
     /**
-     * Mukta weights the card form's Appearance uses (resources/js/checkout/
+     * Geist weights the card form's Appearance uses (resources/js/checkout/
      * appearance.js: normal 400, medium and bold 500). No other weight is
      * sent to Stripe, so the iframe downloads nothing it does not render.
      */
@@ -39,10 +39,10 @@ final class CheckoutFonts
         $fonts = [];
 
         foreach (self::STRIPE_WEIGHTS as $weight) {
-            $url = $this->fileUrl('mukta', $weight);
+            $url = $this->fileUrl('geist', $weight);
 
             if ($url !== null) {
-                $fonts[] = ['family' => 'Mukta', 'src' => 'url('.$url.')', 'weight' => (string) $weight];
+                $fonts[] = ['family' => 'Geist', 'src' => 'url('.$url.')', 'weight' => (string) $weight];
             }
         }
 

@@ -30,8 +30,9 @@
 @source '../../../app/Support/Filament/**/*.php';
 
 /*
- * Panel type scale (ADR-0044). Filament's sizes were tuned for Inter; Mukta's
- * smaller x-height makes the same sizes read about 2px smaller. Remapping the
+ * Panel type scale (ADR-0044). Filament's sizes were tuned for Inter, whose x-height
+ * Geist matches closely; the panel keeps slightly larger steps than Filament's
+ * defaults for readability in dense tables. Remapping the
  * Tailwind tokens on the panel root raises every Filament text-xs/sm/base at
  * once (table cells, sidebar, labels, buttons, badges) without touching the
  * root font size (rem-based spacing stays put) or individual .fi-* classes.
@@ -61,6 +62,21 @@ html.fi {
 }
 
 /*
+ * Solid primary buttons in dark use the design-system primary (mint with a
+ * deep-green label, ADR-0070). Filament picks one palette shade (600) for both
+ * themes and a PHP-computed label, which here would be white on the deep
+ * green: legible, but off-brand next to links, focus and the brand mark.
+ * Light keeps Filament's own shade (forest-600 with a white label). Unlayered
+ * like the rule above: the utilities that set these variables are layered.
+ */
+html.fi.dark .fi-btn.fi-color-primary[class*='fi-bg-color-'] {
+    --dark-bg: var(--color-primary);
+    --dark-hover-bg: var(--color-primary-hover);
+    --dark-text: var(--color-on-primary);
+    --dark-hover-text: var(--color-on-primary);
+}
+
+/*
  * Fonts, self-hosted (App\Support\Filament\ViteFontProvider, ADR-0042).
  * Filament's own `@theme inline` (imported above) maps --font-sans and
  * --font-mono to its --font-family / --mono-font-family variables; these
@@ -72,7 +88,7 @@ html.fi {
  */
 @theme inline {
     --font-sans:
-        var(--font-mukta, 'Mukta'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        var(--font-geist, 'Geist'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
     --font-mono: var(--font-numeric);
 }

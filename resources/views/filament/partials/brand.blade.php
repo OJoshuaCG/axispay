@@ -30,16 +30,17 @@
             <span class="pl-brand-name" aria-hidden="true">{{ $brand->name() }}</span>
         @endif
     @else
-        <svg viewBox="0 0 28 28" class="pl-brand-mark" aria-hidden="true" focusable="false">
-            <rect width="28" height="28" rx="7" class="fill-brand-mark" />
+        <svg viewBox="0 0 32 32" class="pl-brand-mark" aria-hidden="true" focusable="false">
+            <rect width="32" height="32" rx="9" class="fill-brand-mark" />
             <path
-                d="M8.5 20 14 8l5.5 12M10.6 15.5h6.8"
+                d="M10 7.5V22.5H25"
                 fill="none"
-                stroke-width="2.25"
+                stroke-width="2.6"
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 class="stroke-brand-mark-fg"
             />
+        <circle cx="19.5" cy="13" r="3" class="fill-brand-mark-dot" />
         </svg>
         <span class="pl-brand-name">{{ $brand->name() }}</span>
     @endif

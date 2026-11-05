@@ -34,7 +34,7 @@ export default defineConfig({
                 'resources/js/checkout/sandbox-stripe.js',
             ],
             refresh: true,
-            // Mukta (text) and Geist Mono (currency and numeric data, ADR-0042) are
+            // Geist (text, ADR-0070) and Geist Mono (currency and numeric data, ADR-0042) are
             // self-hosted: font files are read from the pinned @fontsource/* packages
             // at build time and emitted into public/build. No third-party font CDN
             // is contacted at build time or at runtime.
@@ -43,20 +43,20 @@ export default defineConfig({
             // á é í ó ú ü ñ ¿ ¡), €, and U+2212 MINUS SIGN used by <x-amount>.
             // latin-ext is not loaded: neither language needs it.
             //
-            // Preload only what the first paint renders on nearly every page: Mukta
+            // Preload only what the first paint renders on nearly every page: Geist
             // 400 (body) and 600 (headings, buttons). Geist Mono is not preloaded:
             // amounts are a small part of most pages, and with `display: swap` the
             // system monospace fallback (same 0.6em digit width) keeps the late
             // swap nearly shift-free.
             //
             // optimizedFallbacks uses `fontaine` (devDependency; an optional peer of
-            // laravel-vite-plugin) to emit a metric-matched "Mukta fallback" face
+            // laravel-vite-plugin) to emit a metric-matched "Geist fallback" face
             // (local Arial with ascent/descent/line-gap/size-adjust overrides), so
-            // swapping in Mukta causes almost no layout shift. Removing fontaine
+            // swapping in Geist causes almost no layout shift. Removing fontaine
             // silently disables this; keep them together.
             fonts: [
-                local('Mukta', {
-                    variants: fontsourceWoff2('mukta', [400, 500, 600, 700]),
+                local('Geist', {
+                    variants: fontsourceWoff2('geist', [400, 500, 600, 700]),
                     display: 'swap',
                     preload: [{ weight: 400 }, { weight: 600 }],
                     optimizedFallbacks: true,

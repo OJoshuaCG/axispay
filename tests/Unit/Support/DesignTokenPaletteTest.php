@@ -19,6 +19,6 @@ it('builds every Filament palette from design-system primitives', function (): v
         }
     }
 
-    expect($colors['primary'][600])->toBe($primitives['blue-600'])
+    expect($colors['primary'][600])->toBe($primitives['forest-600'])
         ->and($colors['gray'][950])->toBe($primitives['neutral-900']);
 });

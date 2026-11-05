@@ -24,6 +24,22 @@
     --color-blue-800: #103367;
     --color-blue-900: #0b2448;
 
+    /* Brand: forest green (primary) and clay/amber (decorative feature). */
+    --color-forest-50: #eaf3ef;
+    --color-forest-100: #d3e7de;
+    --color-forest-200: #b0d5c5;
+    --color-forest-300: #86d6bf;
+    --color-forest-400: #5fc3a6;
+    --color-forest-500: #2e8a6e;
+    --color-forest-600: #0f5c4c;
+    --color-forest-700: #0a4a3d;
+    --color-forest-800: #0a3a30;
+    --color-forest-900: #072a22;
+
+    --color-clay-50: #fdf1e4;
+    --color-clay-400: #e9a36a;
+    --color-clay-700: #9a5a22;
+
     --color-green-50: #edf9f4;
     --color-green-100: #dcf3e9;
     --color-green-200: #b8e7d2;
@@ -35,19 +51,20 @@
     --color-green-800: #125e3c;
     --color-green-900: #0c4129;
 
+    /* Warm neutrals ("Tierra firme", ADR-0070): sand in light, charcoal in dark. */
     --color-neutral-0: #ffffff;
-    --color-neutral-50: #f8f9f9;
-    --color-neutral-100: #eff0f1;
-    --color-neutral-200: #dddfe2;
-    --color-neutral-300: #bcbfc5;
-    --color-neutral-400: #9398a2;
-    --color-neutral-450: #858a94; /* added: 3:1 control edges on light surfaces */
-    --color-neutral-500: #697080; /* retuned from #6d7481 */
-    --color-neutral-550: #5f6673; /* added: secondary text on light surfaces */
-    --color-neutral-600: #1c2536;
-    --color-neutral-700: #171d2b;
-    --color-neutral-800: #111620;
-    --color-neutral-900: #0d1017;
+    --color-neutral-50: #f6f4ef;
+    --color-neutral-100: #efece5;
+    --color-neutral-200: #e2ddd3;
+    --color-neutral-300: #b9b2a5;
+    --color-neutral-400: #948d80;
+    --color-neutral-450: #857e72; /* 3:1 control edges on light surfaces */
+    --color-neutral-500: #6f695f;
+    --color-neutral-550: #5e5850; /* secondary text on light surfaces */
+    --color-neutral-600: #23211e;
+    --color-neutral-700: #1c1b18;
+    --color-neutral-800: #191815;
+    --color-neutral-900: #141311;
 
     /*
      * Status hues are not full scales in the source palette; only the values in

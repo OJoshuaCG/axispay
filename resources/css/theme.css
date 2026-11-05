@@ -68,10 +68,10 @@
 @theme static {
     /* ---------- Typography ---------- */
     /*
-     * --font-mukta and --font-geist-mono are emitted by the @fonts directive
+     * --font-geist and --font-geist-mono are emitted by the @fonts directive
      * (laravel-vite-plugin, vite.config.js), each followed by its metric-matched
-     * "<Family> fallback" face. ADR-0042.
-     *   sans     Mukta: all text.
+     * "<Family> fallback" face. ADR-0042, ADR-0070.
+     *   sans     Geist: all text.
      *   numeric  Geist Mono: currency amounts and numeric money data (the
      *            `amount` utility, <x-amount>). Monospace, so digits align.
      *   mono     Geist Mono too: code, keys, IDs, token names. Same face today,
@@ -79,7 +79,7 @@
      *            touching how money looks, and vice versa.
      */
     --font-sans:
-        var(--font-mukta, 'Mukta'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        var(--font-geist, 'Geist'), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
     --font-numeric:
         var(--font-geist-mono, 'Geist Mono'), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -219,24 +219,24 @@
 }
 
 /*
- * Panel type scale (Filament admin and app panels only; ADR-0044). Mukta's
- * Latin x-height is ~0.47em against ~0.54em for Inter, the face Filament's
- * sizes were tuned for, so 14px Mukta reads like 12px Inter. The panel theme
+ * Panel type scale (Filament admin and app panels only; ADR-0044). Geist's
+ * x-height is close to Inter's, the face Filament's sizes were tuned for, so
+ * the scale sits one notch above Filament's defaults only on desktop. The panel theme
  * (resources/css/filament/theme.css) remaps Tailwind's --text-xs/sm/base to
  * these values on `html.fi`; the Blade pages keep the scale above. Never set
  * a font size on individual .fi-* classes: change these tokens instead.
  *   xs            13px everywhere (badges, hints)
- *   sm            15px below 1024px, 16px from 1024px (table cells, sidebar,
+ *   sm            14px below 1024px, 15px from 1024px (table cells, sidebar,
  *                 labels, buttons)
- *   base          16px below 1024px, 17px from 1024px
+ *   base          16px everywhere
  */
 :root {
     --panel-text-xs: 0.8125rem;
     --panel-text-xs-lh: 1.125rem;
-    --panel-text-sm: 0.9375rem;
-    --panel-text-sm-lh: 1.375rem;
-    --panel-text-sm-desktop: 1rem;
-    --panel-text-sm-desktop-lh: 1.5rem;
-    --panel-text-base-desktop: 1.0625rem;
-    --panel-text-base-desktop-lh: 1.625rem;
+    --panel-text-sm: 0.875rem;
+    --panel-text-sm-lh: 1.25rem;
+    --panel-text-sm-desktop: 0.9375rem;
+    --panel-text-sm-desktop-lh: 1.375rem;
+    --panel-text-base-desktop: 1rem;
+    --panel-text-base-desktop-lh: 1.5rem;
 }

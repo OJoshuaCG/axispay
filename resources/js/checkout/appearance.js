@@ -46,7 +46,7 @@ export function appearance() {
             colorTextPlaceholder: probe('textPlaceholder'),
             colorDanger: danger,
             iconColor: probe('textSecondary'),
-            fontFamily: "'Mukta', system-ui, sans-serif",
+            fontFamily: "'Geist', system-ui, sans-serif",
             fontSizeBase: '16px',
             spacingUnit: '4px',
             borderRadius: '8px',
