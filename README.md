@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="landing/assets/axispay-logo-dark.svg">
+    <img src="landing/assets/axispay-logo-sameweight.svg" alt="AxisPay" height="64">
+  </picture>
+</p>
+
 # AxisPay
 
 A multi-tenant **payment-links orchestrator** on Stripe Connect.
