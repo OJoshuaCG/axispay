@@ -211,6 +211,9 @@
     .cta { text-align: center; }
     .cta .wrap { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
     .cta .sub { max-width: 36rem; }
+    .cta .emblem { width: 5rem; height: 5rem; display: none; }
+    .cta .emblem-light, :root[data-theme="dark"] .cta .emblem-dark { display: block; }
+    :root[data-theme="dark"] .cta .emblem-light { display: none; }
     .cta .actions { justify-content: center; }
 
     footer { border-top: 1px solid var(--border); }
@@ -416,6 +419,8 @@
 
     <section class="cta band-light">
       <div class="wrap">
+        <img class="emblem emblem-light reveal" src="assets/axispay.svg" alt="" width="80" height="80">
+        <img class="emblem emblem-dark reveal" src="assets/axispay-dark.svg" alt="" width="80" height="80">
         <h2 class="reveal" data-i18n="ctaTitle">Read the code. Read the docs.</h2>
         <p class="sub reveal" data-i18n="ctaSub">Everything is public: the architecture, the decisions behind it and the plan.</p>
         <div class="actions reveal">
