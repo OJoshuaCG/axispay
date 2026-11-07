@@ -106,6 +106,8 @@
     .ctl:hover { background: var(--surface-alt); color: var(--fg); }
     .ctl svg { width: 1.125rem; height: 1.125rem; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
     .ctl .i-gh { fill: currentColor; stroke: none; }
+    .ctl-lang { display: inline-flex; align-items: center; gap: .375rem; padding: 0 .75rem; font-size: .85rem; }
+    .ctl-lang span { font-family: var(--font-mono); }
     .i-sun { display: none; }
     :root[data-theme="dark"] .i-sun { display: block; }
     :root[data-theme="dark"] .i-moon { display: none; }
@@ -198,8 +200,6 @@
     .road li { padding-left: 1rem; position: relative; }
     .road li::before { content: ""; position: absolute; left: 0; top: .7em; width: .375rem; height: .375rem; border-radius: 999px; background: var(--amber); }
 
-    .stack { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .625rem; }
-    .stack li { padding: .5rem 1rem; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); font: 500 .875rem var(--font-mono); }
 
     .cta { text-align: center; }
     .cta .wrap { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
@@ -242,7 +242,10 @@
           <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
           <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         </button>
-        <button type="button" class="ctl" id="lang" lang="es" aria-label="Cambiar a español">ES</button>
+        <button type="button" class="ctl ctl-lang" id="lang" lang="es" aria-label="Cambiar a español">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3Z"/></svg>
+          <span id="lang-label">ES</span>
+        </button>
       </div>
     </div>
   </header>
@@ -404,25 +407,13 @@
       </div>
     </section>
 
-    <section id="stack" style="padding-top:0">
-      <div class="wrap">
-        <div class="sec-head reveal">
-          <h2 data-i18n="stackTitle">Under the hood</h2>
-          <p class="sub" data-i18n="stackSub">A conventional, well-tested stack that is easy to operate.</p>
-        </div>
-        <ul class="stack reveal">
-          <li>PHP 8.4</li><li>Laravel 13</li><li>Filament 5</li><li>MariaDB 11.8</li><li>Stripe Connect</li><li>Tailwind CSS 4</li><li>Docker</li><li>Dokploy</li>
-        </ul>
-      </div>
-    </section>
-
     <section class="cta band-light">
       <div class="wrap">
         <h2 class="reveal" data-i18n="ctaTitle">Read the code. Read the docs.</h2>
         <p class="sub reveal" data-i18n="ctaSub">Everything is public: the architecture, the decisions behind it and the plan.</p>
         <div class="actions reveal">
           <a class="btn btn-primary" href="https://github.com/OJoshuaCG/axispay" data-i18n="ctaRepo">View on GitHub</a>
-          <a class="btn btn-ghost" href="https://github.com/OJoshuaCG/axispay/tree/main/docs" data-i18n="ctaDocs">Read the docs</a>
+          <a class="btn btn-ghost" href="https://github.com/OJoshuaCG/axispay/tree/main/docs" data-i18n="ctaDocs">Read the documentation</a>
         </div>
       </div>
     </section>
@@ -430,7 +421,7 @@
 
   <footer>
     <div class="wrap">
-      <span class="who"><img src="assets/axispay.svg" alt="" width="24" height="24">&copy; <span id="year">2026</span> AxisPay &middot; <span data-i18n="footBy">Designed and built by</span> <a href="https://ojoshuacg.github.io/OJoshuaCG/portfolio/" rel="author">Joshua CG</a></span>
+      <span class="who"><img src="assets/axispay.svg" alt="" width="24" height="24">&copy; <span id="year">2026</span> AxisPay &middot; <span data-i18n="footBy">Created by</span> <a href="https://ojoshuacg.github.io/OJoshuaCG/portfolio/" rel="author">Joshua CG</a></span>
       <a href="https://github.com/OJoshuaCG/axispay" data-i18n="footRepo">Source code on GitHub</a>
     </div>
   </footer>
@@ -483,9 +474,8 @@
           r1: 'Fundamentos y CI', r2: 'Multi-tenancy, identidad y roles', r3: 'Conexión con Stripe', r4: 'Claves de API y API de enlaces de pago', r5: 'Checkout y pagos con tarjeta',
           r6: 'Webhooks salientes y validación previa al pago', r7: 'Conversión de moneda',
           r8: 'Reembolsos y disputas', r9: 'Métricas, marca y campos del pagador', r10: 'Planes e informes de uso', r11: 'Refuerzo de seguridad y salida a producción',
-          stackTitle: 'Cómo está construido', stackSub: 'Tecnologías convencionales, bien probadas y fáciles de operar.',
           ctaTitle: 'Lee el código. Lee la documentación.', ctaSub: 'Todo es público: la arquitectura, las decisiones detrás de ella y el plan.',
-          footRepo: 'Código fuente en GitHub', footBy: 'Diseñado y construido por'
+          footRepo: 'Código fuente en GitHub', footBy: 'Creado por'
         }
       };
       var meta = {
@@ -526,7 +516,7 @@
           if (v) n.textContent = v;
         });
         var lb = document.getElementById('lang');
-        lb.textContent = meta[l].langBtn;
+        document.getElementById('lang-label').textContent = meta[l].langBtn;
         lb.setAttribute('aria-label', meta[l].langLabel);
         lb.setAttribute('lang', meta[l].langTo);
         var gh = document.getElementById('gh');
